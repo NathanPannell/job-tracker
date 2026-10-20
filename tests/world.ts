@@ -47,6 +47,7 @@ export function lead(id: string, fields: Partial<Lead> = {}): Lead {
 }
 
 export type World = {
+  clock: ReturnType<typeof mock.clock>
   files: Map<string, string>
   runs: string[][]
   leads: () => Lead[]
@@ -69,7 +70,7 @@ export function world(
   const runs: string[][] = []
 
   mock.env(on, { JOB_TRACKER_DATA: DATA, OS: 'Windows_NT' })
-  mock.clock(on, { now: NOW })
+  const clock = mock.clock(on, { now: NOW })
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('command.register', (_, e) => ({ value: { command: e.name } }))
   on('tool.register', (_, e) => ({ value: { tool: `mcp__job-tracker__${e.name}` } }))
@@ -131,6 +132,7 @@ export function world(
   }
 
   return {
+    clock,
     files,
     runs,
     leads: () => leadsFile().leads,

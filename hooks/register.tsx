@@ -163,6 +163,18 @@ export const register: Register = on => {
         },
       },
     })
+    await $.tool.register({
+      name: 'open_board',
+      description:
+        "Opens the person's job board (the /jobs pane) on the board, one lead, a lead's application package, or the learning proposals, and says whether the surface placed it.",
+      inputSchema: {
+        type: 'object',
+        properties: {
+          view: { type: 'string', enum: ['board', 'lead', 'package', 'proposals'] },
+          leadId: { type: 'string', description: 'The lead, for the lead and package views' },
+        },
+      },
+    })
     await refresh($)
     return next(e)
   })
@@ -176,6 +188,36 @@ export const register: Register = on => {
       text: opened.isPlaced
         ? `Opened the job board: ${bandText(c) ?? 'nothing new'}.`
         : `The job board is waiting for room to open (${opened.reason ?? 'not placed'}).`,
+    }
+  })
+
+  on('tool.call', { tool: 'mcp__job-tracker__open_board' }, async ($, e) => {
+    const { view: kind = 'board', leadId } = toolArgs(e) as { view?: string; leadId?: string }
+    if ((kind === 'lead' || kind === 'package') && !leadId) {
+      return { result: `Error: the ${kind} view needs leadId` }
+    }
+    const target: JobView =
+      kind === 'lead'
+        ? { kind: 'lead', id: leadId as string }
+        : kind === 'package'
+          ? { kind: 'package', id: leadId as string, tab: 'resume' }
+          : kind === 'proposals'
+            ? { kind: 'proposals' }
+            : { kind: 'board' }
+    await refresh($)
+    await show($, target)
+    const opened = await openPane($)
+    // A pane whose tree the surface refused is closed again; give the first draw a moment.
+    await $.clock.sleep(1500)
+    const pane = (await $.ui.panes()).find(one => one.id === 'jobs')
+    return {
+      result: json({
+        opened: opened.isPlaced ? 'placed' : `not placed: ${opened.reason}`,
+        stillOpen: pane !== undefined,
+        isPlaced: pane?.isPlaced ?? false,
+        isShown: pane?.isShown ?? false,
+        view: target,
+      }),
     }
   })
 
