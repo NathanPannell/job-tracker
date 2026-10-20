@@ -25,11 +25,7 @@ const pendingTurn = atom(
 const nudged = atom({ plugin: 'job-tracker', key: 'nudged' } as const, false)
 const busy = atom({ plugin: 'job-tracker', key: 'busy' } as const, null as string | null)
 
-const TOOL = {
-  list: 'mcp__job-tracker__list_leads',
-  update: 'mcp__job-tracker__update_lead',
-  feedback: 'mcp__job-tracker__record_feedback',
-} as const
+// Matchers are written as literals: the engine reads them from the source before the module runs.
 
 /** A person's own prompt: typed in the terminal or the desktop app, or sent from a phone. */
 const isPersonOrigin = (origin: PromptOrigin) =>
@@ -173,7 +169,7 @@ export const register: Register = on => {
     }
   })
 
-  on('tool.call', { tool: TOOL.list }, async ($, e) => {
+  on('tool.call', { tool: 'mcp__job-tracker__list_leads' }, async ($, e) => {
     const input = e.input as { column?: string; minScore?: number; limit?: number }
     const args = ['list', '--limit', String(input.limit ?? 20)]
     if (input.column) args.push('--column', input.column)
@@ -182,7 +178,7 @@ export const register: Register = on => {
     return { result: ran.ok ? json(ran.value) : `Error: ${ran.error}` }
   })
 
-  on('tool.call', { tool: TOOL.update }, async ($, e) => {
+  on('tool.call', { tool: 'mcp__job-tracker__update_lead' }, async ($, e) => {
     const { id, ...fields } = e.input as { id?: string; column?: string } & Record<string, unknown>
     if (!id) return { result: 'Error: id is required' }
     if (fields.column !== undefined && !isColumn(fields.column)) {
@@ -192,7 +188,7 @@ export const register: Register = on => {
     return { result: ran.ok ? json(ran.value) : `Error: ${ran.error}` }
   })
 
-  on('tool.call', { tool: TOOL.feedback }, async ($, e) => {
+  on('tool.call', { tool: 'mcp__job-tracker__record_feedback' }, async ($, e) => {
     const ran = await jobs($, ['feedback', json(e.input)])
     return { result: ran.ok ? json(ran.value) : `Error: ${ran.error}` }
   })
@@ -253,7 +249,7 @@ export const register: Register = on => {
     )
   })
 
-  on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
+  on('ui.render', { component: 'Pane', requestId: 'jobs' }, async ($, e) => {
     const el = $.ui.resolve(e)
     const current = await read($, board)
     const at = await read($, view)
