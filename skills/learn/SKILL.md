@@ -13,7 +13,8 @@ packages are written. You propose; the person approves in /jobs. Never edit the 
 - CLI: `node "$JOB_TRACKER_HOME/bin/jobs.ts" <command>`; data folder `$JOB_TRACKER_DATA`.
 - `feedback.json` (pass reasons, score-too-high / score-too-low, moves, snoozes, outcomes),
   `leads.json` (source, score, column, history), `applications.json`, `jobs edits` (diffs between
-  each drafted package and the person's edited version), `scout/runs.md`,
+  each drafted package and the person's edited version), `scout/runs.md`, `scout/signals.md`
+  (funding and hiring news the scout found, with or without a public job board),
   `profile/preferences.md`, `profile/learnings.md`, and earlier proposals in `proposals.json`
   (do not re-propose what was rejected unless new evidence is strong).
 
@@ -21,7 +22,9 @@ packages are written. You propose; the person approves in /jobs. Never edit the 
 
 1. Funnel for the last 7 days and all time, by source: found, still New, shortlisted, drafted,
    applied, replies, interviews, passed. Note which sources produce leads the person keeps and
-   which produce passes.
+   which produce passes, including each Gmail source (`gmail:viatec`, `gmail:yc`, ...).
+   From `scout/signals.md`, list companies that appeared there and look like strong fits; a
+   change may add them to `learnings.md` as companies to score up or watch.
 2. Patterns, each needing at least two events (say how many): pass reasons that cluster (for
    example several "Too senior" on leads scored 80+), score corrections by kind and source, leads
    the person moved forward that were scored low, and edits to packages (what the person cut,

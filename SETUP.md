@@ -49,7 +49,7 @@ The repo's `.gitignore` and the `check:personal-data` CI job keep it out of git.
 | `proposals.json`      | Weekly learning proposals and their status                                                                                                                                                                                              |
 | `packages/<lead-id>/` | `resume.tex`, `resume.pdf`, `cover-letter.md`, `answers.md`, `company-brief.md`, `warm-intro.md`, `posting.md`, `sources.md`, `preview/` (the pane's résumé strips) and `.draft/` (the draft as written, so `learn` can see your edits) |
 | `profile/`            | The career record copied from the Resume Revamp folder, plus `preferences.md`, `learnings.md`, `target-companies.md`, `ats-boards.json` and `OPEN-QUESTIONS.md`                                                                         |
-| `scout/`              | Each run's raw candidates, `runs.md` (one line per run) and learn's proposal files                                                                                                                                                      |
+| `scout/`              | Each run's raw candidates, `runs.md` (one line per run), `signals.md` (funding news), `gmail-cursor.json` (where Gmail reading stopped) and learn's proposal files                                                                      |
 
 The types of every file are in `types/index.d.ts`.
 

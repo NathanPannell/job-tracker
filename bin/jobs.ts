@@ -5,6 +5,7 @@ import { parseArgs } from 'node:util'
 import * as commands from './lib/commands.ts'
 import type { FeedbackInput, ProposalInput } from './lib/commands.ts'
 import type { IncomingLead, LeadPatch } from '../hooks/lib/model.ts'
+import { gmailQuery, markGmailRead } from './lib/gmail.ts'
 import { dataDir } from './lib/store.ts'
 
 const USAGE = `jobs <command> [args] [--data <dir>]
@@ -29,7 +30,10 @@ const USAGE = `jobs <command> [args] [--data <dir>]
   decide <proposal-id> approve|reject
   edits                                  the person's edits to drafted packages, as diffs
   ats [--all]                            fetch the Greenhouse/Lever/Ashby boards in profile/ats-boards.json
-  probe <slug>... [--company name]       which ATS (if any) has a public board under this slug`
+  probe <slug>... [--company name]       which ATS (if any) has a public board under this slug
+  board-add <company> <ats> <slug>       add a public board to profile/ats-boards.json
+  gmail query                            the Gmail search for job emails since the last run
+  gmail done <iso>                       mark job emails up to <iso> (the newest read) as read`
 
 async function main(argv: string[]): Promise<unknown> {
   const { values, positionals } = parseArgs({
@@ -108,6 +112,17 @@ async function main(argv: string[]): Promise<unknown> {
       return commands.ats(dir, { all: values.all })
     case 'probe':
       return Promise.all(args.map(slug => commands.probe(slug, values.company ?? slug)))
+    case 'board-add':
+      return commands.addBoard(
+        dir,
+        need(args[0], 'company'),
+        need(args[1], 'ats'),
+        need(args[2], 'slug'),
+      )
+    case 'gmail':
+      if (args[0] === 'query') return gmailQuery(dir)
+      if (args[0] === 'done') return markGmailRead(dir, need(args[1], 'newest email time'))
+      throw new Error('Use gmail query, or gmail done <iso>')
     default:
       throw new Error(`Unknown command ${command}\n\n${USAGE}`)
   }
