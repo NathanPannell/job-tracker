@@ -11,9 +11,7 @@
     "skipLibCheck": true,
     "allowImportingTsExtensions": true,
     "verbatimModuleSyntax": true,
-    "erasableSyntaxOnly": true,
-    "allowJs": true,
-    "checkJs": true
+    "erasableSyntaxOnly": true
   },
-  "include": ["bin", "test", "scripts", "hooks/lib"]
+  "include": ["bin", "test", "scripts", "hooks/lib/model.ts", "types"]
 }
