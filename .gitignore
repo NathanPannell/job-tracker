@@ -1,0 +1,25 @@
+# Personal data never lives in this repo. The data folder sits beside it in the workspace.
+data/
+/data
+**/leads.json
+**/applications.json
+**/feedback.json
+**/proposals.json
+**/packages/
+**/profile/
+*.pdf
+*.tex
+*.docx
+*.aux
+*.log
+*.out
+.env
+.env.*
+
+# Tooling
+node_modules/
+coverage/
+.claude/
+.claude-plugin/types/
+*.tsbuildinfo
+.DS_Store

@@ -1,0 +1,29 @@
+{
+  "name": "job-tracker",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Claude Code mod: a job-search kanban, application packages and a learning loop.",
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "lint": "eslint . --max-warnings=0",
+    "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.node.json",
+    "test": "node --test --experimental-test-coverage --test-coverage-lines=85 --test-coverage-branches=75 --test-coverage-functions=85 --test-coverage-include=hooks/lib/** --test-coverage-include=bin/lib/** \"test/**/*.spec.ts\"",
+    "test:plugin": "claude plugin test .",
+    "validate": "claude plugin validate .",
+    "check:personal-data": "node scripts/check-no-personal-data.mjs",
+    "ci": "npm run format:check && npm run lint && npm run typecheck && npm test && npm run check:personal-data"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@types/node": "24.10.1",
+    "eslint": "10.13.0",
+    "prettier": "3.9.10",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.72.0"
+  }
+}

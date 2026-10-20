@@ -1,0 +1,6 @@
+node_modules
+coverage
+vendor
+package-lock.json
+.claude-plugin/types
+skills/**/*.md
