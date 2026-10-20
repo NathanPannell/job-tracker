@@ -59,8 +59,12 @@ jobs:
           node-version: 24
       - name: Install Claude Code ${{ env.CLAUDE_CODE_VERSION }}
         run: npm install --global "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}"
-      - name: Validate the mod
-        run: claude plugin validate .
+      - name: Validate the mod (every hook matcher must be a literal the engine can read)
+        run: |
+          claude plugin validate . | tee validate.txt
+          if grep -q '=?' validate.txt; then
+            echo "A hook matcher is not a literal: the engine never matches it in a session." && exit 1
+          fi
       - name: Plugin tests (terminal, desktop, mobile surfaces)
         run: claude plugin test .
 
