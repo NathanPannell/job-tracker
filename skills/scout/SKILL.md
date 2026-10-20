@@ -37,12 +37,25 @@ You never apply, email anyone, create accounts, or log into job sites.
    - **Local sources** (`source: "<board name>"` or `"careers:<company>"`): the local job boards
      listed under "sources" in `target-companies.md` and the careers pages of the local companies
      listed there, with WebFetch. Note closing dates when shown.
-   - **Gmail job alerts** (`source: "gmail:linkedin"`, `"gmail:indeed"`, `"gmail:wellfound"`,
-     `"gmail:glassdoor"`, ...): search Gmail for alert emails from the last 4 days, for example
-     `newer_than:4d (from:linkedin.com OR from:indeed.com OR from:wellfound.com OR from:glassdoor.com OR from:otta OR subject:"job alert" OR subject:"new jobs")`.
-     Read the threads and extract each posting's title, company, location, pay and link from the
-     email itself. Never visit LinkedIn or Indeed: the email is the source. Where the email gives
-     only a LinkedIn link, keep it as `url`; package will look for the company's own posting.
+   - **Gmail** (sources `gmail:linkedin`, `gmail:indeed`, `gmail:wellfound`, `gmail:glassdoor`,
+     `gmail:yc`, `gmail:wttj`, `gmail:bctechjobs`, `gmail:viatec`, and the news signals
+     `signal:betakit`, `signal:victechjournal`, `signal:vantechjournal`): run `jobs gmail query`.
+     It prints the Gmail `query` for every job email since the last run (an hour of overlap; the
+     last 7 days on a first run) and the `sources`, each with its `kind` and sender tokens. Search
+     Gmail with exactly that query, paging until there is no next page, and read each thread.
+     Give each email the source whose sender token appears in its sender's address.
+     - `alert` emails list postings: extract each posting's title, company, location, pay and link
+       from the email itself. VIATEC's "The Loop" is a weekly newsletter: take only its job board
+       section (links to `members.viatec.ca/job-board`). A YC Work at a Startup message from a
+       founder is a lead too (`description` says a founder wrote). Welcome, onboarding and
+       marketing emails with no postings give nothing.
+     - `signal` emails are news, not postings: return the companies in British Columbia, or hiring
+       remotely in Canada, that just raised money, launched, or said they are hiring, as
+       `{ company, event, amount, location, url }` (the article's link).
+     - Return `{ postings, signals, newest }`, `newest` being the date of the newest email read.
+     Never visit LinkedIn, Indeed, Glassdoor, Wellfound, YC or Welcome to the Jungle: the email is
+     the source. Where the email gives only a LinkedIn link, keep it as `url`; package will look
+     for the company's own posting.
    - **Web search** (`source: "web"`): WebSearch for this week's postings, built from
      `preferences.md`: each target role with the person's city, then with "remote" and their
      country, then the target industries (e.g. `<role> "<city>"`, `junior <role> remote <country>`,
@@ -66,17 +79,26 @@ You never apply, email anyone, create accounts, or log into job sites.
    `{ company, role, url, source, location, comp, fitScore, fitReason, closesAt? }` and run
    `jobs add @<that file> --threshold 60`. It dedupes again, drops anything under 60, and prints
    `added`, `updated`, `dropped` and `alerts` (added leads scored 90+).
-6. If `alerts` is not empty, send one PushNotification naming them, e.g.
+6. If the Gmail source finished without an error, run `jobs gmail done <newest>` so the next run
+   starts there. If it failed or was cut short, skip this: the next run reads the same mail again.
+7. Funding and hiring signals: for each signal company not already in `profile/ats-boards.json`,
+   try `jobs probe <slug> --company "<name>"` with its likely slugs (lowercase name, no spaces or
+   punctuation). When a public board is found, run `jobs board-add "<name>" <ats> <slug>`; its
+   engineering roles are read from the next run on. Append each signal, found or not, as one line
+   to `$JOB_TRACKER_DATA/scout/signals.md`: `<date> · <company> · <event> · <board or "no public board"> · <url>`.
+   Never edit `target-companies.md`; the weekly learn review proposes additions from `signals.md`.
+8. If `alerts` is not empty, send one PushNotification naming them, e.g.
    `2 strong job leads: <Company> — <Role> (93), ... Open /jobs.` Send none
    otherwise.
-7. Append one line to `$JOB_TRACKER_DATA/scout/runs.md`:
-   `<ISO time> · <n> found per source (ats a, local b, gmail c, web d, hn e) · added x · dropped y · errors: ...`
-8. Reply in three lines or fewer: how many were added, the best two with scores, and any source that
-   failed. Do not paste the whole list.
+9. Append one line to `$JOB_TRACKER_DATA/scout/runs.md`:
+   `<ISO time> · <n> found per source (ats a, local b, gmail c [per gmail source], web d, hn e) · signals s · boards added b · added x · dropped y · errors: ...`
+10. Reply in three lines or fewer: how many were added, the best two with scores, new boards from
+    signals, and any source that failed. Do not paste the whole list.
 
 ## Rules
 
 - Never submit, apply, email, message or create an account. Never log into or scrape LinkedIn,
-  Indeed, Glassdoor or Wellfound; their alert emails in Gmail are the only route.
+  Indeed, Glassdoor, Wellfound, YC Work at a Startup or Welcome to the Jungle; their emails in
+  Gmail are the only route. Never click links in emails (unsubscribe, confirm, apply).
 - Never invent a posting, a salary or a location. If a field is unknown, leave it empty.
 - A source that fails is reported, not retried in a loop.

@@ -42,7 +42,7 @@ import { fetchBoards, isReachable } from './ats.ts'
 import type { Ats, Board, Fetch, Posting } from './ats.ts'
 import { renderPreview } from './preview.ts'
 import type { Change, Data } from './store.ts'
-import { init, readData, transact } from './store.ts'
+import { init, readData, transact, withLock, writeAtomic } from './store.ts'
 
 export { init }
 
@@ -440,6 +440,24 @@ export async function ats(dir: string, options: { all?: boolean; fetcher?: Fetch
       .map(result => ({ ...result.board, error: result.error ?? '' })),
   }
   return summary
+}
+
+/** Adds a public board to `profile/ats-boards.json` so `ats` reads it from the next run on. */
+export function addBoard(dir: string, company: string, ats: string, slug: string) {
+  if (ats !== 'greenhouse' && ats !== 'lever' && ats !== 'ashby') {
+    throw new Error('The ATS is greenhouse, lever or ashby')
+  }
+  if (!company.trim() || !slug.trim()) throw new Error('A board needs a company and a slug')
+  const path = join(dir, 'profile', 'ats-boards.json')
+  return withLock(dir, () => {
+    const boards = existsSync(path) ? (JSON.parse(readFileSync(path, 'utf8')) as Board[]) : []
+    const existing = boards.find(one => one.ats === ats && one.slug === slug)
+    if (existing) return { added: false, board: existing, boards: boards.length }
+    const board: Board = { company: company.trim(), ats, slug: slug.trim() }
+    const next = [...boards, board]
+    writeAtomic(path, `${JSON.stringify(next, null, 2)}\n`)
+    return { added: true, board, boards: next.length }
+  })
 }
 
 /** Tries a company's slug on each ATS, to find which public board it uses. */
