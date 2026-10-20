@@ -72,7 +72,10 @@ test('addLeads dedupes by id and by URL, keeps the column, drops below the thres
     moved,
     [
       incoming('Acme', { comp: 'CAD 90k' }),
-      incoming('Other', { url: 'https://jobs.example.com/Acme?ref=x', role: 'Backend Developer (Remote)' }),
+      incoming('Other', {
+        url: 'https://jobs.example.com/Acme?ref=x',
+        role: 'Backend Developer (Remote)',
+      }),
     ],
     AT,
     60,
