@@ -59,7 +59,7 @@ test('a first run reads the last week of every source and skips account mail', (
   for (const one of GMAIL_SOURCES) {
     for (const token of one.senders) assert.ok(result.query.includes(`from:${token}`), token)
   }
-  assert.match(result.query, /-subject:\(verify OR .*password/)
+  assert.match(result.query, /-subject:\(verify OR verified OR .*password/)
   assert.equal(result.sources, GMAIL_SOURCES)
 })
 

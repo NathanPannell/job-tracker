@@ -26,7 +26,15 @@ export const GMAIL_SOURCES: readonly GmailSource[] = [
 ]
 
 /** Account mail (verify your email, password, sign-in notices) that never lists jobs. */
-const NOT_JOBS = ['verify', 'verification', 'password', 'security', 'sign-in', '"sign in"']
+const NOT_JOBS = [
+  'verify',
+  'verified',
+  'verification',
+  'password',
+  'security',
+  'sign-in',
+  '"sign in"',
+]
 
 /** How far back a first run reads, and the furthest back any run reads. */
 const FIRST_RUN_DAYS = 7
