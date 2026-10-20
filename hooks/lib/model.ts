@@ -95,14 +95,48 @@ export const STAGE_ACTIONS: Record<Column, readonly StageAction[]> = {
     { key: 'review', label: 'Review package', kind: 'review', primary: true },
     { key: 'submit', label: 'Approve & submit', kind: 'submit' },
   ],
+  // What a company decided is an outcome, never a pass: passes are the person's own choices,
+  // which the weekly review reads as such. Reasons follow the sync skill's "<kind>: <line>".
   applied: [
-    { key: 'interview', label: 'Got interview', kind: 'move', to: 'interviewing', primary: true },
-    { key: 'rejected', label: 'Rejected', kind: 'outcome', to: 'passed', reason: 'Rejected' },
-    { key: 'ghosted', label: 'Ghosted', kind: 'outcome', to: 'archived', reason: 'Ghosted' },
+    {
+      key: 'interview',
+      label: 'Got interview',
+      kind: 'outcome',
+      to: 'interviewing',
+      reason: 'interview: marked on the board',
+      primary: true,
+    },
+    {
+      key: 'rejected',
+      label: 'Rejected',
+      kind: 'outcome',
+      to: 'archived',
+      reason: 'rejection: marked on the board',
+    },
+    {
+      key: 'ghosted',
+      label: 'Ghosted',
+      kind: 'outcome',
+      to: 'archived',
+      reason: 'rejection: no reply (ghosted)',
+    },
   ],
   interviewing: [
-    { key: 'offer', label: 'Got offer', kind: 'move', to: 'offer', primary: true },
-    { key: 'rejected', label: 'Rejected', kind: 'outcome', to: 'passed', reason: 'Rejected' },
+    {
+      key: 'offer',
+      label: 'Got offer',
+      kind: 'outcome',
+      to: 'offer',
+      reason: 'offer: marked on the board',
+      primary: true,
+    },
+    {
+      key: 'rejected',
+      label: 'Rejected',
+      kind: 'outcome',
+      to: 'archived',
+      reason: 'rejection: after interviews',
+    },
   ],
   offer: [
     {
@@ -110,7 +144,7 @@ export const STAGE_ACTIONS: Record<Column, readonly StageAction[]> = {
       label: 'Accepted',
       kind: 'outcome',
       to: 'archived',
-      reason: 'Accepted offer',
+      reason: 'offer: accepted',
       primary: true,
     },
     {
@@ -118,11 +152,22 @@ export const STAGE_ACTIONS: Record<Column, readonly StageAction[]> = {
       label: 'Declined',
       kind: 'outcome',
       to: 'archived',
-      reason: 'Declined offer',
+      reason: 'offer: declined',
     },
   ],
   passed: [backTo('new')],
   archived: [backTo('new')],
+}
+
+/**
+ * The column a lead came from before its last move, so a mis-click on Rejected or Archive can be
+ * undone in place; undefined when it has never moved or came from where it is now.
+ */
+export function previousColumn(lead: Pick<Lead, 'column' | 'history'>): Column | undefined {
+  const last = [...lead.history]
+    .reverse()
+    .find(entry => entry.action === 'moved' && entry.to === lead.column)
+  return last?.from && last.from !== lead.column ? last.from : undefined
 }
 
 /** The stage the board opens on: New while it has leads, else the first stage that has any. */

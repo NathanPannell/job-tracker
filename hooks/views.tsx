@@ -7,7 +7,9 @@ import {
   age,
   COLUMN_TITLES,
   columnLeads,
+  defaultStage,
   isSnoozed,
+  previousColumn,
   PASS_REASONS,
   PIPELINE,
   scoreTone,
@@ -90,7 +92,8 @@ function badge(ctx: ViewContext, lead: Lead, key: string): RenderElement {
 /** Runs one of a stage's actions on a lead. */
 function run(ctx: ViewContext, lead: Lead, action: StageAction): void {
   const act = ctx.act
-  if (!act) return
+  // While an earlier press is still being written, a second one would record it twice.
+  if (!act || ctx.busy) return
   if (action.kind === 'move') act.move(lead, action.to)
   else if (action.kind === 'outcome') act.outcome(lead, action.to, action.reason)
   else if (action.kind === 'pass') act.askPass(lead)
@@ -103,16 +106,33 @@ function run(ctx: ViewContext, lead: Lead, action: StageAction): void {
 function stageButtons(ctx: ViewContext, lead: Lead, suffix: string): RenderElement[] {
   const { Button } = ctx.el
   const hasPackage = ctx.board.applications.some(one => one.leadId === lead.id)
-  return STAGE_ACTIONS[lead.column]
+  const actions: StageAction[] = STAGE_ACTIONS[lead.column]
     .filter(action => (action.kind === 'review' || action.kind === 'submit' ? hasPackage : true))
-    .map(action => (
-      <Button
-        key={`${action.key}${suffix}`}
-        label={action.label}
-        variant={action.primary ? 'primary' : undefined}
-        onPress={() => run(ctx, lead, action)}
-      />
-    ))
+    .map(action =>
+      action.kind === 'draft' && hasPackage ? { ...action, label: 'Redraft package' } : action,
+    )
+  // Ready without a package (moved there by hand): drafting it is the way on.
+  if (actions.length === 0 && lead.column === 'ready') {
+    actions.push({ key: 'draft', label: 'Draft package', kind: 'draft', primary: true })
+  }
+  // A closed lead can go straight back to where it was, undoing a mis-click.
+  const from = previousColumn(lead)
+  if ((lead.column === 'passed' || lead.column === 'archived') && from && from !== 'new') {
+    actions.unshift({
+      key: 'restore',
+      label: `Back to ${COLUMN_TITLES[from]}`,
+      kind: 'move',
+      to: from,
+    })
+  }
+  return actions.map(action => (
+    <Button
+      key={`${action.key}${suffix}`}
+      label={action.label}
+      variant={action.primary ? 'primary' : undefined}
+      onPress={() => run(ctx, lead, action)}
+    />
+  ))
 }
 
 function card(ctx: ViewContext, lead: Lead): RenderElement {
@@ -146,7 +166,7 @@ function card(ctx: ViewContext, lead: Lead): RenderElement {
 
 export function boardView(
   ctx: ViewContext,
-  options: { showClosed: boolean; stage: Column; shown: number },
+  options: { showClosed: boolean; stage: Column | null; shown: number },
 ): RenderElement {
   const { Box, Text, Button, Markdown } = ctx.el
   if (!ctx.board.dataDir) {
@@ -162,7 +182,7 @@ export function boardView(
   const closed: Column[] = ['passed', 'archived']
   const closedCount = ctx.board.leads.filter(lead => closed.includes(lead.column)).length
   const tabs = options.showClosed ? [...PIPELINE, ...closed] : PIPELINE
-  const stage = tabs.includes(options.stage) ? options.stage : 'new'
+  const stage = options.stage && tabs.includes(options.stage) ? options.stage : defaultStage(file)
   const leads = columnLeads(file, stage, ctx.now)
   const visible = leads.slice(0, Math.max(options.shown, PAGE))
   return (
@@ -284,7 +304,7 @@ export function leadView(ctx: ViewContext, id: string, passing: boolean): Render
             {lead.column !== 'archived' && (
               <Button key="archive" label="Archive" onPress={() => act.move(lead, 'archived')} />
             )}
-            {(app || lead.column !== 'shortlisted') && (
+            {lead.column !== 'shortlisted' && (lead.column !== 'ready' || app) && (
               <Button
                 key="redraft"
                 label={app ? 'Redraft package' : 'Draft package'}

@@ -61,8 +61,9 @@ The types of every file are in `types/index.d.ts`.
   90+, amber 75–89, grey below) and its stage's next steps as labelled buttons:
   New: Shortlist · Pass… — Shortlisted: Draft package · Back to New — Ready: Review package ·
   Approve & submit — Applied: Got interview · Rejected · Ghosted — Interviewing: Got offer ·
-  Rejected — Offer: Accepted · Declined. Rejected, Ghosted, Accepted and Declined also record
-  the outcome for the weekly review. Click a card's name to open it: the same next steps, then
+  Rejected — Offer: Accepted · Declined. Company decisions (Got interview, Got offer, Rejected,
+  Ghosted, Accepted, Declined) move the card and record an outcome for the weekly review, never a
+  pass; an archived or passed card offers "Back to <where it was>" to undo a mis-click. Click a card's name to open it: the same next steps, then
   Pass… · Archive · Draft package, then feedback (Score too high / too low, Snooze).
 - **Review package** shows the résumé PDF drawn in the pane (desktop), "Résumé vs master" (the
   diff against the master résumé), the cover letter, answers, company brief and warm-intro note.

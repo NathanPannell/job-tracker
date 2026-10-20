@@ -5,6 +5,7 @@ import type { Lead } from '../hooks/lib/model.ts'
 import {
   defaultStage,
   PIPELINE,
+  previousColumn,
   scoreTone,
   sourceLabel,
   STAGE_ACTIONS,
@@ -58,12 +59,34 @@ test('every stage offers one highlighted next step, and outcomes say what happen
     .filter(one => one.kind === 'outcome')
   assert.ok(outcomes.length >= 4)
   for (const one of outcomes) {
-    assert.ok(
-      one.kind === 'outcome' && one.reason && (one.to === 'passed' || one.to === 'archived'),
-    )
+    // A company's decision is never recorded as the person's pass.
+    assert.ok(one.kind === 'outcome' && one.to !== 'passed', one.key)
+    assert.match(one.kind === 'outcome' ? one.reason : '', /^(interview|offer|rejection): /)
   }
   assert.deepEqual(
     STAGE_ACTIONS.passed.map(one => one.key),
     ['back-new'],
+  )
+})
+
+test('a closed lead remembers the column it came from', () => {
+  const moved = (from: Lead['column'], to: Lead['column']) => ({
+    at: '',
+    by: 'user' as const,
+    action: 'moved',
+    from,
+    to,
+  })
+  assert.equal(
+    previousColumn({
+      column: 'archived',
+      history: [moved('new', 'applied'), moved('applied', 'archived')],
+    }),
+    'applied',
+  )
+  assert.equal(previousColumn({ column: 'new', history: [] }), undefined)
+  assert.equal(
+    previousColumn({ column: 'passed', history: [{ ...moved('new', 'passed'), from: undefined }] }),
+    undefined,
   )
 })

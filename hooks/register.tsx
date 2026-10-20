@@ -6,14 +6,7 @@ import type { EngineInterface, PromptOrigin, Register } from 'claude-code'
 
 import type { JobPackage, JobView, PackageTab } from '../types/index.d.ts'
 import { act, dataDir, EMPTY_BOARD, jobs, loadPackage, openFile, PANE, refresh } from './lib/io.ts'
-import {
-  bandText,
-  counts,
-  defaultStage,
-  isColumn,
-  leadsToMention,
-  nudgeContext,
-} from './lib/model.ts'
+import { bandText, counts, isColumn, leadsToMention, nudgeContext } from './lib/model.ts'
 import type { Column, Lead } from './lib/model.ts'
 import { boardView, leadView, packageView, PAGE, proposalsView } from './views.tsx'
 import type { Actions, ViewContext } from './views.tsx'
@@ -63,25 +56,33 @@ function actions($: EngineInterface): Actions {
     board: () => void show($, { kind: 'board' }),
     proposals: () => void show($, { kind: 'proposals' }),
     refresh: () => void refresh($),
-    toggleClosed: () => void update($, showClosed, value => !value),
+    toggleClosed: () =>
+      void update($, showClosed, value => !value)
+        .then(() => update($, stage, () => null))
+        .then(() => update($, shown, () => PAGE)),
     tab: column => void update($, stage, () => column).then(() => update($, shown, () => PAGE)),
     more: () => void update($, shown, count => count + PAGE),
     move,
     outcome: (lead, to, reason) =>
-      void act($, `Recording ${reason.toLowerCase()} at ${lead.company}`, [
-        'move',
-        lead.id,
-        to,
-        '--reason',
-        reason,
-      ]).then(result =>
-        result.ok
-          ? act($, 'Recording the outcome', [
-              'feedback',
-              JSON.stringify({ leadId: lead.id, kind: 'outcome', reason }),
-            ])
-          : result,
-      ),
+      void (async () => {
+        // A second press before the redraw would record the outcome twice: only the first,
+        // while the lead is still where the press saw it, counts.
+        if (await read($, busy)) return
+        const now = (await read($, board)).leads.find(one => one.id === lead.id)
+        if (!now || now.column !== lead.column) return
+        const moved = await act($, `Recording the outcome at ${lead.company}`, [
+          'move',
+          lead.id,
+          to,
+          '--note',
+          reason,
+        ])
+        if (!moved.ok) return
+        await act($, 'Recording the outcome', [
+          'feedback',
+          JSON.stringify({ leadId: lead.id, kind: 'outcome', reason }),
+        ])
+      })(),
     askPass: lead => void show($, { kind: 'lead', id: lead.id, passing: true }),
     pass: (lead, reason) =>
       void act($, `Passing on ${lead.company}`, ['pass', lead.id, reason]).then(() =>
@@ -353,7 +354,7 @@ export const register: Register = on => {
     if (at.kind === 'proposals') return proposalsView(ctx)
     return boardView(ctx, {
       showClosed: await read($, showClosed),
-      stage: (await read($, stage)) ?? defaultStage({ version: 1, leads: current.leads }),
+      stage: await read($, stage),
       shown: await read($, shown),
     })
   })

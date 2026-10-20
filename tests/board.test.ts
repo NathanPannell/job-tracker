@@ -83,17 +83,31 @@ describe('kanban', () => {
     })
   }
 
-  test('a rejection moves the lead to Passed and records the outcome for the weekly review', async ($, on) => {
+  test('a rejection is an outcome, not a pass, and can be undone in place', async ($, on) => {
     const w = world(on, { leads: [lead('acme-api', { company: 'Acme', column: 'applied' })] })
     await start($)
     const ui = await $.ui.mount({ ...pane, surface: 'desktop' })
+    await ui.press({ key: 'tab:applied' })
     await ui.press({ key: 'rejected:acme-api' })
-    expect(w.leads()[0]?.column).toBe('passed')
-    expect(w.leads()[0]?.passReason).toBe('Rejected')
+    expect(w.leads()[0]?.column).toBe('archived')
+    expect(w.leads()[0]?.passReason).toBeUndefined()
     expect(w.feedback().map(event => [event.kind, event.reason])).toEqual([
-      ['pass', 'Rejected'],
-      ['outcome', 'Rejected'],
+      ['move', undefined],
+      ['outcome', 'rejection: marked on the board'],
     ])
+    await ui.press({ key: 'closed' })
+    await ui.press({ key: 'tab:archived' })
+    expect(await ui.find({ key: 'restore:acme-api', text: /Back to Applied/ })).toBeDefined()
+    await ui.press({ key: 'restore:acme-api' })
+    expect(w.leads()[0]?.column).toBe('applied')
+  })
+
+  test('a Ready lead without a package offers to draft one', async ($, on) => {
+    world(on, { leads: [lead('acme-api', { column: 'ready' })] })
+    await start($)
+    const ui = await $.ui.mount({ ...pane, surface: 'desktop' })
+    expect(await ui.find({ key: 'draft:acme-api', text: /Draft package/ })).toBeDefined()
+    expect(await ui.find({ key: 'review:acme-api' })).toBeUndefined()
   })
 
   test('New shows ten cards, best first, and Show more adds ten', async ($, on) => {
