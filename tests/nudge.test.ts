@@ -94,6 +94,29 @@ describe('nudge', () => {
     expect(contexts[3]).toBeUndefined()
   })
 
+  test('a prompt typed during another turn is marked by its own reply, not that turn', async ($, on) => {
+    const w = world(on, { leads: [lead('alpha-backend', { company: 'Alpha', fitScore: 91 })] })
+    bottoms(on)
+    await $.session.start({ cwd: '.', surface: 'desktop', isInteractive: true })
+    await $.prompt.submit({ ...typed('quick question'), turnId: 'running' })
+    await $.turn.complete({
+      answer: 'Package drafted. Review it in /jobs.',
+      durationMs: 1,
+      isAborted: false,
+      turnId: 'running',
+      reason: 'answer',
+    })
+    expect(w.leads()[0]?.mentionedAt).toBeUndefined()
+    await $.turn.complete({
+      answer: 'Answer. New lead: Alpha — see /jobs.',
+      durationMs: 1,
+      isAborted: false,
+      turnId: 'mine',
+      reason: 'answer',
+    })
+    expect(w.leads()[0]?.mentionedAt).toBeDefined()
+  })
+
   test('an interrupted reply marks nothing', async ($, on) => {
     const w = world(on, { leads: [lead('alpha-backend', { company: 'Alpha', fitScore: 91 })] })
     bottoms(on)

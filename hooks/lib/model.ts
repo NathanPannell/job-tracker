@@ -95,12 +95,25 @@ export function leadId(company: string, role: string): string {
   return slug || 'lead'
 }
 
-const normalizeUrl = (url: string) =>
-  url
-    .trim()
-    .replace(/[?#].*$/, '')
-    .replace(/\/+$/, '')
-    .toLowerCase()
+/** A posting URL for matching: tracking parameters, the fragment and a trailing slash dropped. */
+export function normalizeUrl(url: string): string {
+  const trimmed = url.trim()
+  try {
+    const parsed = new URL(trimmed)
+    const tracking: string[] = []
+    parsed.searchParams.forEach((_, key) => {
+      if (/^(utm_|ref$|refid$|source$|src$|gh_src$|trk)/i.test(key)) tracking.push(key)
+    })
+    for (const key of tracking) parsed.searchParams.delete(key)
+    parsed.hash = ''
+    return parsed
+      .toString()
+      .replace(/\/+(\?|$)/, '$1')
+      .toLowerCase()
+  } catch {
+    return trimmed.replace(/#.*$/, '').replace(/\/+$/, '').toLowerCase()
+  }
+}
 
 /** The column left or right of `column` along the pipeline; undefined at either end. */
 export function neighbour(column: Column, direction: -1 | 1): Column | undefined {
@@ -125,6 +138,7 @@ export function moveLead(
   if (to === 'passed' && !extra.passReason) {
     return { leads: file, error: 'Passing a lead needs a reason' }
   }
+  if (to === lead.column) return { leads: file }
   const from = lead.column
   const moved: Lead = {
     ...lead,
@@ -212,7 +226,21 @@ export type LeadPatch = Partial<
   >
 >
 
-/** Applies a patch from the model or a skill, recording what changed. */
+const PATCH_KEYS: readonly (keyof LeadPatch)[] = [
+  'column',
+  'fitScore',
+  'fitReason',
+  'notes',
+  'followUpAt',
+  'snoozedUntil',
+  'comp',
+  'location',
+  'url',
+  'closesAt',
+  'passReason',
+]
+
+/** Applies a patch from the model or a skill, recording what changed; other fields are refused. */
 export function patchLead(
   file: LeadsFile,
   id: string,
@@ -228,12 +256,12 @@ export function patchLead(
   if (patch.fitScore !== undefined && !(patch.fitScore >= 0 && patch.fitScore <= 100)) {
     return { leads: file, error: 'fitScore must be 0-100' }
   }
+  const unknown = Object.keys(patch).filter(key => !PATCH_KEYS.includes(key as keyof LeadPatch))
+  if (unknown.length > 0) return { leads: file, error: `Cannot change ${unknown.join(', ')}` }
   const { column, ...rest } = patch
   let next: MoveResult = { leads: file }
   if (column !== undefined && column !== lead.column) {
-    next = moveLead(file, id, column, at, by, {
-      passReason: patch.passReason ?? (column === 'passed' ? 'Passed by the assistant' : undefined),
-    })
+    next = moveLead(file, id, column, at, by, { passReason: patch.passReason })
     if (next.error) return next
   }
   const current = next.leads.leads.find(one => one.id === id) as Lead
@@ -436,10 +464,19 @@ export function age(iso: string, now: number): string {
 
 /** Parses a JSON data file, falling back to `empty` when it is missing or unreadable. */
 export function parseOr<T>(text: string | undefined, empty: () => T): T {
-  if (text === undefined || text.trim() === '') return empty()
   try {
-    return JSON.parse(text) as T
+    return parseStrict(text, empty)
   } catch {
     return empty()
   }
+}
+
+/**
+ * Parses a JSON data file, `empty` only when it is missing or blank. A file that does not parse
+ * throws, so a writer never replaces a hand-edited board with an empty one.
+ */
+export function parseStrict<T>(text: string | undefined, empty: () => T): T {
+  const body = text?.replace(/^\uFEFF/, '')
+  if (body === undefined || body.trim() === '') return empty()
+  return JSON.parse(body) as T
 }

@@ -6,7 +6,7 @@ description: Build a tailored application package for one job lead on the board 
 # Package
 
 Build everything the person needs to apply to one lead, to the quality of the examples in
-`$JOB_TRACKER_DATA/profile/prior-research/` (the Trelent application and the tailored résumés).
+`$JOB_TRACKER_DATA/profile/prior-research/` (earlier applications and tailored résumés).
 You never submit, send an email, or invent a fact.
 
 ## Paths
@@ -51,8 +51,8 @@ You never submit, send an email, or invent a fact.
    person's voice from `cover-letter-prompts.md`; open with why this company, give two concrete
    pieces of evidence from the record, end with a short ask. No facts outside the record.
 6. Answers (`answers.md`): every question found in step 2, each with a drafted answer from the
-   record and the prompt bank. Reuse recorded answers exactly where they apply (Canadian work
-   authorization and sponsorship, travel-commitment answers) and only within their stated limits.
+   record and the prompt bank. Reuse recorded answers exactly where they apply (work
+   authorization, sponsorship, travel commitments) and only within their stated limits.
    Where the record has no answer (salary expectation, start date, a disclosure), write
    `NEEDS ANSWER:` and the question instead of guessing.
 7. Company brief (`company-brief.md`): what they build and for whom, stage and funding, team size,

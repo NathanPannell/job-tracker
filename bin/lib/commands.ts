@@ -409,7 +409,7 @@ export type AtsSummary = {
 }
 
 /**
- * Reads every board in `profile/ats-boards.json`, keeps the postings workable from Victoria
+ * Reads every board in `profile/ats-boards.json`, keeps the postings workable from Canada
  * that are not on the board yet, and writes them to `scout/ats-<date>.json` for scoring.
  */
 export async function ats(dir: string, options: { all?: boolean; fetcher?: Fetch } = {}) {

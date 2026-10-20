@@ -17,8 +17,10 @@ import {
   markMentioned,
   moveLead,
   neighbour,
+  normalizeUrl,
   nudgeContext,
   parseOr,
+  parseStrict,
   patchLead,
   snoozeLead,
 } from '../hooks/lib/model.ts'
@@ -141,15 +143,65 @@ test('patchLead validates, moves and records the fields it changed', () => {
   assert.ok(patchLead(file, 'x', {}, AT, 'model').error)
   assert.ok(patchLead(file, id, { column: 'bogus' as never }, AT, 'model').error)
   assert.ok(patchLead(file, id, { fitScore: 140 }, AT, 'model').error)
-  const patched = patchLead(file, id, { column: 'passed', fitScore: 50, notes: 'n' }, AT, 'model')
+  assert.match(patchLead(file, id, { column: 'passed' }, AT, 'model').error ?? '', /reason/)
+  assert.match(
+    patchLead(file, id, { mentionedAt: AT, company: 'X' } as never, AT, 'model').error ?? '',
+    /Cannot change mentionedAt, company/,
+  )
+  const patched = patchLead(
+    file,
+    id,
+    { column: 'passed', passReason: 'Location', fitScore: 50, notes: 'n' },
+    AT,
+    'model',
+  )
   const lead = patched.leads.leads[0] as Lead
   assert.equal(lead.column, 'passed')
-  assert.equal(lead.passReason, 'Passed by the assistant')
+  assert.equal(lead.passReason, 'Location')
   assert.equal(lead.fitScore, 50)
   assert.equal(lead.history.at(-1)?.action, 'scored')
   assert.equal(patchLead(file, id, {}, AT, 'model').leads, file)
   const noted = patchLead(file, id, { notes: 'x' }, AT, 'model').leads.leads[0] as Lead
   assert.equal(noted.history.at(-1)?.action, 'note')
+})
+
+test('a move to the column a lead is already in records nothing', () => {
+  const file = seeded()
+  const same = moveLead(file, file.leads[0]?.id as string, 'new', AT, 'sync')
+  assert.equal(same.leads, file)
+  assert.equal(same.event, undefined)
+})
+
+test('URLs match without tracking parameters but keep the ones that name the posting', () => {
+  assert.equal(
+    normalizeUrl('https://news.ycombinator.com/item?id=1'),
+    'https://news.ycombinator.com/item?id=1',
+  )
+  assert.notEqual(
+    normalizeUrl('https://news.ycombinator.com/item?id=1'),
+    normalizeUrl('https://news.ycombinator.com/item?id=2'),
+  )
+  assert.equal(
+    normalizeUrl('https://Jobs.example.com/a/?utm_source=x&gh_src=y#apply'),
+    'https://jobs.example.com/a',
+  )
+  assert.equal(normalizeUrl(' not a url/ '), 'not a url')
+  const hn = addLeads(
+    emptyLeads(),
+    [
+      incoming('A', { url: 'https://news.ycombinator.com/item?id=1' }),
+      incoming('B', { url: 'https://news.ycombinator.com/item?id=2' }),
+    ],
+    AT,
+    0,
+  )
+  assert.equal(hn.added.length, 2)
+})
+
+test('parseStrict throws on a broken file and reads one with a byte-order mark', () => {
+  assert.throws(() => parseStrict('{"leads": [,]}', emptyLeads))
+  assert.deepEqual(parseStrict('\uFEFF{"version":1,"leads":[]}', emptyLeads), emptyLeads())
+  assert.deepEqual(parseStrict(undefined, emptyLeads), emptyLeads())
 })
 
 test('appendEvent skips a duplicate id', () => {

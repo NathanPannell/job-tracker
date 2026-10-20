@@ -163,6 +163,8 @@ declare module 'claude-code' {
       expanded: string[]
       /** Leads the nudge named in this session's first prompt, marked when the turn ends. */
       pending: string[]
+      /** The turn that was running when the nudged prompt was typed; its end is not the reply. */
+      pendingTurn: string | null
       /** True once this session's first user prompt was seen. */
       nudged: boolean
       busy: string | null

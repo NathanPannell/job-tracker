@@ -19,7 +19,7 @@ import {
   emptyFeedback,
   emptyLeads,
   emptyProposals,
-  parseOr,
+  parseStrict,
 } from '../../hooks/lib/model.ts'
 import type {
   ApplicationsFile,
@@ -73,7 +73,9 @@ export function withLock<T>(dir: string, fn: () => T): T {
     try {
       fd = openSync(lock, 'wx')
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error
+      // EPERM: Windows refuses to open a lock file another process is deleting.
+      const code = (error as NodeJS.ErrnoException).code
+      if (code !== 'EEXIST' && code !== 'EPERM') throw error
       try {
         if (Date.now() - statSync(lock).mtimeMs > LOCK_STALE_MS) rmSync(lock, { force: true })
       } catch {
@@ -115,7 +117,14 @@ export function writeAtomic(path: string, text: string): void {
 
 export function readData<N extends DataName>(dir: string, name: N): Data[N] {
   const path = join(dir, FILES[name])
-  return parseOr(existsSync(path) ? readFileSync(path, 'utf8') : undefined, EMPTY[name])
+  const text = existsSync(path) ? readFileSync(path, 'utf8') : undefined
+  try {
+    return parseStrict(text, EMPTY[name])
+  } catch (error) {
+    throw new Error(`${path} is not valid JSON; fix it before the board can change.`, {
+      cause: error,
+    })
+  }
 }
 
 export function writeData<N extends DataName>(dir: string, name: N, value: Data[N]): void {

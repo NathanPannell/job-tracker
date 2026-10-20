@@ -146,6 +146,16 @@ test('proposals are approved into the profile files or rejected', () => {
   assert.equal(commands.decide(dir, second.id, 'reject').status, 'rejected')
 })
 
+test('a broken data file stops every write instead of replacing the board', () => {
+  const dir = fresh()
+  commands.add(dir, [lead('Acme')])
+  writeFileSync(join(dir, 'leads.json'), '{"version":1,"leads":[,]}')
+  assert.throws(() => commands.move(dir, 'acme-backend-developer', 'shortlisted'), /not valid JSON/)
+  assert.equal(readFileSync(join(dir, 'leads.json'), 'utf8'), '{"version":1,"leads":[,]}')
+  writeFileSync(join(dir, 'leads.json'), '\uFEFF{"version":1,"leads":[]}')
+  assert.deepEqual(commands.list(dir), [])
+})
+
 test('the lock serializes writers and a stale lock is cleared', () => {
   const dir = fresh()
   writeFileSync(join(dir, '.lock'), '')

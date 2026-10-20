@@ -18,6 +18,10 @@ const pkg = atom({ plugin: 'job-tracker', key: 'pkg' } as const, null as JobPack
 const showClosed = atom({ plugin: 'job-tracker', key: 'showClosed' } as const, false)
 const expanded = atom({ plugin: 'job-tracker', key: 'expanded' } as const, [] as string[])
 const pending = atom({ plugin: 'job-tracker', key: 'pending' } as const, [] as string[])
+const pendingTurn = atom(
+  { plugin: 'job-tracker', key: 'pendingTurn' } as const,
+  null as string | null,
+)
 const nudged = atom({ plugin: 'job-tracker', key: 'nudged' } as const, false)
 const busy = atom({ plugin: 'job-tracker', key: 'busy' } as const, null as string | null)
 
@@ -205,6 +209,7 @@ export const register: Register = on => {
     const named = leadsToMention({ version: 1, leads: current.leads }, await $.clock.now())
     if (named.length === 0) return next(e)
     await update($, pending, () => named.map(lead => lead.id))
+    await update($, pendingTurn, () => e.turnId ?? null)
     return next({ ...e, context: [...(e.context ?? []), nudgeContext(named)] })
   })
 
@@ -213,6 +218,8 @@ export const register: Register = on => {
     const result = await next(e)
     if (e.agentId) return result
     const ids = await read($, pending)
+    // A prompt typed during another turn is answered after it: that turn's end is not the reply.
+    if (ids.length > 0 && e.turnId === (await read($, pendingTurn))) return result
     if (ids.length > 0) {
       await update($, pending, () => [])
       const leads = (await read($, board)).leads.filter(lead => ids.includes(lead.id))
