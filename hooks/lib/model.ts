@@ -314,7 +314,9 @@ export function addLeads(
     }
     const url = normalizeUrl(one.url)
     const at_ = leads.findIndex(
-      lead => lead.id === id || (url !== '' && normalizeUrl(lead.url) === url),
+      lead =>
+        lead.id === id ||
+        (url !== '' && normalizeUrl(lead.url) === url && isSameRole(lead.role, one.role)),
     )
     if (at_ >= 0) {
       const existing = leads[at_] as Lead
@@ -340,6 +342,25 @@ export function addLeads(
     added.push(leads[leads.length - 1]?.id as string)
   }
   return { leads: { ...file, leads }, added, updated, dropped }
+}
+
+const words = (text: string) =>
+  new Set(
+    text
+      .toLowerCase()
+      .split(/[^a-z0-9]+/)
+      .filter(word => word.length > 1),
+  )
+
+/**
+ * Whether two titles name the same role: most of their words shared. One careers page often
+ * lists several roles under a single URL, so a URL match alone is not the same posting.
+ */
+export function isSameRole(a: string, b: string): boolean {
+  const left = words(a)
+  const right = words(b)
+  const shared = [...left].filter(word => right.has(word)).length
+  return shared / Math.max(1, Math.min(left.size, right.size)) >= 0.6
 }
 
 const uniqueId = (leads: readonly Lead[], id: string) => {

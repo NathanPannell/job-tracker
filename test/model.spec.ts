@@ -12,6 +12,7 @@ import {
   emptyFeedback,
   emptyLeads,
   isColumn,
+  isSameRole,
   leadId,
   leadsToMention,
   markMentioned,
@@ -71,7 +72,7 @@ test('addLeads dedupes by id and by URL, keeps the column, drops below the thres
     moved,
     [
       incoming('Acme', { comp: 'CAD 90k' }),
-      incoming('Other', { url: 'https://jobs.example.com/Acme?ref=x', role: 'Different title' }),
+      incoming('Other', { url: 'https://jobs.example.com/Acme?ref=x', role: 'Backend Developer (Remote)' }),
     ],
     AT,
     60,
@@ -196,6 +197,29 @@ test('URLs match without tracking parameters but keep the ones that name the pos
     0,
   )
   assert.equal(hn.added.length, 2)
+})
+
+test('one careers URL listing two roles gives two leads; a retitled posting stays one', () => {
+  const page = 'https://example.com/careers'
+  const two = addLeads(
+    emptyLeads(),
+    [
+      incoming('Cardog', { role: 'Data Platform Engineer', url: page }),
+      incoming('Cardog', { role: 'VIN Decode Engineer', url: page }),
+    ],
+    AT,
+    0,
+  )
+  assert.equal(two.added.length, 2)
+  const retitled = addLeads(
+    two.leads,
+    [incoming('Cardog', { role: 'Senior Data Platform Engineer', url: page })],
+    AT,
+    0,
+  )
+  assert.equal(retitled.added.length, 0)
+  assert.ok(isSameRole('Backend Engineer', 'Backend Engineer (Remote)'))
+  assert.ok(!isSameRole('Applied AI Engineer', 'Data Engineer / Backend Engineer'))
 })
 
 test('parseStrict throws on a broken file and reads one with a byte-order mark', () => {
