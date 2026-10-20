@@ -103,8 +103,11 @@ export function world(
     const [id = '', second = ''] = args
     const file = leadsFile()
     switch (command) {
-      case 'move':
-        return commit(moveLead(file, id, second as Column, at, 'user'))
+      case 'move': {
+        const reason = rest[rest.indexOf('--reason') + 1]
+        const passReason = rest.includes('--reason') ? reason : undefined
+        return commit(moveLead(file, id, second as Column, at, 'user', { passReason }))
+      }
       case 'pass':
         return commit(moveLead(file, id, 'passed', at, 'user', { passReason: second }))
       case 'score':
