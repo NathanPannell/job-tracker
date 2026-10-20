@@ -87,28 +87,33 @@ describe('tools', () => {
   test('list_leads, update_lead and record_feedback read and change the board', async ($, on) => {
     const w = world(on, { leads: [lead('acme-api'), lead('beta-api', { fitScore: 95 })] })
     await $.session.start({ cwd: '.', surface: 'desktop', isInteractive: true })
-    const listed = await $.tool.call({ tool: 'mcp__job-tracker__list_leads', input: {} } as never)
+    const listed = await $.tool.call({ tool: 'mcp__job-tracker__list_leads', limit: 5 })
     expect(String((listed as { result?: unknown }).result)).toContain('beta-api')
 
     await $.tool.call({
       tool: 'mcp__job-tracker__update_lead',
-      input: { id: 'acme-api', column: 'shortlisted', notes: 'Ask about the team' },
-    } as never)
+      id: 'acme-api',
+      column: 'shortlisted',
+      notes: 'Ask about the team',
+    })
     expect(w.leads()[0]?.column).toBe('shortlisted')
     expect(w.leads()[0]?.notes).toBe('Ask about the team')
 
     await $.tool.call({
       tool: 'mcp__job-tracker__record_feedback',
-      input: { leadId: 'beta-api', kind: 'outcome', reason: 'Rejection email' },
-    } as never)
+      leadId: 'beta-api',
+      kind: 'outcome',
+      reason: 'Rejection email',
+    })
     expect(w.feedback().at(-1)).toEqual(
       expect.objectContaining({ kind: 'outcome', leadId: 'beta-api' }),
     )
 
     const bad = await $.tool.call({
       tool: 'mcp__job-tracker__update_lead',
-      input: { id: 'acme-api', column: 'nowhere' },
-    } as never)
+      id: 'acme-api',
+      column: 'nowhere',
+    })
     expect(String((bad as { result?: unknown }).result)).toContain('unknown column')
   })
 

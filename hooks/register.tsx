@@ -98,6 +98,16 @@ function actions($: EngineInterface): Actions {
 
 const json = (value: unknown) => JSON.stringify(value, null, 2)
 
+/**
+ * A tool call's own arguments: `tool.call` carries them flat on `e`, beside the keys the engine
+ * reserves for itself.
+ */
+function toolArgs(e: object): Record<string, unknown> {
+  const { tool, tool_use_id, consent, agentId, ...args } = e as Record<string, unknown>
+  void [tool, tool_use_id, consent, agentId]
+  return args
+}
+
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     await $.command.register({
@@ -170,7 +180,7 @@ export const register: Register = on => {
   })
 
   on('tool.call', { tool: 'mcp__job-tracker__list_leads' }, async ($, e) => {
-    const input = e.input as { column?: string; minScore?: number; limit?: number }
+    const input = toolArgs(e) as { column?: string; minScore?: number; limit?: number }
     const args = ['list', '--limit', String(input.limit ?? 20)]
     if (input.column) args.push('--column', input.column)
     if (input.minScore !== undefined) args.push('--min', String(input.minScore))
@@ -179,7 +189,10 @@ export const register: Register = on => {
   })
 
   on('tool.call', { tool: 'mcp__job-tracker__update_lead' }, async ($, e) => {
-    const { id, ...fields } = e.input as { id?: string; column?: string } & Record<string, unknown>
+    const { id, ...fields } = toolArgs(e) as { id?: string; column?: string } & Record<
+      string,
+      unknown
+    >
     if (!id) return { result: 'Error: id is required' }
     if (fields.column !== undefined && !isColumn(fields.column)) {
       return { result: `Error: unknown column ${String(fields.column)}` }
@@ -189,7 +202,7 @@ export const register: Register = on => {
   })
 
   on('tool.call', { tool: 'mcp__job-tracker__record_feedback' }, async ($, e) => {
-    const ran = await jobs($, ['feedback', json(e.input)])
+    const ran = await jobs($, ['feedback', json(toolArgs(e))])
     return { result: ran.ok ? json(ran.value) : `Error: ${ran.error}` }
   })
 
