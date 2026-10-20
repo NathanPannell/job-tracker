@@ -160,7 +160,10 @@ declare module 'claude-code' {
       view: JobView
       pkg: JobPackage | null
       showClosed: boolean
-      expanded: string[]
+      /** The board's selected stage tab; null until the person picks one. */
+      stage: Column | null
+      /** How many cards the selected stage shows (grows by ten with "Show more"). */
+      shown: number
       /** Leads the nudge named in this session's first prompt, marked when the turn ends. */
       pending: string[]
       /** The turn that was running when the nudged prompt was typed; its end is not the reply. */

@@ -8,7 +8,7 @@ import type { JobPackage, JobView, PackageTab } from '../types/index.d.ts'
 import { act, dataDir, EMPTY_BOARD, jobs, loadPackage, openFile, PANE, refresh } from './lib/io.ts'
 import { bandText, counts, isColumn, leadsToMention, nudgeContext } from './lib/model.ts'
 import type { Column, Lead } from './lib/model.ts'
-import { boardView, leadView, packageView, proposalsView } from './views.tsx'
+import { boardView, leadView, packageView, PAGE, proposalsView } from './views.tsx'
 import type { Actions, ViewContext } from './views.tsx'
 
 // The session values the pane and band draw from (the contract is types/index.d.ts).
@@ -16,7 +16,8 @@ const board = atom({ plugin: 'job-tracker', key: 'board' } as const, EMPTY_BOARD
 const view = atom({ plugin: 'job-tracker', key: 'view' } as const, { kind: 'board' } as JobView)
 const pkg = atom({ plugin: 'job-tracker', key: 'pkg' } as const, null as JobPackage | null)
 const showClosed = atom({ plugin: 'job-tracker', key: 'showClosed' } as const, false)
-const expanded = atom({ plugin: 'job-tracker', key: 'expanded' } as const, [] as string[])
+const stage = atom({ plugin: 'job-tracker', key: 'stage' } as const, null as Column | null)
+const shown = atom({ plugin: 'job-tracker', key: 'shown' } as const, PAGE)
 const pending = atom({ plugin: 'job-tracker', key: 'pending' } as const, [] as string[])
 const pendingTurn = atom(
   { plugin: 'job-tracker', key: 'pendingTurn' } as const,
@@ -55,12 +56,33 @@ function actions($: EngineInterface): Actions {
     board: () => void show($, { kind: 'board' }),
     proposals: () => void show($, { kind: 'proposals' }),
     refresh: () => void refresh($),
-    toggleClosed: () => void update($, showClosed, value => !value),
-    toggleExpanded: column =>
-      void update($, expanded, list =>
-        list.includes(column) ? list.filter(one => one !== column) : [...list, column],
-      ),
+    toggleClosed: () =>
+      void update($, showClosed, value => !value)
+        .then(() => update($, stage, () => null))
+        .then(() => update($, shown, () => PAGE)),
+    tab: column => void update($, stage, () => column).then(() => update($, shown, () => PAGE)),
+    more: () => void update($, shown, count => count + PAGE),
     move,
+    outcome: (lead, to, reason) =>
+      void (async () => {
+        // A second press before the redraw would record the outcome twice: only the first,
+        // while the lead is still where the press saw it, counts.
+        if (await read($, busy)) return
+        const now = (await read($, board)).leads.find(one => one.id === lead.id)
+        if (!now || now.column !== lead.column) return
+        const moved = await act($, `Recording the outcome at ${lead.company}`, [
+          'move',
+          lead.id,
+          to,
+          '--note',
+          reason,
+        ])
+        if (!moved.ok) return
+        await act($, 'Recording the outcome', [
+          'feedback',
+          JSON.stringify({ leadId: lead.id, kind: 'outcome', reason }),
+        ])
+      })(),
     askPass: lead => void show($, { kind: 'lead', id: lead.id, passing: true }),
     pass: (lead, reason) =>
       void act($, `Passing on ${lead.company}`, ['pass', lead.id, reason]).then(() =>
@@ -318,14 +340,22 @@ export const register: Register = on => {
       columns: e.props.bodyColumns,
       busy: await read($, busy),
       act: isReadOnly ? undefined : all,
-      nav: { open: all.open, board: all.board, proposals: all.proposals, review: all.review },
+      nav: {
+        open: all.open,
+        board: all.board,
+        proposals: all.proposals,
+        review: all.review,
+        tab: all.tab,
+        more: all.more,
+      },
     }
     if (at.kind === 'lead') return leadView(ctx, at.id, at.passing === true)
     if (at.kind === 'package') return packageView(ctx, at.id, at.tab, await read($, pkg))
     if (at.kind === 'proposals') return proposalsView(ctx)
     return boardView(ctx, {
       showClosed: await read($, showClosed),
-      expanded: await read($, expanded),
+      stage: await read($, stage),
+      shown: await read($, shown),
     })
   })
 }

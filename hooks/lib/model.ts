@@ -65,6 +65,153 @@ export const COLUMN_TITLES: Record<Column, string> = {
   archived: 'Archived',
 }
 
+/**
+ * What a card offers in each column, the column's next step first. `move` goes to `to`;
+ * `outcome` also records what the company decided (`reason`) for the weekly review.
+ */
+export type StageAction =
+  | { key: string; label: string; kind: 'move'; to: Column; primary?: true }
+  | { key: string; label: string; kind: 'outcome'; to: Column; reason: string; primary?: true }
+  | { key: string; label: string; kind: 'pass' | 'draft' | 'review' | 'submit'; primary?: true }
+
+const backTo = (to: Column): StageAction => ({
+  key: `back-${to}`,
+  label: `Back to ${COLUMN_TITLES[to]}`,
+  kind: 'move',
+  to,
+})
+
+export const STAGE_ACTIONS: Record<Column, readonly StageAction[]> = {
+  new: [
+    { key: 'shortlist', label: 'Shortlist', kind: 'move', to: 'shortlisted', primary: true },
+    { key: 'pass', label: 'Pass…', kind: 'pass' },
+  ],
+  shortlisted: [
+    { key: 'draft', label: 'Draft package', kind: 'draft', primary: true },
+    backTo('new'),
+  ],
+  drafting: [backTo('shortlisted')],
+  ready: [
+    { key: 'review', label: 'Review package', kind: 'review', primary: true },
+    { key: 'submit', label: 'Approve & submit', kind: 'submit' },
+  ],
+  // What a company decided is an outcome, never a pass: passes are the person's own choices,
+  // which the weekly review reads as such. Reasons follow the sync skill's "<kind>: <line>".
+  applied: [
+    {
+      key: 'interview',
+      label: 'Got interview',
+      kind: 'outcome',
+      to: 'interviewing',
+      reason: 'interview: marked on the board',
+      primary: true,
+    },
+    {
+      key: 'rejected',
+      label: 'Rejected',
+      kind: 'outcome',
+      to: 'archived',
+      reason: 'rejection: marked on the board',
+    },
+    {
+      key: 'ghosted',
+      label: 'Ghosted',
+      kind: 'outcome',
+      to: 'archived',
+      reason: 'rejection: no reply (ghosted)',
+    },
+  ],
+  interviewing: [
+    {
+      key: 'offer',
+      label: 'Got offer',
+      kind: 'outcome',
+      to: 'offer',
+      reason: 'offer: marked on the board',
+      primary: true,
+    },
+    {
+      key: 'rejected',
+      label: 'Rejected',
+      kind: 'outcome',
+      to: 'archived',
+      reason: 'rejection: after interviews',
+    },
+  ],
+  offer: [
+    {
+      key: 'accepted',
+      label: 'Accepted',
+      kind: 'outcome',
+      to: 'archived',
+      reason: 'offer: accepted',
+      primary: true,
+    },
+    {
+      key: 'declined',
+      label: 'Declined',
+      kind: 'outcome',
+      to: 'archived',
+      reason: 'offer: declined',
+    },
+  ],
+  passed: [backTo('new')],
+  archived: [backTo('new')],
+}
+
+/**
+ * The column a lead came from before its last move, so a mis-click on Rejected or Archive can be
+ * undone in place; undefined when it has never moved or came from where it is now.
+ */
+export function previousColumn(lead: Pick<Lead, 'column' | 'history'>): Column | undefined {
+  const last = [...lead.history]
+    .reverse()
+    .find(entry => entry.action === 'moved' && entry.to === lead.column)
+  return last?.from && last.from !== lead.column ? last.from : undefined
+}
+
+/** The stage the board opens on: New while it has leads, else the first stage that has any. */
+export function defaultStage(file: LeadsFile): Column {
+  const has = (column: Column) => file.leads.some(lead => lead.column === column)
+  return PIPELINE.find(has) ?? 'new'
+}
+
+/** The theme colour of a fit score's badge: strong, worth a look, or weak. */
+export function scoreTone(score: number): 'success' | 'warning' | 'subtle' {
+  if (score >= 90) return 'success'
+  if (score >= 75) return 'warning'
+  return 'subtle'
+}
+
+const SOURCE_NAMES: Record<string, string> = {
+  web: 'Web search',
+  hn: "HN Who's Hiring",
+  greenhouse: 'Greenhouse board',
+  lever: 'Lever board',
+  ashby: 'Ashby board',
+  'gmail:linkedin': 'LinkedIn alert',
+  'gmail:indeed': 'Indeed alert',
+  'gmail:wellfound': 'Wellfound alert',
+  'gmail:glassdoor': 'Glassdoor alert',
+  'gmail:yc': 'YC Work at a Startup',
+  'gmail:wttj': 'Welcome to the Jungle',
+  'gmail:bctechjobs': 'BCtechjobs alert',
+  'gmail:viatec': 'VIATEC The Loop',
+  'gmail:other': 'Job alert email',
+}
+
+/** A source as the person reads it: `careers:SSI` is "SSI careers", `signal:betakit` is news. */
+export function sourceLabel(source: string): string {
+  const known = SOURCE_NAMES[source]
+  if (known) return known
+  const [kind = '', ...rest] = source.split(':')
+  const name = rest.join(':').trim()
+  if (kind === 'careers' && name) return `${name} careers`
+  if (kind === 'signal' && name) return `${name} (news)`
+  if (kind === 'gmail' && name) return `${name} email`
+  return source
+}
+
 export const PASS_REASONS = [
   'Too senior',
   'Wrong stack',

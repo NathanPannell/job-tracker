@@ -7,12 +7,16 @@ import {
   age,
   COLUMN_TITLES,
   columnLeads,
+  defaultStage,
   isSnoozed,
-  neighbour,
+  previousColumn,
   PASS_REASONS,
   PIPELINE,
+  scoreTone,
+  sourceLabel,
+  STAGE_ACTIONS,
 } from './lib/model.ts'
-import type { Column, Lead } from './lib/model.ts'
+import type { Column, Lead, StageAction } from './lib/model.ts'
 
 export type Table = Elements[RenderSurface]
 
@@ -23,8 +27,10 @@ export type Actions = {
   proposals: () => void
   refresh: () => void
   toggleClosed: () => void
-  toggleExpanded: (column: Column) => void
+  tab: (column: Column) => void
+  more: () => void
   move: (lead: Lead, to: Column) => void
+  outcome: (lead: Lead, to: Column, reason: string) => void
   askPass: (lead: Lead) => void
   pass: (lead: Lead, reason: string) => void
   score: (lead: Lead, correction: 'too-high' | 'too-low') => void
@@ -46,11 +52,16 @@ export type ViewContext = {
   /** Undefined on a surface that only reads. */
   act: Actions | undefined
   /** Navigation stays available where acting is not. */
-  nav: Pick<Actions, 'open' | 'board' | 'proposals' | 'review'>
+  nav: Pick<Actions, 'open' | 'board' | 'proposals' | 'review' | 'tab' | 'more'>
 }
 
-const CARD_LIMIT = 8
-const COLUMN_WIDTH = 34
+/** Cards a stage shows at first, and how many more each "Show more" adds. */
+export const PAGE = 10
+const SNOOZE_OPTIONS = [
+  { value: '3', label: 'Snooze 3 days' },
+  { value: '7', label: 'Snooze a week' },
+  { value: '14', label: 'Snooze two weeks' },
+]
 
 const clip = (text: string, max: number) =>
   text.length > max ? `${text.slice(0, max - 1)}…` : text
@@ -66,58 +77,88 @@ function header(ctx: ViewContext, title: string, back: boolean): RenderElement {
   )
 }
 
-function card(ctx: ViewContext, lead: Lead): RenderElement {
-  const { Box, Text, Button } = ctx.el
-  const left = neighbour(lead.column, -1)
-  const right = neighbour(lead.column, 1)
-  const snoozed = isSnoozed(lead, ctx.now)
+/** The fit score as a coloured chip: green for strong, amber for worth a look, grey for weak. */
+function badge(ctx: ViewContext, lead: Lead, key: string): RenderElement {
+  const { Text } = ctx.el
+  const mark =
+    lead.scoreCorrection === 'too-high' ? '↓' : lead.scoreCorrection === 'too-low' ? '↑' : ''
   return (
-    <Box key={`card:${lead.id}`} flexDirection="column" borderStyle="round" paddingX={1}>
-      <Button key={`open:${lead.id}`} plain onPress={() => ctx.nav.open(lead.id)}>
-        <Text bold>{clip(lead.company, 40)}</Text>
-      </Button>
-      <Text wrap="wrap">{clip(lead.role, 70)}</Text>
-      <Text dimColor wrap="truncate-end">
-        {`fit ${lead.fitScore}${lead.scoreCorrection ? ` (${lead.scoreCorrection})` : ''} · ${age(lead.foundAt, ctx.now)} · ${lead.source}${snoozed ? ' · snoozed' : ''}`}
-      </Text>
-      <Text dimColor wrap="wrap">
-        {clip(lead.fitReason, 140)}
-      </Text>
-      {ctx.act && (
-        <Box flexDirection="row" gap={1} flexWrap="wrap">
-          {left && (
-            <Button key={`left:${lead.id}`} label="◀" onPress={() => ctx.act?.move(lead, left)} />
-          )}
-          {right && (
-            <Button key={`right:${lead.id}`} label="▶" onPress={() => ctx.act?.move(lead, right)} />
-          )}
-          <Button
-            key={`details:${lead.id}`}
-            label="Details"
-            onPress={() => ctx.nav.open(lead.id)}
-          />
-        </Box>
-      )}
-    </Box>
+    <Text key={key} bold color="inverseText" backgroundColor={scoreTone(lead.fitScore)}>
+      {` ${lead.fitScore}${mark} `}
+    </Text>
   )
 }
 
-function column(ctx: ViewContext, name: Column, expandedColumns: readonly string[], width: number) {
+/** Runs one of a stage's actions on a lead. */
+function run(ctx: ViewContext, lead: Lead, action: StageAction): void {
+  const act = ctx.act
+  // While an earlier press is still being written, a second one would record it twice.
+  if (!act || ctx.busy) return
+  if (action.kind === 'move') act.move(lead, action.to)
+  else if (action.kind === 'outcome') act.outcome(lead, action.to, action.reason)
+  else if (action.kind === 'pass') act.askPass(lead)
+  else if (action.kind === 'draft') act.draft(lead)
+  else if (action.kind === 'review') act.review(lead)
+  else act.submit(lead)
+}
+
+/** A stage's actions as labelled buttons, its next step highlighted. */
+function stageButtons(ctx: ViewContext, lead: Lead, suffix: string): RenderElement[] {
+  const { Button } = ctx.el
+  const hasPackage = ctx.board.applications.some(one => one.leadId === lead.id)
+  const actions: StageAction[] = STAGE_ACTIONS[lead.column]
+    .filter(action => (action.kind === 'review' || action.kind === 'submit' ? hasPackage : true))
+    .map(action =>
+      action.kind === 'draft' && hasPackage ? { ...action, label: 'Redraft package' } : action,
+    )
+  // Ready without a package (moved there by hand): drafting it is the way on.
+  if (actions.length === 0 && lead.column === 'ready') {
+    actions.push({ key: 'draft', label: 'Draft package', kind: 'draft', primary: true })
+  }
+  // A closed lead can go straight back to where it was, undoing a mis-click.
+  const from = previousColumn(lead)
+  if ((lead.column === 'passed' || lead.column === 'archived') && from && from !== 'new') {
+    actions.unshift({
+      key: 'restore',
+      label: `Back to ${COLUMN_TITLES[from]}`,
+      kind: 'move',
+      to: from,
+    })
+  }
+  return actions.map(action => (
+    <Button
+      key={`${action.key}${suffix}`}
+      label={action.label}
+      variant={action.primary ? 'primary' : undefined}
+      onPress={() => run(ctx, lead, action)}
+    />
+  ))
+}
+
+function card(ctx: ViewContext, lead: Lead): RenderElement {
   const { Box, Text, Button } = ctx.el
-  const leads = columnLeads({ version: 1, leads: ctx.board.leads }, name, ctx.now)
-  const isOpen = expandedColumns.includes(name)
-  const shown = isOpen ? leads : leads.slice(0, CARD_LIMIT)
+  const snoozed = isSnoozed(lead, ctx.now)
+  const facts = [age(lead.foundAt, ctx.now), sourceLabel(lead.source), lead.location]
+    .concat(snoozed ? ['snoozed'] : [])
+    .filter(Boolean)
   return (
-    <Box key={`col:${name}`} flexDirection="column" width={width} gap={0}>
-      <Text bold>{`${COLUMN_TITLES[name]} (${leads.length})`}</Text>
-      {leads.length === 0 && <Text dimColor>—</Text>}
-      {shown.map(lead => card(ctx, lead))}
-      {leads.length > CARD_LIMIT && (
-        <Button
-          key={`more:${name}`}
-          label={isOpen ? 'Show fewer' : `Show all ${leads.length}`}
-          onPress={() => ctx.act?.toggleExpanded(name) ?? ctx.nav.board()}
-        />
+    <Box key={`card:${lead.id}`} flexDirection="column" borderStyle="round" paddingX={1}>
+      <Box flexDirection="row" gap={1} alignItems="flex-start">
+        {badge(ctx, lead, `score:${lead.id}`)}
+        <Button key={`open:${lead.id}`} plain onPress={() => ctx.nav.open(lead.id)}>
+          <Text bold>{clip(lead.company, 40)}</Text>
+          {` · ${clip(lead.role, 80)}`}
+        </Button>
+      </Box>
+      <Text dimColor wrap="truncate-end">
+        {facts.join(' · ')}
+      </Text>
+      <Text wrap="truncate-end">{lead.fitReason}</Text>
+      {lead.column === 'drafting' && <Text dimColor>Package being drafted…</Text>}
+      {ctx.act && (
+        <Box flexDirection="row" gap={1} flexWrap="wrap">
+          {stageButtons(ctx, lead, `:${lead.id}`)}
+        </Box>
       )}
     </Box>
   )
@@ -125,7 +166,7 @@ function column(ctx: ViewContext, name: Column, expandedColumns: readonly string
 
 export function boardView(
   ctx: ViewContext,
-  options: { showClosed: boolean; expanded: readonly string[] },
+  options: { showClosed: boolean; stage: Column | null; shown: number },
 ): RenderElement {
   const { Box, Text, Button, Markdown } = ctx.el
   if (!ctx.board.dataDir) {
@@ -136,10 +177,14 @@ export function boardView(
       </Box>
     )
   }
+  const file = { version: 1 as const, leads: ctx.board.leads }
   const pendingProposals = ctx.board.proposals.filter(one => one.status === 'pending').length
-  const perRow = Math.max(1, Math.floor(ctx.columns / COLUMN_WIDTH))
-  const width = Math.max(24, Math.floor(ctx.columns / Math.min(perRow, PIPELINE.length)) - 1)
   const closed: Column[] = ['passed', 'archived']
+  const closedCount = ctx.board.leads.filter(lead => closed.includes(lead.column)).length
+  const tabs = options.showClosed ? [...PIPELINE, ...closed] : PIPELINE
+  const stage = options.stage && tabs.includes(options.stage) ? options.stage : defaultStage(file)
+  const leads = columnLeads(file, stage, ctx.now)
+  const visible = leads.slice(0, Math.max(options.shown, PAGE))
   return (
     <Box flexDirection="column" gap={1}>
       <Box flexDirection="row" gap={1} flexWrap="wrap" alignItems="center">
@@ -158,36 +203,42 @@ export function boardView(
         {ctx.act && (
           <Button
             key="closed"
-            label={options.showClosed ? 'Hide passed' : 'Show passed & archived'}
+            label={
+              options.showClosed ? 'Hide passed & archived' : `Passed & archived (${closedCount})`
+            }
             onPress={() => ctx.act?.toggleClosed()}
           />
         )}
       </Box>
       {ctx.board.error && <Text color="warning">{ctx.board.error}</Text>}
-      <Box flexDirection="row" flexWrap="wrap" columnGap={1} rowGap={1}>
-        {PIPELINE.map(name => column(ctx, name, options.expanded, width))}
+      <Box key="tabs" flexDirection="row" gap={1} flexWrap="wrap">
+        {tabs.map(column => (
+          <Button
+            key={`tab:${column}`}
+            label={`${COLUMN_TITLES[column]} ${columnLeads(file, column, ctx.now).length}`}
+            variant={column === stage ? 'primary' : undefined}
+            onPress={() => ctx.nav.tab(column)}
+          />
+        ))}
       </Box>
-      {options.showClosed && (
-        <Box flexDirection="row" flexWrap="wrap" columnGap={1} rowGap={1}>
-          {closed.map(name => column(ctx, name, options.expanded, width))}
-        </Box>
-      )}
-      {!options.showClosed && (
-        <Text dimColor>
-          {closed
-            .map(
-              name =>
-                `${COLUMN_TITLES[name]}: ${ctx.board.leads.filter(l => l.column === name).length}`,
-            )
-            .join(' · ')}
-        </Text>
-      )}
+      <Box key={`stage:${stage}`} flexDirection="column" gap={0}>
+        {leads.length === 0 && <Text dimColor>{`Nothing in ${COLUMN_TITLES[stage]} yet.`}</Text>}
+        {visible.map(lead => card(ctx, lead))}
+        {leads.length > visible.length && (
+          <Button
+            key="more"
+            label={`Show ${Math.min(PAGE, leads.length - visible.length)} more (${leads.length - visible.length} left)`}
+            onPress={() => ctx.nav.more()}
+          />
+        )}
+      </Box>
     </Box>
   )
 }
 
 export function leadView(ctx: ViewContext, id: string, passing: boolean): RenderElement {
   const { Box, Text, Button, Link, Markdown } = ctx.el
+  const Select = 'Select' in ctx.el ? ctx.el.Select : undefined
   const lead = ctx.board.leads.find(one => one.id === id)
   if (!lead) {
     return (
@@ -197,12 +248,9 @@ export function leadView(ctx: ViewContext, id: string, passing: boolean): Render
     )
   }
   const app = ctx.board.applications.find(one => one.leadId === id)
-  const left = neighbour(lead.column, -1)
-  const right = neighbour(lead.column, 1)
   const facts = [
-    `fit ${lead.fitScore}${lead.scoreCorrection ? ` (marked ${lead.scoreCorrection})` : ''}`,
     COLUMN_TITLES[lead.column],
-    lead.source,
+    sourceLabel(lead.source),
     `found ${age(lead.foundAt, ctx.now)} ago`,
     lead.location,
     lead.comp,
@@ -211,47 +259,61 @@ export function leadView(ctx: ViewContext, id: string, passing: boolean): Render
   return (
     <Box flexDirection="column" gap={1}>
       {header(ctx, `${lead.company} — ${lead.role}`, true)}
-      <Text dimColor wrap="wrap">
-        {facts.join(' · ')}
-      </Text>
+      <Box flexDirection="row" gap={1} flexWrap="wrap">
+        {badge(ctx, lead, 'score')}
+        <Text dimColor wrap="wrap">
+          {facts.join(' · ')}
+        </Text>
+      </Box>
       {lead.url.startsWith('https:') ? (
         <Link href={lead.url} label="Open posting ↗" />
       ) : (
         <Text dimColor>{lead.url || 'No posting URL'}</Text>
       )}
       <Markdown
-        text={`**Why this score:** ${lead.fitReason}${lead.notes ? `\n\n**Notes:** ${lead.notes}` : ''}${lead.passReason ? `\n\n**Passed:** ${lead.passReason}` : ''}`}
+        text={`**Why this score:** ${lead.fitReason}${
+          lead.notes
+            ? `
+
+**Notes:** ${lead.notes}`
+            : ''
+        }${
+          lead.passReason
+            ? `
+
+**Passed:** ${lead.passReason}`
+            : ''
+        }`}
       />
       {act && (
         <Box flexDirection="column" gap={1}>
-          <Box flexDirection="row" gap={1} flexWrap="wrap">
-            {left && (
-              <Button
-                key="left"
-                label={`◀ ${COLUMN_TITLES[left]}`}
-                onPress={() => act.move(lead, left)}
-              />
+          <Box key="next" flexDirection="row" gap={1} flexWrap="wrap">
+            {stageButtons(ctx, lead, '')}
+            {app && lead.column !== 'ready' && (
+              <Button key="review-any" label="Review package" onPress={() => act.review(lead)} />
             )}
-            {right && (
+          </Box>
+          <Box key="other" flexDirection="row" gap={1} flexWrap="wrap">
+            {lead.column !== 'passed' && lead.column !== 'new' && (
               <Button
-                key="right"
-                label={`${COLUMN_TITLES[right]} ▶`}
-                onPress={() => act.move(lead, right)}
+                key="pass-any"
+                label={passing ? 'Pass: pick a reason' : 'Pass…'}
+                onPress={() => act.askPass(lead)}
               />
             )}
             {lead.column !== 'archived' && (
               <Button key="archive" label="Archive" onPress={() => act.move(lead, 'archived')} />
             )}
-            {lead.column !== 'passed' && (
+            {lead.column !== 'shortlisted' && (lead.column !== 'ready' || app) && (
               <Button
-                key="pass"
-                label={passing ? 'Pass: pick a reason' : 'Pass…'}
-                onPress={() => act.askPass(lead)}
+                key="redraft"
+                label={app ? 'Redraft package' : 'Draft package'}
+                onPress={() => act.draft(lead)}
               />
             )}
           </Box>
           {passing && (
-            <Box flexDirection="row" gap={1} flexWrap="wrap">
+            <Box key="reasons" flexDirection="row" gap={1} flexWrap="wrap">
               {PASS_REASONS.map(reason => (
                 <Button
                   key={`reason:${reason}`}
@@ -261,37 +323,27 @@ export function leadView(ctx: ViewContext, id: string, passing: boolean): Render
               ))}
             </Box>
           )}
-          <Box flexDirection="row" gap={1} flexWrap="wrap">
+          <Box key="feedback" flexDirection="row" gap={1} flexWrap="wrap" alignItems="center">
+            <Text dimColor>Feedback</Text>
             <Button
               key="too-high"
+              dimColor
               label="Score too high"
               onPress={() => act.score(lead, 'too-high')}
             />
             <Button
               key="too-low"
+              dimColor
               label="Score too low"
               onPress={() => act.score(lead, 'too-low')}
             />
-            <Button key="snooze-3" label="Snooze 3 days" onPress={() => act.snooze(lead, 3)} />
-            <Button key="snooze-7" label="Snooze a week" onPress={() => act.snooze(lead, 7)} />
-          </Box>
-          <Box flexDirection="row" gap={1} flexWrap="wrap">
-            <Button
-              key="draft"
-              label={app ? 'Redraft package' : 'Draft package'}
-              variant={app ? undefined : 'primary'}
-              onPress={() => act.draft(lead)}
-            />
-            {app && (
-              <Button
-                key="review"
-                label="Review package"
-                variant="primary"
-                onPress={() => act.review(lead)}
+            {Select && (
+              <Select
+                key="snooze"
+                label="Snooze"
+                options={SNOOZE_OPTIONS}
+                onSelect={value => act.snooze(lead, Number(value))}
               />
-            )}
-            {app && lead.column === 'ready' && (
-              <Button key="submit" label="Approve & submit" onPress={() => act.submit(lead)} />
             )}
           </Box>
         </Box>

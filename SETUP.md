@@ -55,10 +55,16 @@ The types of every file are in `types/index.d.ts`.
 
 ## Using it
 
-- `/jobs` opens the board. Columns: New → Shortlisted → Drafting → Ready to review → Applied →
-  Interviewing → Offer, with Passed and Archived behind "Show passed & archived". On a card: ◀ ▶
-  move it, the name or Details opens it. In a lead: Pass (pick a reason), Score too high / too low,
-  Snooze, Open posting, Draft package, Review package, Approve & submit.
+- `/jobs` opens the board on tabs, one stage at a time: New → Shortlisted → Drafting → Ready to
+  review → Applied → Interviewing → Offer, with Passed and Archived behind "Passed & archived".
+  New shows the ten best first ("Show more" adds ten). Each card has a coloured fit badge (green
+  90+, amber 75–89, grey below) and its stage's next steps as labelled buttons:
+  New: Shortlist · Pass… — Shortlisted: Draft package · Back to New — Ready: Review package ·
+  Approve & submit — Applied: Got interview · Rejected · Ghosted — Interviewing: Got offer ·
+  Rejected — Offer: Accepted · Declined. Company decisions (Got interview, Got offer, Rejected,
+  Ghosted, Accepted, Declined) move the card and record an outcome for the weekly review, never a
+  pass; an archived or passed card offers "Back to <where it was>" to undo a mis-click. Click a card's name to open it: the same next steps, then
+  Pass… · Archive · Draft package, then feedback (Score too high / too low, Snooze).
 - **Review package** shows the résumé PDF drawn in the pane (desktop), "Résumé vs master" (the
   diff against the master résumé), the cover letter, answers, company brief and warm-intro note.
   "Open PDF" opens the file in your PDF viewer.
