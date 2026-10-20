@@ -45,9 +45,9 @@ test('every alert and signal sender maps to its source', () => {
     [at('VanTechJournal', 'mail.beehiiv.com'), 'signal:vantechjournal'],
   ]
   for (const [sender, source] of cases) assert.equal(sourceFor(sender)?.source, source, sender)
-  assert.equal(sourceFor(at('friend', 'example.com')), undefined)
-  assert.equal(sourceFor(at('newsletter', 'betakit.com'))?.kind, 'signal')
-  assert.equal(sourceFor(at('tectoria', 'viatec.ca'))?.kind, 'alert')
+  assert.equal(sourceFor(at('alerts', 'example.com')).source, 'gmail:other')
+  assert.equal(sourceFor(at('newsletter', 'betakit.com')).kind, 'signal')
+  assert.equal(sourceFor(at('tectoria', 'viatec.ca')).kind, 'alert')
 })
 
 test('a first run reads the last week of every source and skips account mail', () => {
@@ -59,7 +59,16 @@ test('a first run reads the last week of every source and skips account mail', (
   for (const one of GMAIL_SOURCES) {
     for (const token of one.senders) assert.ok(result.query.includes(`from:${token}`), token)
   }
-  assert.match(result.query, /-subject:\(verify OR verified OR .*password/)
+  assert.ok(result.query.includes('OR subject:"job alert" OR subject:"job alerts"'))
+  assert.ok(
+    result.query.endsWith(
+      '-subject:("verify your" OR "email was verified" OR "reset your password" OR "security alert" OR "new sign-in")',
+    ),
+  )
+  // Words that also name jobs ("Security Engineer", "Design Verification") are never excluded.
+  for (const word of ['OR security OR', '(verification', 'OR verify OR']) {
+    assert.ok(!result.query.includes(word), word)
+  }
   assert.equal(result.sources, GMAIL_SOURCES)
 })
 
@@ -89,13 +98,20 @@ test('the cursor only moves forward and refuses bad times', () => {
   assert.equal(readCursor(dir), '2026-10-20T18:00:00.000Z')
   assert.throws(() => markGmailRead(dir, 'yesterday', NOW), /Not a date/)
   assert.throws(() => markGmailRead(dir, '2027-01-01T00:00:00Z', NOW), /future/)
+  assert.throws(() => markGmailRead(dir, '2026-10-20T20:30:00Z', NOW), /future/)
+  assert.throws(() => markGmailRead(dir, '2026-10-20T19:00:00', NOW), /no timezone/)
+  const offset = markGmailRead(dir, '2026-10-20T12:00:00-07:00', NOW)
+  assert.equal(offset.after, '2026-10-20T19:00:00.000Z')
 })
 
 test('a damaged cursor is ignored, so the next run reads the first-run window', () => {
   const dir = freshDir()
   mkdirSync(join(dir, 'scout'), { recursive: true })
-  writeFileSync(join(dir, 'scout', 'gmail-cursor.json'), '{"after": "soon"}')
-  assert.equal(readCursor(dir), undefined)
+  const path = join(dir, 'scout', 'gmail-cursor.json')
+  for (const text of ['{"after": "soon"}', 'null', '{not json']) {
+    writeFileSync(path, text)
+    assert.equal(readCursor(dir), undefined, text)
+  }
   assert.equal(gmailQuery(dir, NOW).firstRun, true)
 })
 
@@ -109,6 +125,7 @@ test('board-add appends a board once and checks its fields', () => {
     boards: 1,
   })
   assert.equal(commands.addBoard(dir, 'Acme Inc', 'ashby', 'acme').added, false)
+  assert.equal(commands.addBoard(dir, 'Acme', 'ashby', ' ACME ').added, false)
   commands.addBoard(dir, 'Wave', 'lever', 'waveapps')
   assert.deepEqual(
     JSON.parse(readFileSync(path, 'utf8')).map((one: { slug: string }) => one.slug),

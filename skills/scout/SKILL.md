@@ -24,11 +24,13 @@ You never apply, email anyone, create accounts, or log into job sites.
 1. Run `jobs init`, then `jobs seen` and keep the list: anything already on the board, in any
    column (Passed included), is not new. Note today's date and time.
 2. Launch one subagent per source below, **all in one message so they run in parallel**. Give each
-   the preferences summary (roles, level, location, dealbreakers) and the seen list, and ask for a
-   JSON array only, each item `{ company, role, url, location, comp, source, description, postedAt }`
-   with `description` at most 800 characters of the posting's own words. Tell each: do not apply,
-   do not log in anywhere, do not open linkedin.com or indeed.com pages, drop anything on the seen
-   list, drop postings older than 30 days, and return at most 25 items.
+   the preferences summary (roles, level, location, dealbreakers) and the seen list, and ask for
+   JSON only: an array of postings (the Gmail source returns the object described below), each
+   item `{ company, role, url, location, comp, source, description, postedAt }` with `description`
+   at most 800 characters of the posting's own words. Tell each: do not apply, do not log in
+   anywhere, do not open linkedin.com or indeed.com pages, drop anything on the seen list, drop
+   postings older than 30 days, and return at most 25 items. The Gmail source has no cap: every
+   email it reads is marked read, so it returns every relevant posting in those emails.
    - **ATS boards** (`source: "greenhouse" | "lever" | "ashby"`): run `jobs ats`, read the file it
      names, keep engineering roles (backend, platform, API, data, applied AI, full-stack, integration,
      automation; not sales, design, support, legal or finance roles). To widen coverage it may run
@@ -43,7 +45,9 @@ You never apply, email anyone, create accounts, or log into job sites.
      It prints the Gmail `query` for every job email since the last run (an hour of overlap; the
      last 7 days on a first run) and the `sources`, each with its `kind` and sender tokens. Search
      Gmail with exactly that query, paging until there is no next page, and read each thread.
-     Give each email the source whose sender token appears in its sender's address.
+     Give each email the source whose sender token appears in its sender's address, and
+     `gmail:other` to a job alert from any other sender (the query also matches "job alert" and
+     "new jobs" subjects).
      - `alert` emails list postings: extract each posting's title, company, location, pay and link
        from the email itself. VIATEC's "The Loop" is a weekly newsletter: take only its job board
        section (links to `members.viatec.ca/job-board`). A YC Work at a Startup message from a
@@ -52,7 +56,10 @@ You never apply, email anyone, create accounts, or log into job sites.
      - `signal` emails are news, not postings: return the companies in British Columbia, or hiring
        remotely in Canada, that just raised money, launched, or said they are hiring, as
        `{ company, event, amount, location, url }` (the article's link).
-     - Return `{ postings, signals, newest }`, `newest` being the date of the newest email read.
+     - Return `{ postings, signals, newest }`. `newest` is the time of the newest email whose
+       postings and signals were all returned, in UTC ending in `Z` (Gmail's `internalDate`
+       converted), or `null` when the query matched nothing. If it had to stop early, `newest` is
+       the newest email before the first one it did not finish, so nothing unread is skipped.
      Never visit LinkedIn, Indeed, Glassdoor, Wellfound, YC or Welcome to the Jungle: the email is
      the source. Where the email gives only a LinkedIn link, keep it as `url`; package will look
      for the company's own posting.
@@ -79,8 +86,9 @@ You never apply, email anyone, create accounts, or log into job sites.
    `{ company, role, url, source, location, comp, fitScore, fitReason, closesAt? }` and run
    `jobs add @<that file> --threshold 60`. It dedupes again, drops anything under 60, and prints
    `added`, `updated`, `dropped` and `alerts` (added leads scored 90+).
-6. If the Gmail source finished without an error, run `jobs gmail done <newest>` so the next run
-   starts there. If it failed or was cut short, skip this: the next run reads the same mail again.
+6. Run `jobs gmail done <newest>` only when all of these hold: the Gmail source returned without
+   an error, `newest` is not null, and `jobs add` in step 5 succeeded. Otherwise skip it: the next
+   run reads the same mail again (dedupe keeps the board clean).
 7. Funding and hiring signals: for each signal company not already in `profile/ats-boards.json`,
    try `jobs probe <slug> --company "<name>"` with its likely slugs (lowercase name, no spaces or
    punctuation). When a public board is found, run `jobs board-add "<name>" <ats> <slug>`; its

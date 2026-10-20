@@ -451,7 +451,8 @@ export function addBoard(dir: string, company: string, ats: string, slug: string
   const path = join(dir, 'profile', 'ats-boards.json')
   return withLock(dir, () => {
     const boards = existsSync(path) ? (JSON.parse(readFileSync(path, 'utf8')) as Board[]) : []
-    const existing = boards.find(one => one.ats === ats && one.slug === slug)
+    const key = slug.trim().toLowerCase()
+    const existing = boards.find(one => one.ats === ats && one.slug.trim().toLowerCase() === key)
     if (existing) return { added: false, board: existing, boards: boards.length }
     const board: Board = { company: company.trim(), ats, slug: slug.trim() }
     const next = [...boards, board]

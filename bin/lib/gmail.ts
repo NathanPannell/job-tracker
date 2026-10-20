@@ -25,16 +25,28 @@ export const GMAIL_SOURCES: readonly GmailSource[] = [
   { source: 'signal:vantechjournal', kind: 'signal', senders: ['vantechjournal'] },
 ]
 
-/** Account mail (verify your email, password, sign-in notices) that never lists jobs. */
+/**
+ * Account mail (verify your email, password resets, sign-in notices) that never lists jobs.
+ * Phrases, not single words: "Security" or "Verification" alone are common in job titles.
+ */
 const NOT_JOBS = [
-  'verify',
-  'verified',
-  'verification',
-  'password',
-  'security',
-  'sign-in',
-  '"sign in"',
+  '"verify your"',
+  '"email was verified"',
+  '"reset your password"',
+  '"security alert"',
+  '"new sign-in"',
 ]
+
+/** Job alerts from senders not listed above (Job Bank, company career sites, ...). */
+const ANY_SENDER = ['subject:"job alert"', 'subject:"job alerts"', 'subject:"new jobs"']
+
+/** The source of an alert from a sender that is not listed in GMAIL_SOURCES. */
+export const OTHER_SOURCE: GmailSource = { source: 'gmail:other', kind: 'alert', senders: [] }
+
+/** How far ahead of now an email's time may be (clock skew), before it is refused. */
+const FUTURE_SKEW_MS = 10 * 60 * 1000
+/** A time with a timezone: ends in Z or an offset such as -07:00. */
+const ZONED = /(?:Z|[+-]\d{2}:?\d{2})$/i
 
 /** How far back a first run reads, and the furthest back any run reads. */
 const FIRST_RUN_DAYS = 7
@@ -47,17 +59,25 @@ const CURSOR_FILE = join('scout', 'gmail-cursor.json')
 
 type Cursor = { after: string; updatedAt: string }
 
-/** The source an email belongs to, by its sender's address; undefined for any other sender. */
-export function sourceFor(sender: string): GmailSource | undefined {
+/** The source an email belongs to, by its sender's address; `gmail:other` for any other sender. */
+export function sourceFor(sender: string): GmailSource {
   const address = sender.toLowerCase()
-  return GMAIL_SOURCES.find(one => one.senders.some(token => address.includes(token)))
+  return (
+    GMAIL_SOURCES.find(one => one.senders.some(token => address.includes(token))) ?? OTHER_SOURCE
+  )
 }
 
 export function readCursor(dir: string): string | undefined {
   const path = join(dir, CURSOR_FILE)
   if (!existsSync(path)) return undefined
-  const { after } = JSON.parse(readFileSync(path, 'utf8')) as Partial<Cursor>
-  return typeof after === 'string' && !Number.isNaN(Date.parse(after)) ? after : undefined
+  try {
+    const parsed = JSON.parse(readFileSync(path, 'utf8')) as Partial<Cursor> | null
+    const after = parsed?.after
+    return typeof after === 'string' && !Number.isNaN(Date.parse(after)) ? after : undefined
+  } catch {
+    // A damaged cursor is ignored: the next run reads the first-run window and writes a new one.
+    return undefined
+  }
 }
 
 export type GmailQuery = {
@@ -80,7 +100,7 @@ export function gmailQuery(dir: string, now: Date = new Date()): GmailQuery {
   const senders = GMAIL_SOURCES.flatMap(one => one.senders.map(token => `from:${token}`))
   const query = [
     `after:${Math.floor(start / 1000)}`,
-    `(${senders.join(' OR ')})`,
+    `(${[...senders, ...ANY_SENDER].join(' OR ')})`,
     `-subject:(${NOT_JOBS.join(' OR ')})`,
   ].join(' ')
   return { query, since: new Date(start).toISOString(), firstRun: !cursor, sources: GMAIL_SOURCES }
@@ -93,7 +113,10 @@ export function gmailQuery(dir: string, now: Date = new Date()): GmailQuery {
 export function markGmailRead(dir: string, newest: string, now: Date = new Date()) {
   const time = Date.parse(newest)
   if (Number.isNaN(time)) throw new Error(`Not a date: ${newest}`)
-  if (time > now.getTime() + DAY_MS) throw new Error(`${newest} is in the future`)
+  if (!ZONED.test(newest.trim())) {
+    throw new Error(`${newest} has no timezone: give it as UTC (ending in Z) or with an offset`)
+  }
+  if (time > now.getTime() + FUTURE_SKEW_MS) throw new Error(`${newest} is in the future`)
   return withLock(dir, () => {
     const previous = readCursor(dir)
     const after = new Date(Math.max(time, previous ? Date.parse(previous) : 0)).toISOString()
