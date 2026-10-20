@@ -117,6 +117,32 @@ describe('tools', () => {
     expect(String((bad as { result?: unknown }).result)).toContain('unknown column')
   })
 
+  test('open_board opens the pane on a package and reports that it stayed open', async ($, on) => {
+    const w = world(on, seed, files)
+    const opened: string[] = []
+    on('ui.open', (_, e) => {
+      opened.push(e.id)
+      return { value: { isPlaced: true } }
+    })
+    on('ui.panes', () => ({
+      value: [{ id: 'jobs', title: 'Jobs', isShown: true, isFocused: false, isPlaced: true }],
+    }))
+    await $.session.start({ cwd: '.', surface: 'desktop', isInteractive: true })
+    const ran = $.tool.call({
+      tool: 'mcp__job-tracker__open_board',
+      view: 'package',
+      leadId: 'acme-api',
+    })
+    await w.clock.advance(2000)
+    const result = String(((await ran) as { result?: unknown }).result)
+    expect(opened).toEqual(['jobs'])
+    expect(result).toContain('"stillOpen": true')
+    const ui = await $.ui.mount({ ...pane, surface: 'desktop' })
+    expect(await ui.findAll({ type: 'Svg' })).toHaveLength(2)
+    const bad = await $.tool.call({ tool: 'mcp__job-tracker__open_board', view: 'lead' })
+    expect(String((bad as { result?: unknown }).result)).toContain('needs leadId')
+  })
+
   test('/jobs opens the pane on the board', async ($, on) => {
     world(on, { leads: [lead('acme-api')] })
     const opened: string[] = []
