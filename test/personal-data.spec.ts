@@ -3,7 +3,7 @@ import { execFileSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
 
-import { denyListFromProfile, scanFile } from '../bin/lib/personal-data.mjs'
+import { denyListFromProfile, scanFile } from '../bin/lib/personal-data.ts'
 
 // Fixtures are assembled at run time so this file does not trip the scan it tests.
 const PHONE = ['250', '555', '0199'].join(' ')

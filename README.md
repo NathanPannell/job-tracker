@@ -6,4 +6,5 @@ draws the kanban pane (`/jobs`), a band above the prompt, and gives the model to
 and update leads.
 
 This repository holds code only. Profiles, résumés, leads and packages live in a data
-folder outside it (see [SETUP.md](SETUP.md)); CI fails if personal data is committed.
+folder outside it; CI fails if personal data is committed. [SETUP.md](SETUP.md) covers how
+it loads, running each skill, editing preferences, where data lives and pausing the schedule.
