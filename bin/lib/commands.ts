@@ -15,11 +15,13 @@ import { join } from 'node:path'
 import {
   addLeads,
   appendEvent,
+  checkSummary,
   correctScore,
   counts,
   eventId,
   isColumn,
   markMentioned,
+  missingSummaries,
   moveLead,
   patchLead,
   snoozeLead,
@@ -96,6 +98,10 @@ export type AddSummary = {
 
 export function add(dir: string, incoming: IncomingLead[], threshold: string | number = 60) {
   if (!Array.isArray(incoming)) throw new Error('add takes a JSON array of leads')
+  for (const one of incoming) {
+    const error = checkSummary(one)
+    if (error) throw new Error(`${one.company} — ${one.role}: ${error}`)
+  }
   const at = now()
   return transact<AddSummary>(dir, data => {
     const result = addLeads(data.leads, incoming, at, Number(threshold))
@@ -142,6 +148,41 @@ export function patch(dir: string, id: string, fields: LeadPatch, by = 'model') 
   return transact(dir, data =>
     commit(data, patchLead(data.leads, id, fields, now(), by as Actor), id),
   )
+}
+
+export type SummaryInput = Pick<Lead, 'id' | 'companyBlurb' | 'roleHighlights'>
+
+/**
+ * Without input, the open leads that lack a company blurb or role highlights, for scout to fill.
+ * With an array of `{ id, companyBlurb?, roleHighlights? }`, writes each one in one transaction.
+ */
+export function summaries(dir: string): ReturnType<typeof missingSummaries>
+export function summaries(
+  dir: string,
+  input: SummaryInput[] | undefined,
+): ReturnType<typeof missingSummaries> | { updated: string[]; errors: string[] }
+export function summaries(dir: string, input?: SummaryInput[]) {
+  if (input === undefined) return missingSummaries(readData(dir, 'leads'))
+  if (!Array.isArray(input)) throw new Error('summaries takes a JSON array')
+  const at = now()
+  return transact(dir, data => {
+    let leads = data.leads
+    const updated: string[] = []
+    const errors: string[] = []
+    for (const { id, companyBlurb, roleHighlights } of input) {
+      const fields: LeadPatch = {
+        ...(companyBlurb ? { companyBlurb } : {}),
+        ...(roleHighlights?.length ? { roleHighlights } : {}),
+      }
+      const result = patchLead(leads, id, fields, at, 'scout')
+      if (result.error) errors.push(`${id}: ${result.error}`)
+      else if (result.leads !== leads) {
+        leads = result.leads
+        updated.push(id)
+      }
+    }
+    return { write: { leads }, result: { updated, errors } }
+  })
 }
 
 export function mention(dir: string, ids: string[]) {

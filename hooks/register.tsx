@@ -152,7 +152,7 @@ export const register: Register = on => {
     await $.tool.register({
       name: 'update_lead',
       description:
-        "Changes one lead on the person's job board: move it to a column, rescore it, add notes, set a follow-up or snooze date. Moving to passed needs passReason.",
+        "Changes one lead on the person's job board: move it to a column, rescore it, add notes, set a follow-up or snooze date, or write its company blurb and role highlights. Moving to passed needs passReason.",
       inputSchema: {
         type: 'object',
         required: ['id'],
@@ -160,7 +160,17 @@ export const register: Register = on => {
           id: { type: 'string' },
           column: { type: 'string' },
           fitScore: { type: 'number' },
-          fitReason: { type: 'string' },
+          fitReason: { type: 'string', description: 'One line: why this score' },
+          companyBlurb: {
+            type: 'string',
+            description: 'One sentence: what the company builds, for whom, stage or size if known',
+          },
+          roleHighlights: {
+            type: 'array',
+            items: { type: 'string' },
+            description:
+              '2-4 short points on what is distinctive about this role, from the posting',
+          },
           notes: { type: 'string' },
           passReason: { type: 'string' },
           followUpAt: { type: 'string', description: 'ISO date' },

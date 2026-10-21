@@ -100,6 +100,18 @@ describe('tools', () => {
     expect(w.leads()[0]?.notes).toBe('Ask about the team')
 
     await $.tool.call({
+      tool: 'mcp__job-tracker__update_lead',
+      id: 'acme-api',
+      companyBlurb: 'Builds billing APIs for clinics.',
+      roleHighlights: ['Owns the payments service', 'Fully remote in Canada'],
+    })
+    expect(w.leads()[0]?.companyBlurb).toBe('Builds billing APIs for clinics.')
+    expect(w.leads()[0]?.roleHighlights).toEqual([
+      'Owns the payments service',
+      'Fully remote in Canada',
+    ])
+
+    await $.tool.call({
       tool: 'mcp__job-tracker__record_feedback',
       leadId: 'beta-api',
       kind: 'outcome',

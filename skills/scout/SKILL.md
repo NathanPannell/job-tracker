@@ -27,7 +27,8 @@ You never apply, email anyone, create accounts, or log into job sites.
    the preferences summary (roles, level, location, dealbreakers) and the seen list, and ask for
    JSON only: an array of postings (the Gmail source returns the object described below), each
    item `{ company, role, url, location, comp, source, description, postedAt }` with `description`
-   at most 800 characters of the posting's own words. Tell each: do not apply, do not log in
+   at most 1500 characters of the posting's own words, keeping what it says about the company
+   and what sets the role apart (team, stack, comp, setup). Tell each: do not apply, do not log in
    anywhere, do not open linkedin.com or indeed.com pages, drop anything on the seen list, drop
    postings older than 30 days, and return at most 25 items. The Gmail source has no cap: every
    email it reads is marked read, so it returns every relevant posting in those emails.
@@ -82,10 +83,28 @@ You never apply, email anyone, create accounts, or log into job sites.
    US-only remote or relocation is a dealbreaker (under 40). Write `fitReason` as one line naming
    the two or three biggest factors, e.g. `Backend APIs + applied AI, hybrid in their city; asks 3+ yrs`.
    Keep `comp` as posted ("" if none) and `location` as posted.
+   For each posting you keep (60+), also write what the person sees when they open the card;
+   `fitReason` stays the match one-liner on the card:
+   - `companyBlurb`: one sentence on what the company builds and for whom, with stage or size
+     when the posting or the company's own site says so, e.g.
+     `Builds scheduling software for home-care agencies; Series A, ~60 people.`
+   - `roleHighlights`: 2-4 short points (under 15 words each) on what is distinctive about this
+     role: team, product, stack, comp or equity, remote setup, anything unusual. Not the
+     generic duties every posting lists.
+   Take both from the posting's `description` and, where that is thin, the company's own posting
+   or careers page (never LinkedIn or Indeed). Never invent a fact: leave a field out rather than
+   guess.
 5. Write the scored list to `$JOB_TRACKER_DATA/scout/candidates-<YYYYMMDD-HHMM>.json` as a JSON array of
-   `{ company, role, url, source, location, comp, fitScore, fitReason, closesAt? }` and run
-   `jobs add @<that file> --threshold 60`. It dedupes again, drops anything under 60, and prints
+   `{ company, role, url, source, location, comp, fitScore, fitReason, companyBlurb?, roleHighlights?, closesAt? }`
+   and run `jobs add @<that file> --threshold 60`. It dedupes again, drops anything under 60, and prints
    `added`, `updated`, `dropped` and `alerts` (added leads scored 90+).
+   Then backfill: `jobs summaries` lists open leads still missing a `companyBlurb` or
+   `roleHighlights` (`{ id, company, role, url, source }`). For each, read the posting at `url`
+   (when it is a LinkedIn or Indeed link, find the role on the company's own careers page or ATS
+   board instead; if you cannot find it, skip the lead), write the missing fields by the same
+   rules, save them as `$JOB_TRACKER_DATA/scout/summaries-<YYYYMMDD-HHMM>.json`, an array of
+   `{ id, companyBlurb?, roleHighlights? }`, and run `jobs summaries @<that file>`. It prints the
+   `updated` ids and any `errors`. At most 15 leads per run; the rest wait for the next one.
 6. Run `jobs gmail done <newest>` only when all of these hold: the Gmail source returned without
    an error, `newest` is not null, and `jobs add` in step 5 succeeded. Otherwise skip it: the next
    run reads the same mail again (dedupe keeps the board clean).
@@ -108,5 +127,6 @@ You never apply, email anyone, create accounts, or log into job sites.
 - Never submit, apply, email, message or create an account. Never log into or scrape LinkedIn,
   Indeed, Glassdoor, Wellfound, YC Work at a Startup or Welcome to the Jungle; their emails in
   Gmail are the only route. Never click links in emails (unsubscribe, confirm, apply).
-- Never invent a posting, a salary or a location. If a field is unknown, leave it empty.
+- Never invent a posting, a salary, a location or a company fact. If a field is unknown, leave it
+  empty (or out, for `companyBlurb` and `roleHighlights`).
 - A source that fails is reported, not retried in a loop.

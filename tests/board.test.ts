@@ -144,6 +144,47 @@ describe('kanban', () => {
     expect(await ui.find({ text: /LinkedIn alert/ })).toBeDefined()
   })
 
+  for (const surface of ['terminal', 'desktop', 'mobile'] as const) {
+    test(`the lead view shows the company and role summary; the card keeps the one-liner (${surface})`, async ($, on) => {
+      world(on, {
+        leads: [
+          lead('acme-api', {
+            company: 'Acme',
+            fitReason: 'Backend APIs in Victoria',
+            companyBlurb: 'Builds billing software for dental clinics; Series A, ~40 people.',
+            roleHighlights: ['Owns the claims API end to end', 'Equity on top of CAD 110k'],
+          }),
+        ],
+      })
+      await start($)
+      const ui = await $.ui.mount({ ...pane, surface })
+      expect(await ui.find({ text: /Backend APIs in Victoria/ })).toBeDefined()
+      expect(await ui.find({ text: /dental clinics/ })).toBeUndefined()
+      expect(await ui.find({ text: /claims API/ })).toBeUndefined()
+
+      await ui.press({ key: 'open:acme-api' })
+      const summary = await ui.find({ key: 'summary', type: 'Markdown' })
+      expect(summary?.props.text).toBe(
+        [
+          '**Company:** Builds billing software for dental clinics; Series A, ~40 people.',
+          '**The role:**\n- Owns the claims API end to end\n- Equity on top of CAD 110k',
+        ].join('\n\n'),
+      )
+      expect(await ui.find({ text: /Why this score:\*\* Backend APIs in Victoria/ })).toBeDefined()
+      await ui.unmount()
+    })
+  }
+
+  test('a lead without a summary opens with only the score rationale', async ($, on) => {
+    world(on, { leads: [lead('acme-api', { company: 'Acme', roleHighlights: [' '] })] })
+    await start($)
+    const ui = await $.ui.mount({ ...pane, surface: 'desktop' })
+    await ui.press({ key: 'open:acme-api' })
+    expect(await ui.find({ key: 'summary' })).toBeUndefined()
+    expect(await ui.find({ text: /Why this score/ })).toBeDefined()
+    await ui.unmount()
+  })
+
   test('score corrections and snoozes are feedback events', async ($, on) => {
     const w = world(on, { leads: [lead('acme-api'), lead('beta-api')] })
     await start($)

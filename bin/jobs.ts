@@ -3,7 +3,7 @@
 import { parseArgs } from 'node:util'
 
 import * as commands from './lib/commands.ts'
-import type { FeedbackInput, ProposalInput } from './lib/commands.ts'
+import type { FeedbackInput, ProposalInput, SummaryInput } from './lib/commands.ts'
 import type { IncomingLead, LeadPatch } from '../hooks/lib/model.ts'
 import { gmailQuery, markGmailRead } from './lib/gmail.ts'
 import { dataDir } from './lib/store.ts'
@@ -20,6 +20,8 @@ const USAGE = `jobs <command> [args] [--data <dir>]
   score <id> too-high|too-low
   snooze <id> <days>
   patch <id> <json|@file> [--by actor]   change fields of a lead
+  summaries [<json|@file>]               open leads missing companyBlurb/roleHighlights; with
+                                         [{ id, companyBlurb?, roleHighlights? }], fill them
   mention <id>...                        mark leads as mentioned to the person
   feedback <json|@file>                  { leadId, kind, reason? }
   package <id> [--column ready] [--draft-id id] [--redraft]
@@ -87,6 +89,11 @@ async function main(argv: string[]): Promise<unknown> {
         need(args[0], 'id'),
         commands.readJsonArg<LeadPatch>(args[1]),
         values.by,
+      )
+    case 'summaries':
+      return commands.summaries(
+        dir,
+        args[0] === undefined ? undefined : commands.readJsonArg<SummaryInput[]>(args[0]),
       )
     case 'mention':
       return commands.mention(dir, args)
