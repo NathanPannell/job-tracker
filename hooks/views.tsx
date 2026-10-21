@@ -51,6 +51,8 @@ export type ViewContext = {
   now: number
   columns: number
   busy: string | null
+  /** What the pane's buttons sent to the conversation that has not started yet. */
+  queued: string[]
   /** Undefined on a surface that only reads. */
   act: Actions | undefined
   /** Navigation stays available where acting is not. */
@@ -75,8 +77,17 @@ function header(ctx: ViewContext, title: string, back: boolean): RenderElement {
       {back && <Button key="back" label="← Board" onPress={() => ctx.nav.board()} />}
       <Text bold>{title}</Text>
       {ctx.busy && <Text dimColor>{ctx.busy}…</Text>}
+      {queuedNotes(ctx)}
     </Box>
   )
+}
+
+/** Prompts the buttons sent that wait for Claude to finish the current reply. */
+function queuedNotes(ctx: ViewContext): RenderElement[] {
+  const { Text } = ctx.el
+  return ctx.queued.map(label => (
+    <Text key={`queued:${label}`} color="claude">{`${label}: queued…`}</Text>
+  ))
 }
 
 /**
@@ -197,6 +208,7 @@ export function boardView(
         <Text bold>Jobs</Text>
         <Text dimColor>{`${ctx.board.leads.length} leads`}</Text>
         {ctx.busy && <Text dimColor>{ctx.busy}…</Text>}
+        {queuedNotes(ctx)}
         {ctx.act && <Button key="refresh" label="Refresh" onPress={() => ctx.act?.refresh()} />}
         {pendingProposals > 0 && (
           <Button

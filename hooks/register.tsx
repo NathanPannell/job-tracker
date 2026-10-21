@@ -4,7 +4,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, PromptOrigin, Register } from 'claude-code'
 
-import type { JobPackage, JobView, PackageTab } from '../types/index.d.ts'
+import type { JobPackage, JobView, PackageTab, SentPrompt } from '../types/index.d.ts'
 import { act, dataDir, EMPTY_BOARD, jobs, loadPackage, openFile, PANE, refresh } from './lib/io.ts'
 import { bandText, counts, isColumn, leadsToMention, nudgeContext } from './lib/model.ts'
 import type { Column, Lead } from './lib/model.ts'
@@ -25,6 +25,13 @@ const pendingTurn = atom(
 )
 const nudged = atom({ plugin: 'job-tracker', key: 'nudged' } as const, false)
 const busy = atom({ plugin: 'job-tracker', key: 'busy' } as const, null as string | null)
+const turning = atom({ plugin: 'job-tracker', key: 'turning' } as const, false)
+const sent = atom({ plugin: 'job-tracker', key: 'sent' } as const, [] as SentPrompt[])
+
+/** How long a sent prompt shows as queued before the pane stops waiting for its turn. */
+const SENT_FOR_MS = 30 * 60_000
+const isLive = (one: SentPrompt, now: number) => now - one.at < SENT_FOR_MS
+const startsWith = (one: SentPrompt, text: string) => text.includes(one.entered ?? one.text)
 
 // Matchers are written as literals: the engine reads them from the source before the module runs.
 
@@ -42,10 +49,45 @@ async function show($: EngineInterface, next: JobView) {
   if (next.kind === 'package') await loadPackage($, next.id)
 }
 
-function submitPrompt($: EngineInterface, text: string) {
-  void $.prompt.submit({ text, asUser: true }).catch((error: unknown) => {
+/**
+ * Sends a pane button's prompt in the person's name. A plugin's prompt waits until the session
+ * is idle, so a press during a reply looked like nothing happened: say so at once, show it as
+ * queued until its turn starts, and report a prompt that did not enter.
+ */
+async function sendPrompt($: EngineInterface, text: string, label: string) {
+  const at = await $.clock.now()
+  // An entry whose turn was never seen (the queue cleared, say) expires, so the button
+  // never stays blocked.
+  if ((await read($, sent)).some(one => one.text === text && isLive(one, at))) {
+    $.ui.toast(`${label} is already queued.`)
+    return
+  }
+  const isTurning = await read($, turning)
+  await update($, sent, list => [
+    ...list.filter(one => one.text !== text && isLive(one, at)),
+    { text, label, at },
+  ])
+  $.ui.toast(
+    isTurning
+      ? `${label} once Claude finishes the current reply.`
+      : `${label} in the conversation.`,
+  )
+  const forget = () => update($, sent, list => list.filter(one => one.text !== text))
+  try {
+    const result = await $.prompt.submit({ text, asUser: true })
+    if (result.drop !== undefined) {
+      await forget()
+      $.ui.toast(`job-tracker: the prompt was not sent: ${result.drop}`)
+    } else if (result.text !== text) {
+      const entered = result.text
+      await update($, sent, list =>
+        list.map(one => (one.text === text ? { ...one, entered } : one)),
+      )
+    }
+  } catch (error) {
+    await forget()
     $.ui.toast(`job-tracker: could not send the prompt: ${String(error)}`)
-  })
+  }
 }
 
 function actions($: EngineInterface): Actions {
@@ -97,16 +139,18 @@ function actions($: EngineInterface): Actions {
         show($, { kind: 'board' }),
       ),
     draft: lead =>
-      submitPrompt(
+      void sendPrompt(
         $,
         `Use the job-tracker:package skill to build the application package for lead ${lead.id} (${lead.company} — ${lead.role}).`,
+        `Drafting the ${lead.company} package`,
       ),
     review: (lead, tab: PackageTab = 'resume') =>
       void show($, { kind: 'package', id: lead.id, tab }),
     submit: lead =>
-      submitPrompt(
+      void sendPrompt(
         $,
         `I approved the package for lead ${lead.id} (${lead.company} — ${lead.role}) on the job board. Use the job-tracker:submit skill: prefill the application and stop before the final submit so I can confirm here.`,
+        `Prefilling the ${lead.company} application`,
       ),
     openPdf: path => void openFile($, path),
     decide: (id, decision) =>
@@ -297,10 +341,21 @@ export const register: Register = on => {
     return next({ ...e, context: [...(e.context ?? []), nudgeContext(named, now)] })
   })
 
+  // A sent prompt stops showing as queued once its own turn starts.
+  on('turn.start', async ($, e, next) => {
+    if (e.agentId) return next(e)
+    await update($, turning, () => true)
+    if ((await read($, sent)).some(one => startsWith(one, e.text))) {
+      await update($, sent, list => list.filter(one => !startsWith(one, e.text)))
+    }
+    return next(e)
+  })
+
   // Marks exactly the leads the nudge named, once the reply that names them has ended.
   on('turn.complete', async ($, e, next) => {
     const result = await next(e)
     if (e.agentId) return result
+    await update($, turning, () => false)
     const ids = await read($, pending)
     // A prompt typed during another turn is answered after it: that turn's end is not the reply.
     if (ids.length > 0 && e.turnId === (await read($, pendingTurn))) return result
@@ -342,6 +397,7 @@ export const register: Register = on => {
     const current = await read($, board)
     const at = await read($, view)
     const isReadOnly = e.surface === 'mobile'
+    const now = await $.clock.now()
     const all = actions($)
     const ctx: ViewContext = {
       el,
@@ -350,6 +406,7 @@ export const register: Register = on => {
       now: current.loadedAt,
       columns: e.props.bodyColumns,
       busy: await read($, busy),
+      queued: (await read($, sent)).filter(one => isLive(one, now)).map(one => one.label),
       act: isReadOnly ? undefined : all,
       nav: {
         open: all.open,

@@ -258,6 +258,70 @@ describe('kanban', () => {
     expect(prompts[1]?.text).toContain('job-tracker:package')
   })
 
+  test('a Draft press during a reply says it is queued until its own turn starts', async ($, on) => {
+    const w = world(on, { leads: [lead('acme-api', { company: 'Acme', column: 'shortlisted' })] })
+    const toasts: string[] = []
+    on('ui.toast', (_, e) => {
+      toasts.push(e.text)
+      return { value: undefined }
+    })
+    on('turn.start', (_, e) => ({ turnId: e.turnId }))
+    on('turn.complete', (_, e) => ({ text: e.answer }))
+    const refusals: string[] = []
+    const prompts: string[] = []
+    on('prompt.submit', (_, e) => {
+      prompts.push(e.text)
+      return refusals[0] ? { drop: refusals[0] } : { text: e.text }
+    })
+    const done = (turnId: string) =>
+      $.turn.complete({
+        answer: 'Done.',
+        durationMs: 1,
+        isAborted: false,
+        turnId,
+        reason: 'answer',
+      })
+    await start($)
+    const ui = await $.ui.mount({ ...pane, surface: 'desktop' })
+    await ui.press({ key: 'tab:shortlisted' })
+
+    // A plugin's prompt waits for the running reply: the press says so instead of doing nothing.
+    await $.turn.start({ text: 'what is new on my board?', turnId: 't1' })
+    await ui.press({ key: 'draft:acme-api' })
+    expect(prompts).toHaveLength(1)
+    expect(prompts[0]).toContain('job-tracker:package')
+    expect(toasts).toEqual(['Drafting the Acme package once Claude finishes the current reply.'])
+    const queued = { type: 'Text', text: /^Drafting the Acme package: queued…$/ } as const
+    expect(await ui.find(queued)).toBeDefined()
+    await ui.press({ key: 'draft:acme-api' })
+    expect(prompts).toHaveLength(1)
+    expect(toasts.at(-1)).toBe('Drafting the Acme package is already queued.')
+
+    await done('t1')
+    expect(await ui.find(queued)).toBeDefined()
+    await $.turn.start({ text: prompts[0] ?? '', turnId: 't2' })
+    expect(await ui.find(queued)).toBeUndefined()
+    await done('t2')
+
+    // A prompt a hook refused is reported, not silently lost.
+    refusals.push('a hook refused it')
+    await ui.press({ key: 'draft:acme-api' })
+    expect(toasts.slice(-2)).toEqual([
+      'Drafting the Acme package in the conversation.',
+      'job-tracker: the prompt was not sent: a hook refused it',
+    ])
+    expect(await ui.find(queued)).toBeUndefined()
+
+    // A prompt whose turn is never seen stops blocking the button after half an hour.
+    refusals.length = 0
+    await ui.press({ key: 'draft:acme-api' })
+    await ui.press({ key: 'draft:acme-api' })
+    expect(prompts).toHaveLength(3)
+    await w.clock.advance(31 * 60_000)
+    await ui.press({ key: 'draft:acme-api' })
+    expect(prompts).toHaveLength(4)
+  })
+
   test('mobile reads every stage but takes no action', async ($, on) => {
     world(on, { leads: [lead('acme-api'), lead('beta-api', { column: 'applied' })] })
     await start($)
