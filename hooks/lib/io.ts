@@ -87,10 +87,14 @@ export async function jobs($: EngineInterface, args: readonly string[]): Promise
 /** Runs a write from a pane button: shows it as busy, toasts a failure. */
 export async function act($: EngineInterface, label: string, args: readonly string[]) {
   await update($, busy, () => label)
-  const result = await jobs($, args)
-  await update($, busy, () => null)
-  if (!result.ok) $.ui.toast(`job-tracker: ${result.error}`)
-  return result
+  try {
+    const result = await jobs($, args)
+    if (!result.ok) $.ui.toast(`job-tracker: ${result.error}`)
+    return result
+  } finally {
+    // A busy label left set would silently block every stage button for the session.
+    await update($, busy, () => null)
+  }
 }
 
 const TAB_FILES: Record<

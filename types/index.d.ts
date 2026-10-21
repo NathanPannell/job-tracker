@@ -157,6 +157,9 @@ export type JobPackage = {
   error: string | null
 }
 
+/** A prompt a pane button sent, until its turn starts; a plugin's prompt waits for idle. */
+export type SentPrompt = { text: string; label: string; at: number }
+
 declare module 'claude-code' {
   interface PluginState {
     'job-tracker': {
@@ -175,6 +178,10 @@ declare module 'claude-code' {
       /** True once this session's first user prompt was seen. */
       nudged: boolean
       busy: string | null
+      /** True while a main-loop turn runs: a prompt sent now waits for it to end. */
+      turning: boolean
+      /** Prompts the pane sent whose turn has not started yet. */
+      sent: SentPrompt[]
     }
   }
 }
