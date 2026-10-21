@@ -82,7 +82,8 @@ You never apply, email anyone, create accounts, or log into job sites.
    `learnings.md`. Be strict: a senior-only role, a student-only role, pay wholly under the floor,
    US-only remote or relocation is a dealbreaker (under 40). Write `fitReason` as one line naming
    the two or three biggest factors, e.g. `Backend APIs + applied AI, hybrid in their city; asks 3+ yrs`.
-   Keep `comp` as posted ("" if none) and `location` as posted.
+   Keep `comp` as posted ("" if none) and `location` as posted. Score the fit only, not the
+   posting's age: the board ages scores itself from `postedAt`.
    For each posting you keep (60+), also write what the person sees when they open the card;
    `fitReason` stays the match one-liner on the card:
    - `companyBlurb`: one sentence on what the company builds and for whom, with stage or size
@@ -95,9 +96,11 @@ You never apply, email anyone, create accounts, or log into job sites.
    or careers page (never LinkedIn or Indeed). Never invent a fact: leave a field out rather than
    guess.
 5. Write the scored list to `$JOB_TRACKER_DATA/scout/candidates-<YYYYMMDD-HHMM>.json` as a JSON array of
-   `{ company, role, url, source, location, comp, fitScore, fitReason, companyBlurb?, roleHighlights?, closesAt? }`
-   and run `jobs add @<that file> --threshold 60`. It dedupes again, drops anything under 60, and prints
-   `added`, `updated`, `dropped` and `alerts` (added leads scored 90+).
+   `{ company, role, url, source, location, comp, fitScore, fitReason, companyBlurb?, roleHighlights?, postedAt?, closesAt? }`
+   (`postedAt` as the source gave it, ISO; omit it when unknown) and run
+   `jobs add @<that file> --threshold 60`. It dedupes again, drops a new lead whose score, aged by
+   `postedAt`, is under 60 (a posting over a week old must fit better to get on), and prints
+   `added`, `updated`, `dropped` and `alerts` (added leads whose aged `score` is 90+).
    Then backfill: `jobs summaries` lists open leads still missing a `companyBlurb` or
    `roleHighlights` (`{ id, company, role, url, source }`). For each, read the posting at `url`
    (when it is a LinkedIn or Indeed link, find the role on the company's own careers page or ATS
@@ -115,7 +118,7 @@ You never apply, email anyone, create accounts, or log into job sites.
    to `$JOB_TRACKER_DATA/scout/signals.md`: `<date> · <company> · <event> · <board or "no public board"> · <url>`.
    Never edit `target-companies.md`; the weekly learn review proposes additions from `signals.md`.
 8. If `alerts` is not empty, send one PushNotification naming them, e.g.
-   `2 strong job leads: <Company> — <Role> (93), ... Open /jobs.` Send none
+   `2 strong job leads: <Company> — <Role> (<score>), ... Open /jobs.` Send none
    otherwise.
 9. Append one line to `$JOB_TRACKER_DATA/scout/runs.md`:
    `<ISO time> · <n> found per source (ats a, local b, gmail c [per gmail source], web d, hn e) · signals s · boards added b · added x · dropped y · errors: ...`

@@ -12,9 +12,11 @@ const USAGE = `jobs <command> [args] [--data <dir>]
 
   init                                   create the data files that are missing
   list [--column c] [--min n] [--limit n]
+                                         leads by aged score, best first
   summary                                counts for the band
   seen                                   ids, companies, roles and URLs already on the board
-  add <json|@file> [--threshold 60]      merge scouted leads (array); prints added/updated/dropped/alerts
+  add <json|@file> [--threshold 60]      merge scouted leads (array), threshold on the aged score;
+                                         prints added/updated/dropped/alerts
   move <id> <column> [--reason r] [--by actor] [--note n]
   pass <id> <reason>
   score <id> too-high|too-low

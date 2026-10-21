@@ -356,7 +356,7 @@ test('leadsToMention picks the top three unmentioned new leads, quiet for three 
     '2027-01-01T00:00:00.000Z',
   )
   assert.equal(twice.leads[0]?.mentionedAt, AT)
-  const note = nudgeContext(picked)
+  const note = nudgeContext(picked, NOW)
   assert.match(note, /Answer the user's actual request first/)
   assert.match(note, /\/jobs/)
   assert.match(note, /Co2/)

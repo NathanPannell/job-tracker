@@ -50,6 +50,30 @@ test('init creates the files, add merges and alerts on 90+', () => {
   assert.equal(commands.summary(dir).newLeads, 2)
 })
 
+test('list and alerts go by the aged score; the fit score stays as scored', () => {
+  const dir = fresh()
+  const weeksAgo = (weeks: number) => new Date(Date.now() - weeks * 7 * 86_400_000).toISOString()
+  const added = commands.add(dir, [
+    { ...lead('Stale', 95), postedAt: weeksAgo(4) },
+    { ...lead('Fresh', 90), postedAt: weeksAgo(0) },
+  ])
+  assert.deepEqual(
+    added.alerts.map(alert => [alert.company, alert.fitScore, alert.score]),
+    [['Fresh', 90, 90]],
+  )
+  assert.deepEqual(
+    commands.list(dir).map(one => [one.company, one.fitScore, one.score]),
+    [
+      ['Fresh', 90, 90],
+      ['Stale', 95, 80],
+    ],
+  )
+  assert.deepEqual(
+    commands.list(dir, { min: 85 }).map(one => one.company),
+    ['Fresh'],
+  )
+})
+
 test('move, pass, score, snooze, patch and mention write the lead and its feedback', () => {
   const dir = fresh()
   commands.add(dir, [lead('Acme')])

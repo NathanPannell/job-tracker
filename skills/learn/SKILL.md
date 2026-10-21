@@ -18,6 +18,11 @@ packages are written. You propose; the person approves in /jobs. Never edit the 
   `profile/preferences.md`, `profile/learnings.md`, and earlier proposals in `proposals.json`
   (do not re-propose what was rejected unless new evidence is strong).
 
+Scores: `fitScore` in `leads.json` and `feedback.json` is the scout's fit judgement. The board
+shows it aged (points off for the posting's age until applied), but age is applied by the board,
+not by scoring, so reason about `fitScore` only: a score correction means the fit was misjudged.
+Never propose rules that score old postings down; that would count age twice.
+
 ## Steps
 
 1. Funnel for the last 7 days and all time, by source: found, still New, shortlisted, drafted,

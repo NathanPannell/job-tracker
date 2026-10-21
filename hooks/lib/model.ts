@@ -176,6 +176,58 @@ export function defaultStage(file: LeadsFile): Column {
   return PIPELINE.find(has) ?? 'new'
 }
 
+// How a score ages. `fitScore` is the scout's fit judgement and is never changed by age; the
+// board ranks and shows `effectiveScore`, which takes points off postings the person has not
+// applied to yet as they get older. Nothing polls: it is worked out whenever the board draws.
+
+/** Days a posting keeps its full score. */
+export const DECAY_GRACE_DAYS = 7
+/** Points a posting loses each week after the grace days, worked out by the day. */
+export const DECAY_POINTS_PER_WEEK = 5
+/** The most age takes off, so a strong old posting still outranks a weak fresh one. */
+export const DECAY_MAX_POINTS = 25
+/** Columns whose leads age: not applied yet, so a stale posting is less worth the time. */
+export const DECAYING_COLUMNS: readonly Column[] = ['new', 'shortlisted', 'drafting', 'ready']
+
+const DAY_MS = 86_400_000
+
+/** When the posting went up: its own date when the source gave one, else when scout found it. */
+export function postedTime(lead: Pick<Lead, 'foundAt' | 'postedAt'>): number {
+  const posted = lead.postedAt === undefined ? Number.NaN : Date.parse(lead.postedAt)
+  return Number.isNaN(posted) ? Date.parse(lead.foundAt) : posted
+}
+
+/** Points age takes off a lead's score at `now`: none in the grace days or once applied. */
+export function scoreDecay(
+  lead: Pick<Lead, 'column' | 'foundAt' | 'postedAt'>,
+  now: number,
+): number {
+  if (!DECAYING_COLUMNS.includes(lead.column)) return 0
+  const days = (now - postedTime(lead)) / DAY_MS - DECAY_GRACE_DAYS
+  if (!(days > 0)) return 0
+  return Math.min(DECAY_MAX_POINTS, Math.floor((days * DECAY_POINTS_PER_WEEK) / 7))
+}
+
+/** The score the board shows and ranks by: the fit score less what age takes off. */
+export function effectiveScore(
+  lead: Pick<Lead, 'column' | 'fitScore' | 'foundAt' | 'postedAt'>,
+  now: number,
+): number {
+  return Math.max(0, lead.fitScore - scoreDecay(lead, now))
+}
+
+/** The line that shows age's effect beside the badge, e.g. `Fit 86 → 79, posted 3w ago`. */
+export function decayNote(
+  lead: Pick<Lead, 'column' | 'fitScore' | 'foundAt' | 'postedAt'>,
+  now: number,
+): string | undefined {
+  if (scoreDecay(lead, now) === 0) return undefined
+  const since = postedTime(lead)
+  const verb = since === Date.parse(lead.foundAt) ? 'found' : 'posted'
+  const ago = age(new Date(since).toISOString(), now)
+  return `Fit ${lead.fitScore} → ${effectiveScore(lead, now)}, ${verb} ${ago} ago`
+}
+
 /** The theme colour of a fit score's badge: strong, worth a look, or weak. */
 export function scoreTone(score: number): 'success' | 'warning' | 'subtle' {
   if (score >= 90) return 'success'
@@ -371,6 +423,7 @@ export type LeadPatch = Partial<
     | 'location'
     | 'url'
     | 'closesAt'
+    | 'postedAt'
     | 'passReason'
   >
 >
@@ -388,6 +441,7 @@ const PATCH_KEYS: readonly (keyof LeadPatch)[] = [
   'location',
   'url',
   'closesAt',
+  'postedAt',
   'passReason',
 ]
 
@@ -475,7 +529,8 @@ export type AddResult = { leads: LeadsFile; added: string[]; updated: string[]; 
 
 /**
  * Merges scouted leads: dedupes by id, then by posting URL; keeps the board's column and
- * history for a lead already there; drops anything scored under `threshold`.
+ * history for a lead already there; drops a new lead under `threshold` once aged, so an old
+ * posting has to fit better to be added.
  */
 export function addLeads(
   file: LeadsFile,
@@ -489,10 +544,6 @@ export function addLeads(
   const dropped: string[] = []
   for (const one of incoming) {
     const id = one.id ?? leadId(one.company, one.role)
-    if (!(one.fitScore >= threshold)) {
-      dropped.push(id)
-      continue
-    }
     const url = normalizeUrl(one.url)
     const at_ = leads.findIndex(
       lead =>
@@ -512,8 +563,15 @@ export function addLeads(
         ...(!hasHighlights(existing) && one.roleHighlights?.length
           ? { roleHighlights: one.roleHighlights }
           : {}),
+        postedAt: earlierDate(existing.postedAt, one.postedAt),
       }
       updated.push(existing.id)
+      continue
+    }
+    // Only a new lead must clear the threshold, aged as the board will show it.
+    const aged = effectiveScore({ ...one, column: 'new', foundAt: at }, Date.parse(at))
+    if (!(aged >= threshold)) {
+      dropped.push(id)
       continue
     }
     const { id: _ignored, ...fields } = one
@@ -528,6 +586,14 @@ export function addLeads(
     added.push(leads[leads.length - 1]?.id as string)
   }
   return { leads: { ...file, leads }, added, updated, dropped }
+}
+
+/** The earlier of two dates that parse: finding a posting again does not make it fresh. */
+function earlierDate(a: string | undefined, b: string | undefined): string | undefined {
+  const valid = [a, b].filter(
+    (one): one is string => one !== undefined && !Number.isNaN(Date.parse(one)),
+  )
+  return valid.sort((x, y) => Date.parse(x) - Date.parse(y))[0] ?? a ?? b
 }
 
 const words = (text: string) =>
@@ -599,14 +665,19 @@ export function bandText(c: Counts): string | undefined {
   ].join(' · ')
 }
 
+/** Best first by aged score; of two equal aged scores, the better fit leads. */
+export const byScore = (now: number) => (a: Lead, b: Lead) =>
+  effectiveScore(b, now) - effectiveScore(a, now) || b.fitScore - a.fitScore
+
 /** Leads in a column, best first; snoozed ones last. */
 export function columnLeads(file: LeadsFile, column: Column, now: number): Lead[] {
+  const best = byScore(now)
   return file.leads
     .filter(lead => lead.column === column)
     .sort(
       (a, b) =>
         Number(isSnoozed(a, now)) - Number(isSnoozed(b, now)) ||
-        b.fitScore - a.fitScore ||
+        best(a, b) ||
         a.company.localeCompare(b.company),
     )
 }
@@ -626,13 +697,13 @@ export function leadsToMention(file: LeadsFile, now: number): Lead[] {
   if (now - lastMention < NUDGE_QUIET_MS) return []
   return file.leads
     .filter(lead => lead.column === 'new' && !lead.mentionedAt && !isSnoozed(lead, now))
-    .sort((a, b) => b.fitScore - a.fitScore)
+    .sort(byScore(now))
     .slice(0, NUDGE_TOP)
 }
 
-export function nudgeContext(leads: readonly Lead[]): string {
+export function nudgeContext(leads: readonly Lead[], now: number): string {
   const named = leads
-    .map(lead => `${lead.company} — ${lead.role} (fit ${lead.fitScore})`)
+    .map(lead => `${lead.company} — ${lead.role} (score ${effectiveScore(lead, now)})`)
     .join('; ')
   return [
     'Note from the job-tracker plugin, not from the user:',

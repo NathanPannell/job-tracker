@@ -36,7 +36,10 @@ export type Lead = {
   location: string
   /** As posted, e.g. "CAD 90k-135k"; empty when unknown. */
   comp: string
-  /** 0-100 against preferences.md and learnings.md. */
+  /**
+   * 0-100 against preferences.md and learnings.md: the scout's fit judgement, which never ages.
+   * The board ranks and shows it aged by the posting's age (`effectiveScore` in hooks/lib/model.ts).
+   */
   fitScore: number
   /** One line: why this score. */
   fitReason: string
@@ -47,6 +50,8 @@ export type Lead = {
   column: Column
   passReason?: string
   foundAt: string
+  /** When the posting went up, when its source says (ATS boards do); the score ages from it. */
+  postedAt?: string
   /** When the nudge named this lead in a conversation. */
   mentionedAt?: string
   snoozedUntil?: string

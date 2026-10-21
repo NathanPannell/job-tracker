@@ -15,9 +15,11 @@ import { join } from 'node:path'
 import {
   addLeads,
   appendEvent,
+  byScore,
   checkSummary,
   correctScore,
   counts,
+  effectiveScore,
   eventId,
   hasBlurb,
   hasHighlights,
@@ -66,12 +68,17 @@ function commit(data: Data, result: MoveResult, id: string): Change<Lead | undef
 
 export type ListOptions = { column?: string; min?: string | number; limit?: string | number }
 
-export function list(dir: string, { column, min, limit }: ListOptions = {}): Lead[] {
+/** A lead as listed: `score` is what the board shows, `fitScore` less what age takes off. */
+export type ListedLead = Lead & { score: number }
+
+export function list(dir: string, { column, min, limit }: ListOptions = {}): ListedLead[] {
   const { leads } = readData(dir, 'leads')
+  const at = Date.now()
   return leads
     .filter(lead => (column ? lead.column === column : true))
-    .filter(lead => (min !== undefined ? lead.fitScore >= Number(min) : true))
-    .sort((a, b) => b.fitScore - a.fitScore)
+    .map(lead => ({ ...lead, score: effectiveScore(lead, at) }))
+    .filter(lead => (min !== undefined ? lead.score >= Number(min) : true))
+    .sort(byScore(at))
     .slice(0, limit !== undefined ? Number(limit) : undefined)
 }
 
@@ -94,8 +101,8 @@ export type AddSummary = {
   added: string[]
   updated: string[]
   dropped: string[]
-  /** Added leads scored 90 or more: the ones worth a push notification. */
-  alerts: Pick<Lead, 'id' | 'company' | 'role' | 'fitScore'>[]
+  /** Added leads scoring 90 or more once aged: the ones worth a push notification. */
+  alerts: (Pick<Lead, 'id' | 'company' | 'role' | 'fitScore'> & { score: number })[]
 }
 
 export function add(dir: string, incoming: IncomingLead[], threshold: string | number = 60) {
@@ -108,8 +115,15 @@ export function add(dir: string, incoming: IncomingLead[], threshold: string | n
   return transact<AddSummary>(dir, data => {
     const result = addLeads(data.leads, incoming, at, Number(threshold))
     const alerts = result.leads.leads
-      .filter(lead => result.added.includes(lead.id) && lead.fitScore >= 90)
-      .map(({ id, company, role, fitScore }) => ({ id, company, role, fitScore }))
+      .filter(lead => result.added.includes(lead.id))
+      .map(({ id, company, role, fitScore, ...rest }) => ({
+        id,
+        company,
+        role,
+        fitScore,
+        score: effectiveScore({ fitScore, ...rest }, Date.parse(at)),
+      }))
+      .filter(alert => alert.score >= 90)
     return {
       write: { leads: result.leads },
       result: { added: result.added, updated: result.updated, dropped: result.dropped, alerts },
