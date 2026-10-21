@@ -183,12 +183,12 @@ export const register: Register = on => {
     await $.tool.register({
       name: 'list_leads',
       description:
-        "Lists job leads on the person's job board (job-tracker), best fit first. Filter by column (new, shortlisted, drafting, ready, applied, interviewing, offer, passed, archived) and minimum fit score.",
+        "Lists job leads on the person's job board (job-tracker), best first. Each lead has fitScore (the scout's fit) and score (fitScore less points for the posting's age until applied, as the board shows it). Filter by column (new, shortlisted, drafting, ready, applied, interviewing, offer, passed, archived) and minimum score.",
       inputSchema: {
         type: 'object',
         properties: {
           column: { type: 'string', description: 'Only leads in this column' },
-          minScore: { type: 'number', description: 'Only leads with fitScore at least this' },
+          minScore: { type: 'number', description: 'Only leads whose score is at least this' },
           limit: { type: 'number', description: 'At most this many (default 20)' },
         },
       },
@@ -196,7 +196,7 @@ export const register: Register = on => {
     await $.tool.register({
       name: 'update_lead',
       description:
-        "Changes one lead on the person's job board: move it to a column, rescore it, add notes, set a follow-up or snooze date, or write its company blurb and role highlights. Moving to passed needs passReason.",
+        "Changes one lead on the person's job board: move it to a column, rescore it, add notes, set a follow-up or snooze date, or write its company blurb and role highlights. Moving to passed needs passReason. fitScore is the fit before ageing (the board takes points off for age itself), so never set it from the aged score list_leads shows.",
       inputSchema: {
         type: 'object',
         required: ['id'],
@@ -333,11 +333,12 @@ export const register: Register = on => {
     if (await read($, nudged)) return next(e)
     await update($, nudged, () => true)
     if (!current?.dataDir || isJobPrompt(e.text)) return next(e)
-    const named = leadsToMention({ version: 1, leads: current.leads }, await $.clock.now())
+    const now = await $.clock.now()
+    const named = leadsToMention({ version: 1, leads: current.leads }, now)
     if (named.length === 0) return next(e)
     await update($, pending, () => named.map(lead => lead.id))
     await update($, pendingTurn, () => e.turnId ?? null)
-    return next({ ...e, context: [...(e.context ?? []), nudgeContext(named)] })
+    return next({ ...e, context: [...(e.context ?? []), nudgeContext(named, now)] })
   })
 
   // A sent prompt stops showing as queued once its own turn starts.

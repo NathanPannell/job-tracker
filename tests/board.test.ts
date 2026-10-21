@@ -185,6 +185,37 @@ describe('kanban', () => {
     await ui.unmount()
   })
 
+  test('scores age until applied: the badge and order use the aged score, the lead says why', async ($, on) => {
+    world(on, {
+      leads: [
+        lead('old-1', { company: 'Old', fitScore: 86, postedAt: '2026-09-29T12:00:00.000Z' }),
+        lead('fresh-2', { company: 'Fresh', fitScore: 80 }),
+        lead('sent-3', {
+          company: 'Sent',
+          fitScore: 86,
+          column: 'applied',
+          foundAt: '2026-09-01T12:00:00.000Z',
+        }),
+      ],
+    })
+    await start($)
+    const ui = await $.ui.mount({ ...pane, surface: 'desktop' })
+    const chip = async (score: number) =>
+      ui.find({ type: 'Text', text: new RegExp(`^ ${score} $`) })
+    expect(await chip(80)).toBeDefined()
+    expect(await chip(76)).toBeDefined()
+    expect(await chip(86)).toBeUndefined()
+    const order = (await ui.findAll({ type: 'Text', text: /^ \d+ $/ })).map(one => one.text)
+    expect(order).toEqual([' 80 ', ' 76 '])
+    await ui.press({ key: 'open:old-1' })
+    expect(await ui.find({ type: 'Text', text: 'Fit 86 → 76, posted 3w ago' })).toBeDefined()
+    await ui.press({ key: 'back' })
+    await ui.press({ key: 'tab:applied' })
+    expect(await chip(86)).toBeDefined()
+    await ui.press({ key: 'open:sent-3' })
+    expect(await ui.find({ type: 'Text', text: /^Fit / })).toBeUndefined()
+  })
+
   test('score corrections and snoozes are feedback events', async ($, on) => {
     const w = world(on, { leads: [lead('acme-api'), lead('beta-api')] })
     await start($)

@@ -7,7 +7,9 @@ import {
   age,
   COLUMN_TITLES,
   columnLeads,
+  decayNote,
   defaultStage,
+  effectiveScore,
   isSnoozed,
   previousColumn,
   PASS_REASONS,
@@ -88,14 +90,18 @@ function queuedNotes(ctx: ViewContext): RenderElement[] {
   ))
 }
 
-/** The fit score as a coloured chip: green for strong, amber for worth a look, grey for weak. */
+/**
+ * The score, aged, as a coloured chip: green for strong, amber for worth a look, grey for weak.
+ * `↓`/`↑` marks the person's own correction of it.
+ */
 function badge(ctx: ViewContext, lead: Lead, key: string): RenderElement {
   const { Text } = ctx.el
+  const score = effectiveScore(lead, ctx.now)
   const mark =
     lead.scoreCorrection === 'too-high' ? '↓' : lead.scoreCorrection === 'too-low' ? '↑' : ''
   return (
-    <Text key={key} bold color="inverseText" backgroundColor={scoreTone(lead.fitScore)}>
-      {` ${lead.fitScore}${mark} `}
+    <Text key={key} bold color="inverseText" backgroundColor={scoreTone(score)}>
+      {` ${score}${mark} `}
     </Text>
   )
 }
@@ -271,6 +277,7 @@ export function leadView(ctx: ViewContext, id: string, passing: boolean): Render
     )
   }
   const app = ctx.board.applications.find(one => one.leadId === id)
+  const aged = decayNote(lead, ctx.now)
   const facts = [
     COLUMN_TITLES[lead.column],
     sourceLabel(lead.source),
@@ -289,6 +296,11 @@ export function leadView(ctx: ViewContext, id: string, passing: boolean): Render
           {facts.join(' · ')}
         </Text>
       </Box>
+      {aged && (
+        <Text key="aged" dimColor>
+          {aged}
+        </Text>
+      )}
       {lead.url.startsWith('https:') ? (
         <Link href={lead.url} label="Open posting ↗" />
       ) : (
