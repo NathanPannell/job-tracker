@@ -228,7 +228,7 @@ describe('kanban', () => {
   })
 
   test('a Draft press during a reply says it is queued until its own turn starts', async ($, on) => {
-    world(on, { leads: [lead('acme-api', { company: 'Acme', column: 'shortlisted' })] })
+    const w = world(on, { leads: [lead('acme-api', { company: 'Acme', column: 'shortlisted' })] })
     const toasts: string[] = []
     on('ui.toast', (_, e) => {
       toasts.push(e.text)
@@ -280,6 +280,15 @@ describe('kanban', () => {
       'job-tracker: the prompt was not sent: a hook refused it',
     ])
     expect(await ui.find(queued)).toBeUndefined()
+
+    // A prompt whose turn is never seen stops blocking the button after half an hour.
+    refusals.length = 0
+    await ui.press({ key: 'draft:acme-api' })
+    await ui.press({ key: 'draft:acme-api' })
+    expect(prompts).toHaveLength(3)
+    await w.clock.advance(31 * 60_000)
+    await ui.press({ key: 'draft:acme-api' })
+    expect(prompts).toHaveLength(4)
   })
 
   test('mobile reads every stage but takes no action', async ($, on) => {

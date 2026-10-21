@@ -30,6 +30,8 @@ const sent = atom({ plugin: 'job-tracker', key: 'sent' } as const, [] as SentPro
 
 /** How long a sent prompt shows as queued before the pane stops waiting for its turn. */
 const SENT_FOR_MS = 30 * 60_000
+const isLive = (one: SentPrompt, now: number) => now - one.at < SENT_FOR_MS
+const startsWith = (one: SentPrompt, text: string) => text.includes(one.entered ?? one.text)
 
 // Matchers are written as literals: the engine reads them from the source before the module runs.
 
@@ -53,13 +55,18 @@ async function show($: EngineInterface, next: JobView) {
  * queued until its turn starts, and report a prompt that did not enter.
  */
 async function sendPrompt($: EngineInterface, text: string, label: string) {
-  if ((await read($, sent)).some(one => one.text === text)) {
+  const at = await $.clock.now()
+  // An entry whose turn was never seen (the queue cleared, say) expires, so the button
+  // never stays blocked.
+  if ((await read($, sent)).some(one => one.text === text && isLive(one, at))) {
     $.ui.toast(`${label} is already queued.`)
     return
   }
   const isTurning = await read($, turning)
-  const at = await $.clock.now()
-  await update($, sent, list => [...list, { text, label, at }])
+  await update($, sent, list => [
+    ...list.filter(one => one.text !== text && isLive(one, at)),
+    { text, label, at },
+  ])
   $.ui.toast(
     isTurning
       ? `${label} once Claude finishes the current reply.`
@@ -71,6 +78,11 @@ async function sendPrompt($: EngineInterface, text: string, label: string) {
     if (result.drop !== undefined) {
       await forget()
       $.ui.toast(`job-tracker: the prompt was not sent: ${result.drop}`)
+    } else if (result.text !== text) {
+      const entered = result.text
+      await update($, sent, list =>
+        list.map(one => (one.text === text ? { ...one, entered } : one)),
+      )
     }
   } catch (error) {
     await forget()
@@ -332,8 +344,8 @@ export const register: Register = on => {
   on('turn.start', async ($, e, next) => {
     if (e.agentId) return next(e)
     await update($, turning, () => true)
-    if ((await read($, sent)).some(one => e.text.includes(one.text))) {
-      await update($, sent, list => list.filter(one => !e.text.includes(one.text)))
+    if ((await read($, sent)).some(one => startsWith(one, e.text))) {
+      await update($, sent, list => list.filter(one => !startsWith(one, e.text)))
     }
     return next(e)
   })
@@ -393,7 +405,7 @@ export const register: Register = on => {
       now: current.loadedAt,
       columns: e.props.bodyColumns,
       busy: await read($, busy),
-      queued: (await read($, sent)).filter(one => now - one.at < SENT_FOR_MS).map(one => one.label),
+      queued: (await read($, sent)).filter(one => isLive(one, now)).map(one => one.label),
       act: isReadOnly ? undefined : all,
       nav: {
         open: all.open,

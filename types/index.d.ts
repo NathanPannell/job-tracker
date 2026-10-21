@@ -158,7 +158,13 @@ export type JobPackage = {
 }
 
 /** A prompt a pane button sent, until its turn starts; a plugin's prompt waits for idle. */
-export type SentPrompt = { text: string; label: string; at: number }
+export type SentPrompt = {
+  text: string
+  label: string
+  at: number
+  /** The text that entered, when a hook rewrote it: what its turn starts with. */
+  entered?: string
+}
 
 declare module 'claude-code' {
   interface PluginState {
