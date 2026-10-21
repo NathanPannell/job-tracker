@@ -19,6 +19,8 @@ import {
   correctScore,
   counts,
   eventId,
+  hasBlurb,
+  hasHighlights,
   isColumn,
   markMentioned,
   missingSummaries,
@@ -154,7 +156,8 @@ export type SummaryInput = Pick<Lead, 'id' | 'companyBlurb' | 'roleHighlights'>
 
 /**
  * Without input, the open leads that lack a company blurb or role highlights, for scout to fill.
- * With an array of `{ id, companyBlurb?, roleHighlights? }`, writes each one in one transaction.
+ * With an array of `{ id, companyBlurb?, roleHighlights? }`, fills the fields each lead lacks, in
+ * one transaction; a field already written is kept (`patch` replaces one on purpose).
  */
 export function summaries(dir: string): ReturnType<typeof missingSummaries>
 export function summaries(
@@ -169,10 +172,18 @@ export function summaries(dir: string, input?: SummaryInput[]) {
     let leads = data.leads
     const updated: string[] = []
     const errors: string[] = []
-    for (const { id, companyBlurb, roleHighlights } of input) {
+    for (const entry of input as unknown[]) {
+      const { id, companyBlurb, roleHighlights } = (entry ?? {}) as Partial<SummaryInput>
+      if (typeof id !== 'string') {
+        errors.push(`${JSON.stringify(entry)}: needs an id`)
+        continue
+      }
+      const lead = leads.leads.find(one => one.id === id)
+      const isEmpty = (value: unknown) =>
+        value === undefined || value === '' || (Array.isArray(value) && value.length === 0)
       const fields: LeadPatch = {
-        ...(companyBlurb ? { companyBlurb } : {}),
-        ...(roleHighlights?.length ? { roleHighlights } : {}),
+        ...(!isEmpty(companyBlurb) && !(lead && hasBlurb(lead)) ? { companyBlurb } : {}),
+        ...(!isEmpty(roleHighlights) && !(lead && hasHighlights(lead)) ? { roleHighlights } : {}),
       }
       const result = patchLead(leads, id, fields, at, 'scout')
       if (result.error) errors.push(`${id}: ${result.error}`)

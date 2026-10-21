@@ -210,12 +210,13 @@ test('missingSummaries lists open leads without a blurb or highlights', () => {
     { companyBlurb: 'a' },
     { roleHighlights: [] },
     {},
+    { companyBlurb: ' ', roleHighlights: [' '] },
   ])
   const ids = file.leads.map(one => one.id)
   const closed = moveLead(file, ids[3] as string, 'archived', AT, 'user').leads
   assert.deepEqual(
     missingSummaries(closed).map(one => one.id),
-    [ids[1], ids[2]],
+    [ids[1], ids[2], ids[4]],
   )
   assert.deepEqual(Object.keys(missingSummaries(closed)[0] ?? {}), [
     'id',

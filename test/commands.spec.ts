@@ -91,17 +91,21 @@ test('summaries lists open leads missing a blurb or highlights and fills them', 
       companyBlurb: 'Makes farm sensors.',
       roleHighlights: ['Rust', 'Equity'],
     },
-    { id: 'acme-backend-developer', companyBlurb: '' },
+    // What a lead already has is kept: only missing fields are filled.
+    { id: 'acme-backend-developer', companyBlurb: 'Replaced?', roleHighlights: [] },
     { id: 'missing', companyBlurb: 'x' },
-    { id: 'beta-backend-developer', roleHighlights: 'one' as never },
+    { id: 'gone-backend-developer', roleHighlights: {} as never },
+    null as never,
   ])
   assert.deepEqual(filled, {
     updated: ['beta-backend-developer'],
     errors: [
       'missing: No lead missing',
-      'beta-backend-developer: roleHighlights must be a list of strings',
+      'gone-backend-developer: roleHighlights must be a list of strings',
+      'null: needs an id',
     ],
   })
+  assert.equal(commands.list(dir, { limit: 1 })[0]?.companyBlurb, 'Builds APIs.')
   const beta = readData(dir, 'leads').leads.find(one => one.id === 'beta-backend-developer')
   assert.equal(beta?.companyBlurb, 'Makes farm sensors.')
   assert.deepEqual(beta?.roleHighlights, ['Rust', 'Equity'])

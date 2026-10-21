@@ -453,11 +453,16 @@ export function checkSummary(fields: Pick<Lead, 'companyBlurb' | 'roleHighlights
   return undefined
 }
 
+/** Whether a lead has a company blurb or role highlights worth showing (blank ones are not). */
+export const hasBlurb = (lead: Pick<Lead, 'companyBlurb'>) => Boolean(lead.companyBlurb?.trim())
+export const hasHighlights = (lead: Pick<Lead, 'roleHighlights'>) =>
+  (lead.roleHighlights ?? []).some(one => one.trim() !== '')
+
 /** Leads still in play (not passed or archived) that lack a company blurb or role highlights. */
 export function missingSummaries(file: LeadsFile) {
   return file.leads
     .filter(lead => lead.column !== 'passed' && lead.column !== 'archived')
-    .filter(lead => !lead.companyBlurb || !lead.roleHighlights?.length)
+    .filter(lead => !hasBlurb(lead) || !hasHighlights(lead))
     .map(({ id, company, role, url, source }) => ({ id, company, role, url, source }))
 }
 
@@ -503,8 +508,8 @@ export function addLeads(
         comp: one.comp || existing.comp,
         closesAt: one.closesAt ?? existing.closesAt,
         // Fills a summary the card lacks; never replaces one already written.
-        ...(!existing.companyBlurb && one.companyBlurb ? { companyBlurb: one.companyBlurb } : {}),
-        ...(!existing.roleHighlights?.length && one.roleHighlights?.length
+        ...(!hasBlurb(existing) && one.companyBlurb ? { companyBlurb: one.companyBlurb } : {}),
+        ...(!hasHighlights(existing) && one.roleHighlights?.length
           ? { roleHighlights: one.roleHighlights }
           : {}),
       }
