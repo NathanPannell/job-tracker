@@ -58,8 +58,16 @@ jobs:
         with:
           node-version: 24
       - name: Install Claude Code ${{ env.CLAUDE_CODE_VERSION }}
-        run: npm install --global "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}"
+        shell: bash
+        # npm's install-scripts gate can skip the package's postinstall, which leaves no native
+        # binary on some runs. Run the postinstall explicitly (it is idempotent) and check it.
+        run: |
+          npm install --global --allow-scripts=@anthropic-ai/claude-code "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}"
+          node "$(npm root --global)/@anthropic-ai/claude-code/install.cjs"
+          claude --version | grep -F "${CLAUDE_CODE_VERSION}"
       - name: Validate the mod (every hook matcher must be a literal the engine can read)
+        # bash with pipefail, so a failing `claude plugin validate` is not hidden by `tee`.
+        shell: bash
         run: |
           claude plugin validate . | tee validate.txt
           if grep -q '=?' validate.txt; then
