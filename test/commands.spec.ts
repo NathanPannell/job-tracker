@@ -72,6 +72,78 @@ test('move, pass, score, snooze, patch and mention write the lead and its feedba
   assert.throws(() => commands.feedback(dir, { leadId: 'x', kind: 'pass' }), /No lead/)
 })
 
+test('summaries lists open leads missing a blurb or highlights and fills them', () => {
+  const dir = fresh()
+  commands.add(dir, [
+    { ...lead('Acme'), companyBlurb: 'Builds APIs.', roleHighlights: ['Remote'] },
+    lead('Beta'),
+    lead('Gone'),
+  ])
+  commands.move(dir, 'gone-backend-developer', 'archived')
+  assert.equal(commands.list(dir, { limit: 1 })[0]?.companyBlurb, 'Builds APIs.')
+  assert.deepEqual(
+    commands.summaries(dir).map(one => one.id),
+    ['beta-backend-developer'],
+  )
+  const filled = commands.summaries(dir, [
+    {
+      id: 'beta-backend-developer',
+      companyBlurb: 'Makes farm sensors.',
+      roleHighlights: ['Rust', 'Equity'],
+    },
+    // What a lead already has is kept: only missing fields are filled.
+    { id: 'acme-backend-developer', companyBlurb: 'Replaced?', roleHighlights: [] },
+    { id: 'missing', companyBlurb: 'x' },
+    { id: 'gone-backend-developer', roleHighlights: {} as never },
+    null as never,
+  ])
+  assert.deepEqual(filled, {
+    updated: ['beta-backend-developer'],
+    errors: [
+      'missing: No lead missing',
+      'gone-backend-developer: roleHighlights must be a list of strings',
+      'null: needs an id',
+    ],
+  })
+  assert.equal(commands.list(dir, { limit: 1 })[0]?.companyBlurb, 'Builds APIs.')
+  const beta = readData(dir, 'leads').leads.find(one => one.id === 'beta-backend-developer')
+  assert.equal(beta?.companyBlurb, 'Makes farm sensors.')
+  assert.deepEqual(beta?.roleHighlights, ['Rust', 'Equity'])
+  assert.equal(beta?.history.at(-1)?.by, 'scout')
+  assert.deepEqual(commands.summaries(dir), [])
+  assert.throws(() => commands.summaries(dir, {} as never), /JSON array/)
+  assert.throws(
+    () => commands.add(dir, [{ ...lead('Bad'), companyBlurb: 3 as never }]),
+    /Bad — Backend Developer: companyBlurb must be a string/,
+  )
+})
+
+test('the jobs CLI lists and fills summaries from a file', () => {
+  const dir = fresh()
+  commands.add(dir, [lead('Acme')])
+  const file = join(dir, 'summaries.json')
+  writeFileSync(file, JSON.stringify([{ id: 'acme-backend-developer', companyBlurb: 'APIs.' }]))
+  const cli = (...args: string[]) =>
+    JSON.parse(
+      execFileSync(process.execPath, ['bin/jobs.ts', ...args, '--data', dir], { encoding: 'utf8' }),
+    ) as unknown
+  assert.deepEqual(cli('summaries'), [
+    {
+      id: 'acme-backend-developer',
+      company: 'Acme',
+      role: 'Backend Developer',
+      url: 'https://jobs.example.com/Acme',
+      source: 'greenhouse',
+    },
+  ])
+  assert.deepEqual(cli('summaries', `@${file}`), {
+    updated: ['acme-backend-developer'],
+    errors: [],
+  })
+  // Highlights are still missing, so it stays on the list.
+  assert.equal((cli('summaries') as unknown[]).length, 1)
+})
+
 test('a package is registered with its diff, draft snapshot and files, then submitted', () => {
   const dir = fresh()
   commands.add(dir, [lead('Acme')])

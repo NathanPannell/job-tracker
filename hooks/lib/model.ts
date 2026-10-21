@@ -362,6 +362,8 @@ export type LeadPatch = Partial<
     | 'column'
     | 'fitScore'
     | 'fitReason'
+    | 'companyBlurb'
+    | 'roleHighlights'
     | 'notes'
     | 'followUpAt'
     | 'snoozedUntil'
@@ -377,6 +379,8 @@ const PATCH_KEYS: readonly (keyof LeadPatch)[] = [
   'column',
   'fitScore',
   'fitReason',
+  'companyBlurb',
+  'roleHighlights',
   'notes',
   'followUpAt',
   'snoozedUntil',
@@ -405,6 +409,8 @@ export function patchLead(
   }
   const unknown = Object.keys(patch).filter(key => !PATCH_KEYS.includes(key as keyof LeadPatch))
   if (unknown.length > 0) return { leads: file, error: `Cannot change ${unknown.join(', ')}` }
+  const summaryError = checkSummary(patch)
+  if (summaryError) return { leads: file, error: summaryError }
   const { column, ...rest } = patch
   let next: MoveResult = { leads: file }
   if (column !== undefined && column !== lead.column) {
@@ -430,6 +436,34 @@ export function patchLead(
     ],
   }
   return { leads: replaceLead(next.leads, updated), event: next.event }
+}
+
+/** Why a company blurb or role highlights are malformed; undefined when they are fine or absent. */
+export function checkSummary(fields: Pick<Lead, 'companyBlurb' | 'roleHighlights'>) {
+  const { companyBlurb, roleHighlights } = fields
+  if (companyBlurb !== undefined && typeof companyBlurb !== 'string') {
+    return 'companyBlurb must be a string'
+  }
+  if (
+    roleHighlights !== undefined &&
+    !(Array.isArray(roleHighlights) && roleHighlights.every(one => typeof one === 'string'))
+  ) {
+    return 'roleHighlights must be a list of strings'
+  }
+  return undefined
+}
+
+/** Whether a lead has a company blurb or role highlights worth showing (blank ones are not). */
+export const hasBlurb = (lead: Pick<Lead, 'companyBlurb'>) => Boolean(lead.companyBlurb?.trim())
+export const hasHighlights = (lead: Pick<Lead, 'roleHighlights'>) =>
+  (lead.roleHighlights ?? []).some(one => one.trim() !== '')
+
+/** Leads still in play (not passed or archived) that lack a company blurb or role highlights. */
+export function missingSummaries(file: LeadsFile) {
+  return file.leads
+    .filter(lead => lead.column !== 'passed' && lead.column !== 'archived')
+    .filter(lead => !hasBlurb(lead) || !hasHighlights(lead))
+    .map(({ id, company, role, url, source }) => ({ id, company, role, url, source }))
 }
 
 export type IncomingLead = Omit<
@@ -473,6 +507,11 @@ export function addLeads(
         location: one.location || existing.location,
         comp: one.comp || existing.comp,
         closesAt: one.closesAt ?? existing.closesAt,
+        // Fills a summary the card lacks; never replaces one already written.
+        ...(!hasBlurb(existing) && one.companyBlurb ? { companyBlurb: one.companyBlurb } : {}),
+        ...(!hasHighlights(existing) && one.roleHighlights?.length
+          ? { roleHighlights: one.roleHighlights }
+          : {}),
       }
       updated.push(existing.id)
       continue

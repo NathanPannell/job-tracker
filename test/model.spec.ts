@@ -22,6 +22,7 @@ import {
   nudgeContext,
   parseOr,
   parseStrict,
+  missingSummaries,
   patchLead,
   snoozeLead,
 } from '../hooks/lib/model.ts'
@@ -167,6 +168,63 @@ test('patchLead validates, moves and records the fields it changed', () => {
   assert.equal(patchLead(file, id, {}, AT, 'model').leads, file)
   const noted = patchLead(file, id, { notes: 'x' }, AT, 'model').leads.leads[0] as Lead
   assert.equal(noted.history.at(-1)?.action, 'note')
+})
+
+test('patchLead and addLeads keep a company blurb and role highlights', () => {
+  const file = seeded([{ companyBlurb: 'Builds APIs.' }])
+  const id = file.leads[0]?.id as string
+  assert.equal(file.leads[0]?.companyBlurb, 'Builds APIs.')
+  const patched = patchLead(file, id, { roleHighlights: ['Rust', 'Remote'] }, AT, 'scout')
+  assert.deepEqual(patched.leads.leads[0]?.roleHighlights, ['Rust', 'Remote'])
+  assert.equal(patched.leads.leads[0]?.history.at(-1)?.note, 'roleHighlights')
+  assert.match(
+    patchLead(file, id, { roleHighlights: [1] as never }, AT, 'scout').error ?? '',
+    /list of strings/,
+  )
+  assert.match(
+    patchLead(file, id, { companyBlurb: ['x'] as never }, AT, 'scout').error ?? '',
+    /must be a string/,
+  )
+  // A re-found posting fills what is missing and never replaces what is there.
+  const again = addLeads(
+    patched.leads,
+    [incoming('Co0', { companyBlurb: 'Other words.', roleHighlights: ['New'] })],
+    AT,
+    0,
+  ).leads.leads[0]
+  assert.equal(again?.companyBlurb, 'Builds APIs.')
+  assert.deepEqual(again?.roleHighlights, ['Rust', 'Remote'])
+  const filled = addLeads(
+    seeded(),
+    [incoming('Co0', { companyBlurb: 'Fresh.', roleHighlights: ['One'] })],
+    AT,
+    0,
+  ).leads.leads[0]
+  assert.equal(filled?.companyBlurb, 'Fresh.')
+  assert.deepEqual(filled?.roleHighlights, ['One'])
+})
+
+test('missingSummaries lists open leads without a blurb or highlights', () => {
+  const file = seeded([
+    { companyBlurb: 'a', roleHighlights: ['b'] },
+    { companyBlurb: 'a' },
+    { roleHighlights: [] },
+    {},
+    { companyBlurb: ' ', roleHighlights: [' '] },
+  ])
+  const ids = file.leads.map(one => one.id)
+  const closed = moveLead(file, ids[3] as string, 'archived', AT, 'user').leads
+  assert.deepEqual(
+    missingSummaries(closed).map(one => one.id),
+    [ids[1], ids[2], ids[4]],
+  )
+  assert.deepEqual(Object.keys(missingSummaries(closed)[0] ?? {}), [
+    'id',
+    'company',
+    'role',
+    'url',
+    'source',
+  ])
 })
 
 test('a move to the column a lead is already in records nothing', () => {

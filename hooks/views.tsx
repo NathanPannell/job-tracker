@@ -236,6 +236,17 @@ export function boardView(
   )
 }
 
+/** The company line and the role's highlights as Markdown; empty when scout wrote neither. */
+export function leadSummary(lead: Pick<Lead, 'companyBlurb' | 'roleHighlights'>): string {
+  const highlights = (lead.roleHighlights ?? []).map(one => one.trim()).filter(Boolean)
+  return [
+    lead.companyBlurb?.trim() ? `**Company:** ${lead.companyBlurb.trim()}` : '',
+    highlights.length > 0 ? `**The role:**\n${highlights.map(one => `- ${one}`).join('\n')}` : '',
+  ]
+    .filter(Boolean)
+    .join('\n\n')
+}
+
 export function leadView(ctx: ViewContext, id: string, passing: boolean): RenderElement {
   const { Box, Text, Button, Link, Markdown } = ctx.el
   const Select = 'Select' in ctx.el ? ctx.el.Select : undefined
@@ -255,6 +266,7 @@ export function leadView(ctx: ViewContext, id: string, passing: boolean): Render
     lead.location,
     lead.comp,
   ].filter(Boolean)
+  const summary = leadSummary(lead)
   const act = ctx.act
   return (
     <Box flexDirection="column" gap={1}>
@@ -270,6 +282,7 @@ export function leadView(ctx: ViewContext, id: string, passing: boolean): Render
       ) : (
         <Text dimColor>{lead.url || 'No posting URL'}</Text>
       )}
+      {summary && <Markdown key="summary" text={summary} />}
       <Markdown
         text={`**Why this score:** ${lead.fitReason}${
           lead.notes
