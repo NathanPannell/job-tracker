@@ -1,10 +1,10 @@
 // How the hooks module reaches the data folder: reads through `$.fs`, every write through
 // `bin/jobs.ts` (one writer, a lock and an atomic rename), and the session values the pane draws.
-import { atom, update } from 'claude-code'
+import { atom, read, update } from 'claude-code'
 import type { EngineInterface } from 'claude-code'
 
 import type { JobBoard, JobPackage, PackageTab } from '../../types/index.d.ts'
-import { emptyApplications, emptyLeads, emptyProposals, parseOr } from './model.ts'
+import { emptyApplications, emptyLeads, emptyProposals, isStale, parseOr } from './model.ts'
 import type { ApplicationsFile, LeadsFile, ProposalsFile } from './model.ts'
 
 export const PANE = 'jobs'
@@ -38,8 +38,12 @@ async function readText($: EngineInterface, path: string): Promise<string | unde
   }
 }
 
-/** Reads the data files into the board value the pane and band draw from. */
-export async function refresh($: EngineInterface): Promise<JobBoard> {
+/**
+ * Reads the data files into the board value the pane and band draw from. A New lead whose
+ * posting has passed a week is archived first (one `jobs archive`, only when there is one), so
+ * the board never shows it; nothing runs on a timer.
+ */
+export async function refresh($: EngineInterface, sweep = true): Promise<JobBoard> {
   const dir = await dataDir($)
   const loadedAt = await $.clock.now()
   let next: JobBoard
@@ -61,6 +65,11 @@ export async function refresh($: EngineInterface): Promise<JobBoard> {
         leads === undefined ? 'No leads.json yet: run the scout skill to fill the board.' : null,
     }
   }
+  const hasStale = next.leads.some(lead => lead.column === 'new' && isStale(lead, loadedAt))
+  if (sweep && hasStale) {
+    const swept = await jobs($, ['archive'])
+    if (swept.ok) return read($, board)
+  }
   await update($, board, () => next)
   return next
 }
@@ -76,7 +85,8 @@ export async function jobs($: EngineInterface, args: readonly string[]): Promise
     const ran = await $.process.run(['node', script, ...args, '--data', dir], {
       timeoutMs: 120_000,
     })
-    await refresh($)
+    // No sweep here: a failed `jobs archive` must not run itself again.
+    await refresh($, false)
     if (ran.exitCode !== 0) return { ok: false, error: ran.stderr.trim() || `exit ${ran.exitCode}` }
     return { ok: true, value: ran.stdout.trim() ? JSON.parse(ran.stdout) : null }
   } catch (error) {

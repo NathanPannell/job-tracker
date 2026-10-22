@@ -6,6 +6,7 @@ import type { On } from 'claude-code'
 
 import {
   appendEvent,
+  archiveStale,
   correctScore,
   emptyFeedback,
   eventId,
@@ -40,7 +41,8 @@ export function lead(id: string, fields: Partial<Lead> = {}): Lead {
     fitScore: 80,
     fitReason: 'Backend APIs in Victoria',
     column: 'new',
-    foundAt: '2026-10-19T12:00:00.000Z',
+    // An hour before NOW: too fresh to have aged, so badges show the fit score.
+    foundAt: '2026-10-20T11:00:00.000Z',
     history: [],
     ...fields,
   }
@@ -121,6 +123,11 @@ export function world(
       case 'mention':
         put('leads.json', markMentioned(file, args, at))
         return { exitCode: 0, stdout: '{}', stderr: '' }
+      case 'archive': {
+        const swept = archiveStale(file, at)
+        put('leads.json', swept.leads)
+        return { exitCode: 0, stdout: JSON.stringify({ archived: swept.archived }), stderr: '' }
+      }
       case 'list':
         return { exitCode: 0, stdout: JSON.stringify(file.leads), stderr: '' }
       case 'feedback': {

@@ -188,7 +188,7 @@ describe('kanban', () => {
   test('scores age until applied: the badge and order use the aged score, the lead says why', async ($, on) => {
     world(on, {
       leads: [
-        lead('old-1', { company: 'Old', fitScore: 86, postedAt: '2026-09-29T12:00:00.000Z' }),
+        lead('old-1', { company: 'Old', fitScore: 86, postedAt: '2026-10-18T12:00:00.000Z' }),
         lead('fresh-2', { company: 'Fresh', fitScore: 80 }),
         lead('sent-3', {
           company: 'Sent',
@@ -203,17 +203,48 @@ describe('kanban', () => {
     const chip = async (score: number) =>
       ui.find({ type: 'Text', text: new RegExp(`^ ${score} $`) })
     expect(await chip(80)).toBeDefined()
-    expect(await chip(76)).toBeDefined()
+    expect(await chip(66)).toBeDefined()
     expect(await chip(86)).toBeUndefined()
     const order = (await ui.findAll({ type: 'Text', text: /^ \d+ $/ })).map(one => one.text)
-    expect(order).toEqual([' 80 ', ' 76 '])
+    expect(order).toEqual([' 80 ', ' 66 '])
     await ui.press({ key: 'open:old-1' })
-    expect(await ui.find({ type: 'Text', text: 'Fit 86 → 76, posted 3w ago' })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: 'Fit 86 → 66, posted 2d ago' })).toBeDefined()
     await ui.press({ key: 'back' })
     await ui.press({ key: 'tab:applied' })
     expect(await chip(86)).toBeDefined()
     await ui.press({ key: 'open:sent-3' })
     expect(await ui.find({ type: 'Text', text: /^Fit / })).toBeUndefined()
+  })
+
+  test('a New lead posted over a week ago is archived when the board loads', async ($, on) => {
+    const w = world(on, {
+      leads: [
+        lead('stale-1', { company: 'Stale', postedAt: '2026-10-12T12:00:00.000Z' }),
+        lead('kept-2', {
+          company: 'Kept',
+          column: 'shortlisted',
+          postedAt: '2026-10-01T12:00:00.000Z',
+        }),
+        lead('fresh-3', { company: 'Fresh' }),
+      ],
+    })
+    await start($)
+    expect(w.runs.filter(argv => argv[2] === 'archive')).toHaveLength(1)
+    expect(w.leads().map(one => [one.id, one.column])).toEqual([
+      ['stale-1', 'archived'],
+      ['kept-2', 'shortlisted'],
+      ['fresh-3', 'new'],
+    ])
+    expect(w.leads()[0]?.history.at(-1)?.by).toBe('tracker')
+    const ui = await $.ui.mount({ ...pane, surface: 'desktop' })
+    expect(await ui.find({ key: 'open:stale-1' })).toBeUndefined()
+    expect(await ui.find({ key: 'open:fresh-3' })).toBeDefined()
+  })
+
+  test('a board with nothing stale runs no archive', async ($, on) => {
+    const w = world(on, { leads: [lead('fresh-1')] })
+    await start($)
+    expect(w.runs.filter(argv => argv[2] === 'archive')).toHaveLength(0)
   })
 
   test('score corrections and snoozes are feedback events', async ($, on) => {

@@ -15,6 +15,7 @@ import { join } from 'node:path'
 import {
   addLeads,
   appendEvent,
+  archiveStale,
   byScore,
   checkSummary,
   correctScore,
@@ -101,6 +102,8 @@ export type AddSummary = {
   added: string[]
   updated: string[]
   dropped: string[]
+  /** New leads moved to Archived because their posting is over a week old. */
+  archived: string[]
   /** Added leads scoring 90 or more once aged: the ones worth a push notification. */
   alerts: (Pick<Lead, 'id' | 'company' | 'role' | 'fitScore'> & { score: number })[]
 }
@@ -113,7 +116,9 @@ export function add(dir: string, incoming: IncomingLead[], threshold: string | n
   }
   const at = now()
   return transact<AddSummary>(dir, data => {
-    const result = addLeads(data.leads, incoming, at, Number(threshold))
+    const merged = addLeads(data.leads, incoming, at, Number(threshold))
+    const swept = archiveStale(merged.leads, at)
+    const result = { ...merged, leads: swept.leads }
     const alerts = result.leads.leads
       .filter(lead => result.added.includes(lead.id))
       .map(({ id, company, role, fitScore, ...rest }) => ({
@@ -126,8 +131,22 @@ export function add(dir: string, incoming: IncomingLead[], threshold: string | n
       .filter(alert => alert.score >= 90)
     return {
       write: { leads: result.leads },
-      result: { added: result.added, updated: result.updated, dropped: result.dropped, alerts },
+      result: {
+        added: result.added,
+        updated: result.updated,
+        dropped: result.dropped,
+        archived: swept.archived,
+        alerts,
+      },
     }
+  })
+}
+
+/** Moves New leads whose posting is over a week old to Archived; prints their ids. */
+export function archive(dir: string): { archived: string[] } {
+  return transact(dir, data => {
+    const { leads, archived } = archiveStale(data.leads, now())
+    return { write: archived.length > 0 ? { leads } : {}, result: { archived } }
   })
 }
 
