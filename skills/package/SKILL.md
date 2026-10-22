@@ -37,7 +37,7 @@ You never submit, send an email, or invent a fact.
 3. Résumé. Start from `resume-format-template.tex`: keep its preamble, fonts, margins, header,
    section rules and custom commands byte for byte, keep its section order, and match its level of
    detail (about as many entries and bullets per section as it has, on one page). Leave out its
-   instruction comment above `\documentclass`. Replace all of
+   instruction comment at the top of the file. Replace all of
    its body text: pull roles, projects, bullets and skills fresh from `master-resume.tex` and the
    knowledge base, choosing what fits this posting, following `resume-generation-rules.md` (fast
    scanning; no keyword tagline; no technology added for keywords). You may shorten or
