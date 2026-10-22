@@ -139,24 +139,30 @@ test('the nudge names the best leads by aged score, with that score', () => {
   assert.match(nudgeContext(named, NOW), /Stale — Backend Developer \(score 75\)/)
 })
 
-test('a New lead posted over a week ago is archived; kept and applied leads stay', () => {
+test('a New lead posted over a week ago is archived; kept, snoozed, restored and applied stay', () => {
   assert.equal(isStale(lead({ foundAt: daysAgo(7) }), NOW), false)
   assert.equal(isStale(lead({ foundAt: hoursAgo(7 * 24 + 1) }), NOW), true)
   assert.equal(isStale(lead({ postedAt: daysAgo(8), foundAt: AT }), NOW), true)
   const file = board(
     lead({ id: 'stale', postedAt: daysAgo(8) }),
     lead({ id: 'snoozed', foundAt: daysAgo(9), snoozedUntil: daysAgo(-2) }),
+    lead({ id: 'woke', foundAt: daysAgo(9), snoozedUntil: daysAgo(1) }),
+    lead({
+      id: 'restored',
+      foundAt: daysAgo(9),
+      history: [{ at: AT, by: 'user', action: 'moved', from: 'archived', to: 'new' }],
+    }),
     lead({ id: 'week', foundAt: daysAgo(7) }),
     lead({ id: 'kept', column: 'shortlisted', foundAt: daysAgo(9) }),
     lead({ id: 'applied', column: 'applied', foundAt: daysAgo(30) }),
   )
   const { leads, archived } = archiveStale(file, AT)
-  assert.deepEqual(archived, ['stale', 'snoozed'])
+  assert.deepEqual(archived, ['stale', 'woke'])
   assert.deepEqual(
     leads.leads.map(one => one.column),
-    ['archived', 'archived', 'new', 'shortlisted', 'applied'],
+    ['archived', 'new', 'archived', 'new', 'new', 'shortlisted', 'applied'],
   )
-  const moved = leads.leads[1] as Lead
+  const moved = leads.leads[2] as Lead
   assert.equal(moved.snoozedUntil, undefined)
   assert.deepEqual(moved.history.at(-1), {
     at: AT,

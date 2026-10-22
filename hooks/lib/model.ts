@@ -214,6 +214,19 @@ export const isStale = (lead: Pick<Lead, 'foundAt' | 'postedAt'>, now: number) =
   now - postedTime(lead) > ARCHIVE_AFTER_DAYS * DAY_MS
 
 /**
+ * Whether `archiveStale` takes this lead: in New, past a week, not snoozed, and never moved
+ * back into New by hand (a lead restored with "Back to New" stays restored).
+ */
+export const isArchivable = (
+  lead: Pick<Lead, 'column' | 'foundAt' | 'postedAt' | 'snoozedUntil' | 'history'>,
+  now: number,
+) =>
+  lead.column === 'new' &&
+  isStale(lead, now) &&
+  !isSnoozed(lead, now) &&
+  !lead.history.some(entry => entry.action === 'moved' && entry.to === 'new')
+
+/**
  * Archives New leads whose posting is over a week old. Only New: a lead the person shortlisted
  * or is drafting stays where they put it. No feedback event, since the person made no call.
  */
@@ -224,7 +237,7 @@ export function archiveStale(
   const now = Date.parse(at)
   const archived: string[] = []
   const leads = file.leads.map(lead => {
-    if (lead.column !== 'new' || !isStale(lead, now)) return lead
+    if (!isArchivable(lead, now)) return lead
     archived.push(lead.id)
     return {
       ...lead,
@@ -672,7 +685,7 @@ export function appendEvent(file: FeedbackFile, event: FeedbackEvent): FeedbackF
   return { ...file, events: [...file.events, event] }
 }
 
-export const isSnoozed = (lead: Lead, now: number) =>
+export const isSnoozed = (lead: Pick<Lead, 'snoozedUntil'>, now: number) =>
   lead.snoozedUntil !== undefined && Date.parse(lead.snoozedUntil) > now
 
 export type Counts = { newLeads: number; readyToReview: number; followUpsDue: number }

@@ -239,6 +239,13 @@ describe('kanban', () => {
     const ui = await $.ui.mount({ ...pane, surface: 'desktop' })
     expect(await ui.find({ key: 'open:stale-1' })).toBeUndefined()
     expect(await ui.find({ key: 'open:fresh-3' })).toBeDefined()
+    // Moved back to New by hand, it stays there through later refreshes.
+    await ui.press({ key: 'closed' })
+    await ui.press({ key: 'tab:archived' })
+    await ui.press({ key: 'back-new:stale-1' })
+    await ui.press({ key: 'refresh' })
+    expect(w.leads()[0]?.column).toBe('new')
+    expect(w.runs.filter(argv => argv[2] === 'archive')).toHaveLength(1)
   })
 
   test('a board with nothing stale runs no archive', async ($, on) => {
