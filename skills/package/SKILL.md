@@ -18,7 +18,8 @@ You never submit, send an email, or invent a fact.
 - Profile (read before writing anything):
   - `profile/resume-generation-rules.md` — how a tailored résumé is built. Obey it.
   - `profile/master-resume.tex` — the only approved résumé wording.
-  - `profile/resume-format-template.tex` — the mandatory layout.
+  - `profile/resume-format-template.tex` — the mandatory layout, section order and level of
+    detail. Its wording is a sample of that shape, never a source.
   - `profile/knowledge-base/` — indexed, source-linked facts (start at its `README.md`; read only
     the records relevant to this role).
   - `profile/cover-letter-prompts.md` — reusable stories and answers.
@@ -34,10 +35,11 @@ You never submit, send an email, or invent a fact.
    its URL and the date to `posting.md`. Note every application-form question the posting or its
    public apply page shows.
 3. Résumé. Start from `resume-format-template.tex`: keep its preamble, fonts, margins, header,
-   section rules and custom commands byte for byte; change content and section choice only. Select
-   sections, roles, projects and bullets from `master-resume.tex` and the knowledge base that fit
-   this posting, following `resume-generation-rules.md` (fast scanning; one or two bullets per
-   project or role; no keyword tagline; no technology added for keywords). You may shorten or
+   section rules and custom commands byte for byte, keep its section order, and match its level of
+   detail (about as many entries and bullets per section as it has, on one page). Replace all of
+   its body text: pull roles, projects, bullets and skills fresh from `master-resume.tex` and the
+   knowledge base, choosing what fits this posting, following `resume-generation-rules.md` (fast
+   scanning; no keyword tagline; no technology added for keywords). You may shorten or
    reorder approved wording; you may not broaden scope, add metrics, change dates or claim planned
    work as done. For every bullet you keep, write a line in `sources.md`: the bullet, then the
    master-résumé line or knowledge-base file it came from. If something the posting wants is not
