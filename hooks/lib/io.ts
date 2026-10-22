@@ -1,10 +1,10 @@
 // How the hooks module reaches the data folder: reads through `$.fs`, every write through
 // `bin/jobs.ts` (one writer, a lock and an atomic rename), and the session values the pane draws.
-import { atom, update } from 'claude-code'
+import { atom, read, update } from 'claude-code'
 import type { EngineInterface } from 'claude-code'
 
 import type { JobBoard, JobPackage, PackageTab } from '../../types/index.d.ts'
-import { emptyApplications, emptyLeads, emptyProposals, parseOr } from './model.ts'
+import { emptyApplications, emptyLeads, emptyProposals, isArchivable, parseOr } from './model.ts'
 import type { ApplicationsFile, LeadsFile, ProposalsFile } from './model.ts'
 
 export const PANE = 'jobs'
@@ -21,6 +21,8 @@ export const EMPTY_BOARD: JobBoard = {
 const board = atom({ plugin: 'job-tracker', key: 'board' } as const, EMPTY_BOARD)
 const pkg = atom({ plugin: 'job-tracker', key: 'pkg' } as const, null as JobPackage | null)
 const busy = atom({ plugin: 'job-tracker', key: 'busy' } as const, null as string | null)
+/** Leads this session already asked `jobs archive` to take, so a failure is not retried. */
+const swept = atom({ plugin: 'job-tracker', key: 'swept' } as const, [] as string[])
 
 /** The data folder: `JOB_TRACKER_DATA`, without a trailing separator; null when unset. */
 export async function dataDir($: EngineInterface): Promise<string | null> {
@@ -38,8 +40,12 @@ async function readText($: EngineInterface, path: string): Promise<string | unde
   }
 }
 
-/** Reads the data files into the board value the pane and band draw from. */
-export async function refresh($: EngineInterface): Promise<JobBoard> {
+/**
+ * Reads the data files into the board value the pane and band draw from. A New lead whose
+ * posting has passed a week is archived first (one `jobs archive`, only when there is one), so
+ * the board never shows it; nothing runs on a timer.
+ */
+export async function refresh($: EngineInterface, sweep = true): Promise<JobBoard> {
   const dir = await dataDir($)
   const loadedAt = await $.clock.now()
   let next: JobBoard
@@ -62,7 +68,17 @@ export async function refresh($: EngineInterface): Promise<JobBoard> {
     }
   }
   await update($, board, () => next)
-  return next
+  if (!sweep) return next
+  // Each stale lead is tried once a session: a failed or empty archive is not respawned.
+  const tried = await read($, swept)
+  const stale = next.leads
+    .filter(lead => isArchivable(lead, loadedAt) && !tried.includes(lead.id))
+    .map(lead => lead.id)
+  if (stale.length === 0) return next
+  await update($, swept, ids => [...ids, ...stale])
+  const result = await jobs($, ['archive'])
+  if (!result.ok) $.ui.toast(`job-tracker: could not archive stale leads: ${result.error}`)
+  return read($, board)
 }
 
 export type RunResult = { ok: true; value: unknown } | { ok: false; error: string }
@@ -76,7 +92,8 @@ export async function jobs($: EngineInterface, args: readonly string[]): Promise
     const ran = await $.process.run(['node', script, ...args, '--data', dir], {
       timeoutMs: 120_000,
     })
-    await refresh($)
+    // No sweep here: a failed `jobs archive` must not run itself again.
+    await refresh($, false)
     if (ran.exitCode !== 0) return { ok: false, error: ran.stderr.trim() || `exit ${ran.exitCode}` }
     return { ok: true, value: ran.stdout.trim() ? JSON.parse(ran.stdout) : null }
   } catch (error) {

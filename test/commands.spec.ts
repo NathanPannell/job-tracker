@@ -52,10 +52,10 @@ test('init creates the files, add merges and alerts on 90+', () => {
 
 test('list and alerts go by the aged score; the fit score stays as scored', () => {
   const dir = fresh()
-  const weeksAgo = (weeks: number) => new Date(Date.now() - weeks * 7 * 86_400_000).toISOString()
+  const daysAgo = (days: number) => new Date(Date.now() - days * 86_400_000).toISOString()
   const added = commands.add(dir, [
-    { ...lead('Stale', 95), postedAt: weeksAgo(4) },
-    { ...lead('Fresh', 90), postedAt: weeksAgo(0) },
+    { ...lead('Stale', 95), postedAt: daysAgo(2) },
+    { ...lead('Fresh', 90), postedAt: daysAgo(0) },
   ])
   assert.deepEqual(
     added.alerts.map(alert => [alert.company, alert.fitScore, alert.score]),
@@ -65,13 +65,63 @@ test('list and alerts go by the aged score; the fit score stays as scored', () =
     commands.list(dir).map(one => [one.company, one.fitScore, one.score]),
     [
       ['Fresh', 90, 90],
-      ['Stale', 95, 80],
+      ['Stale', 95, 75],
     ],
   )
   assert.deepEqual(
     commands.list(dir, { min: 85 }).map(one => one.company),
     ['Fresh'],
   )
+})
+
+test('archive and add move New leads posted over a week ago to Archived', () => {
+  const dir = fresh()
+  const daysAgo = (days: number) => new Date(Date.now() - days * 86_400_000).toISOString()
+  commands.add(dir, [
+    { ...lead('Old', 99), postedAt: daysAgo(1) },
+    { ...lead('Kept', 99), postedAt: daysAgo(1) },
+  ])
+  commands.move(dir, 'kept-backend-developer', 'shortlisted')
+  assert.deepEqual(commands.archive(dir), { archived: [] })
+  // A week on, as the board would find it.
+  transact(dir, data => ({
+    write: {
+      leads: {
+        ...data.leads,
+        leads: data.leads.leads.map(one => ({ ...one, postedAt: daysAgo(8) })),
+      },
+    },
+    result: null,
+  }))
+  assert.deepEqual(commands.archive(dir), { archived: ['old-backend-developer'] })
+  const columns = readData(dir, 'leads').leads.map(one => [one.id, one.column])
+  assert.deepEqual(columns, [
+    ['old-backend-developer', 'archived'],
+    ['kept-backend-developer', 'shortlisted'],
+  ])
+  // No feedback for the weekly review: the person made no call.
+  assert.deepEqual(
+    readData(dir, 'feedback').events.map(event => event.to),
+    ['shortlisted'],
+  )
+  // add sweeps in the same write.
+  transact(dir, data => ({
+    write: {
+      leads: {
+        ...data.leads,
+        leads: [
+          ...data.leads.leads,
+          {
+            ...(data.leads.leads[0] as (typeof data.leads.leads)[number]),
+            id: 'again',
+            column: 'new' as const,
+          },
+        ],
+      },
+    },
+    result: null,
+  }))
+  assert.deepEqual(commands.add(dir, [lead('Fresh')]).archived, ['again'])
 })
 
 test('move, pass, score, snooze, patch and mention write the lead and its feedback', () => {

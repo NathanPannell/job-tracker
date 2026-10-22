@@ -12,7 +12,8 @@ export type Column =
   | 'passed'
   | 'archived'
 
-export type Actor = 'user' | 'scout' | 'package' | 'submit' | 'sync' | 'learn' | 'model'
+/** Who changed a lead; `tracker` is the board itself, e.g. archiving a stale posting. */
+export type Actor = 'user' | 'scout' | 'package' | 'submit' | 'sync' | 'learn' | 'model' | 'tracker'
 
 export type HistoryEntry = {
   at: string
@@ -193,6 +194,8 @@ declare module 'claude-code' {
       turning: boolean
       /** Prompts the pane sent whose turn has not started yet. */
       sent: SentPrompt[]
+      /** Stale leads this session already asked `jobs archive` to take; each is tried once. */
+      swept: string[]
     }
   }
 }

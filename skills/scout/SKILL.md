@@ -99,8 +99,9 @@ You never apply, email anyone, create accounts, or log into job sites.
    `{ company, role, url, source, location, comp, fitScore, fitReason, companyBlurb?, roleHighlights?, postedAt?, closesAt? }`
    (`postedAt` as the source gave it, ISO; omit it when unknown) and run
    `jobs add @<that file> --threshold 60`. It dedupes again, drops a new lead whose score, aged by
-   `postedAt`, is under 60 (a posting over a week old must fit better to get on), and prints
-   `added`, `updated`, `dropped` and `alerts` (added leads whose aged `score` is 90+).
+   `postedAt`, is under 60 (10 points off a day, so an older posting must fit better to get on)
+   or whose posting is over 7 days old, archives New leads past 7 days, and prints `added`,
+   `updated`, `dropped`, `archived` and `alerts` (added leads whose aged `score` is 90+).
    Then backfill: `jobs summaries` lists open leads still missing a `companyBlurb` or
    `roleHighlights` (`{ id, company, role, url, source }`). For each, read the posting at `url`
    (when it is a LinkedIn or Indeed link, find the role on the company's own careers page or ATS

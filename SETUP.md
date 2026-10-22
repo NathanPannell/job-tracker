@@ -66,15 +66,19 @@ The types of every file are in `types/index.d.ts`.
   pass; an archived or passed card offers "Back to <where it was>" to undo a mis-click. Click a card's name to open it: the same next steps, then
   Pass… · Archive · Draft package, then feedback (Score too high / too low, Snooze).
 - **Scores age.** The badge shows the scout's fit score less points for the posting's age, so
-  stale postings sink: the first 7 days cost nothing, then 5 points a week (worked out by the
-  day), at most 25 off. Age counts from the posting date when the source gives one (Greenhouse,
+  stale postings sink: 10 points a day, worked out by the hour (a day old is 10 off, two days
+  20), at most 70 off. A New lead whose posting is over 7 days old moves to Archived on its own
+  (history says `tracker: moved → Archived (posted over 7 days ago)`, and no feedback is
+  recorded); Shortlisted, Drafting and Ready leads stay where you put them. Age counts from the posting date when the source gives one (Greenhouse,
   Lever and Ashby boards do), else from when scout found it. Only New, Shortlisted, Drafting and
   Ready age; once applied, a lead keeps its fit score. Opening an aged lead shows both, e.g.
-  `Fit 86 → 76, posted 3w ago`. The fit score in `leads.json` never changes with age: score
+  `Fit 86 → 66, posted 2d ago`. The fit score in `leads.json` never changes with age: score
   corrections, feedback and the weekly `learn` review use it, while sorting, the nudge,
   `list_leads` (its `score` field and `minScore`) and scout's add threshold use the aged score.
-  Nothing runs on a timer; scores are worked out each time the board draws or refreshes. The
-  curve is the `DECAY_*` constants in `hooks/lib/model.ts`.
+  Nothing runs on a timer; scores are worked out each time the board draws or refreshes, and
+  stale leads are archived when the board refreshes and on every `jobs add` (or by hand with
+  `jobs archive`). The curve is the `DECAY_*` and `ARCHIVE_AFTER_DAYS` constants in
+  `hooks/lib/model.ts`.
 - **Review package** shows the résumé PDF drawn in the pane (desktop), "Résumé vs master" (the
   diff against the master résumé), the cover letter, answers, company brief and warm-intro note.
   "Open PDF" opens the file in your PDF viewer.
