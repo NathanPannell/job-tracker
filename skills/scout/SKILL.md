@@ -117,7 +117,8 @@ You never apply, email anyone, create accounts, or log into job sites.
    `roleHighlights` (`{ id, company, role, url, source }`). For each, read the posting at `url`
    (when it is a LinkedIn or Indeed link, find the role on the company's own careers page or ATS
    board instead; if you cannot find it, write only a missing `companyBlurb`, from the lookup
-   above), write the missing fields by the same rules, save them as `$JOB_TRACKER_DATA/scout/summaries-<YYYYMMDD-HHMM>.json`, an array of
+   above), write the missing fields by the same rules, save them as
+   `$JOB_TRACKER_DATA/scout/summaries-<YYYYMMDD-HHMM>.json`, an array of
    `{ id, companyBlurb?, roleHighlights? }`, and run `jobs summaries @<that file>`. It prints the
    `updated` ids and any `errors`. At most 15 leads per run; the rest wait for the next one.
 6. Run `jobs gmail done <newest>` only when all of these hold: the Gmail source returned without
