@@ -18,6 +18,7 @@ import {
   archiveStale,
   byScore,
   checkSummary,
+  COLUMN_TITLES,
   correctScore,
   counts,
   effectiveScore,
@@ -316,11 +317,22 @@ function snapshotDraft(pkg: string): void {
 
 export type PackageOptions = { column?: string; draftId?: string; redraft?: boolean }
 
+/** The registered application, the column the card ended in, and why it stayed when it did. */
+export type PackageResult = Application & { column: Column; notice?: string }
+
 /**
  * Records a lead's package from the files in `packages/<id>/`, renders the résumé preview and
  * diff, snapshots the draft, and moves the card to Ready to review (or `column`).
+ *
+ * The card moves only from Drafting, where the package skill put it when the build began. In any
+ * other column the person (or another flow) moved it during the build, most often to Archived or
+ * Passed, so the files are still registered but the card stays where it is, with a `notice`.
  */
-export function registerPackage(dir: string, id: string, options: PackageOptions = {}) {
+export function registerPackage(
+  dir: string,
+  id: string,
+  options: PackageOptions = {},
+): PackageResult {
   const column = (options.column ?? 'ready') as Column
   if (!isColumn(column)) throw new Error(`Unknown column ${String(column)}`)
   const pkg = join(dir, 'packages', id)
@@ -339,9 +351,11 @@ export function registerPackage(dir: string, id: string, options: PackageOptions
   }
   if (preview.length > 0) files.preview = preview
   const at = now()
-  return transact<Application>(dir, data => {
+  return transact<PackageResult>(dir, data => {
     const lead = data.leads.leads.find(one => one.id === id)
     if (!lead) throw new Error(`No lead ${id}`)
+    const stays = lead.column !== column && lead.column !== 'drafting'
+    const ends = stays ? lead.column : column
     const existing = data.applications.applications.find(one => one.leadId === id)
     const draftId = options.draftId ?? existing?.warmIntroDraftId
     const application: Application = {
@@ -350,14 +364,12 @@ export function registerPackage(dir: string, id: string, options: PackageOptions
       createdAt: existing?.createdAt ?? at,
       updatedAt: at,
       files,
-      status: column === 'ready' ? 'ready' : (existing?.status ?? 'drafting'),
+      status: ends === 'ready' ? 'ready' : (existing?.status ?? 'drafting'),
       ...(existing?.submittedAt ? { submittedAt: existing.submittedAt } : {}),
       ...(draftId ? { warmIntroDraftId: draftId } : {}),
     }
     const moved: MoveResult =
-      lead.column === column
-        ? { leads: data.leads }
-        : moveLead(data.leads, id, column, at, 'package')
+      lead.column === ends ? { leads: data.leads } : moveLead(data.leads, id, ends, at, 'package')
     if (moved.error) throw new Error(moved.error)
     return {
       write: {
@@ -371,7 +383,18 @@ export function registerPackage(dir: string, id: string, options: PackageOptions
         leads: moved.leads,
         ...(moved.event ? { feedback: appendEvent(data.feedback, moved.event) } : {}),
       },
-      result: application,
+      result: {
+        ...application,
+        column: ends,
+        ...(stays
+          ? {
+              notice:
+                `Package registered, but the card stays in ${COLUMN_TITLES[ends]}, where it ` +
+                `was put by hand: only a card still in Drafting is moved to ` +
+                `${COLUMN_TITLES[column]}.`,
+            }
+          : {}),
+      },
     }
   })
 }
