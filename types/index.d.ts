@@ -44,7 +44,10 @@ export type Lead = {
   fitScore: number
   /** One line: why this score. */
   fitReason: string
-  /** One sentence from the posting or the company's site: what it builds, for whom, stage or size. */
+  /**
+   * One sentence on what the company makes: product category, who it is for and the flagship
+   * product by name when known. Stage, size or location only as a trailing clause.
+   */
   companyBlurb?: string
   /** Two to four short points on what is distinctive about this role (team, stack, comp, setup). */
   roleHighlights?: string[]

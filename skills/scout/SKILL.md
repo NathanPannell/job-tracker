@@ -86,15 +86,26 @@ You never apply, email anyone, create accounts, or log into job sites.
    posting's age: the board ages scores itself from `postedAt`.
    For each posting you keep (60+), also write what the person sees when they open the card;
    `fitReason` stays the match one-liner on the card:
-   - `companyBlurb`: one sentence on what the company builds and for whom, with stage or size
-     when the posting or the company's own site says so, e.g.
-     `Builds scheduling software for home-care agencies; Series A, ~60 people.`
+   - `companyBlurb`: one sentence that says concretely what the company makes: the product
+     category, who it is for, and the flagship product or app by name when one is known. Stage,
+     size or location may follow as a second clause, never on their own. E.g.
+     `Builds scheduling software for home-care agencies; Series A, ~60 people.`,
+     `Makes consumer productivity apps for iOS and Android; its main app is <App>.` or
+     `Offers business banking for startups; <Product> is its LLM-powered finance assistant.`
+     Not `<City>-based startup of 1-10 employees, hiring and growing fast.`: size, location,
+     funding and "fast-growing" or "hiring" say nothing about the product, so never pad with them.
+     When the posting does not say what the company makes, look it up before writing: the
+     company's own site first, then a WebSearch for the company, whose results from its Wellfound
+     or LinkedIn company page, app store listing or press coverage usually name the product (read
+     the search results only; the Rules below still forbid visiting those sites). If it still
+     cannot be found, say so plainly, e.g. `What <Company> builds isn't stated in the posting or
+     on its site; <City>, 1-10 people.`
    - `roleHighlights`: 2-4 short points (under 15 words each) on what is distinctive about this
      role: team, product, stack, comp or equity, remote setup, anything unusual. Not the
      generic duties every posting lists.
    Take both from the posting's `description` and, where that is thin, the company's own posting
-   or careers page (never LinkedIn or Indeed). Never invent a fact: leave a field out rather than
-   guess.
+   or careers page (never LinkedIn or Indeed), plus the lookup above for `companyBlurb`. Never
+   invent a fact: leave `roleHighlights` out rather than guess.
 5. Write the scored list to `$JOB_TRACKER_DATA/scout/candidates-<YYYYMMDD-HHMM>.json` as a JSON array of
    `{ company, role, url, source, location, comp, fitScore, fitReason, companyBlurb?, roleHighlights?, postedAt?, closesAt? }`
    (`postedAt` as the source gave it, ISO; omit it when unknown) and run
@@ -105,8 +116,9 @@ You never apply, email anyone, create accounts, or log into job sites.
    Then backfill: `jobs summaries` lists open leads still missing a `companyBlurb` or
    `roleHighlights` (`{ id, company, role, url, source }`). For each, read the posting at `url`
    (when it is a LinkedIn or Indeed link, find the role on the company's own careers page or ATS
-   board instead; if you cannot find it, skip the lead), write the missing fields by the same
-   rules, save them as `$JOB_TRACKER_DATA/scout/summaries-<YYYYMMDD-HHMM>.json`, an array of
+   board instead; if you cannot find it, write only a missing `companyBlurb`, from the lookup
+   above), write the missing fields by the same rules, save them as
+   `$JOB_TRACKER_DATA/scout/summaries-<YYYYMMDD-HHMM>.json`, an array of
    `{ id, companyBlurb?, roleHighlights? }`, and run `jobs summaries @<that file>`. It prints the
    `updated` ids and any `errors`. At most 15 leads per run; the rest wait for the next one.
 6. Run `jobs gmail done <newest>` only when all of these hold: the Gmail source returned without
@@ -132,5 +144,6 @@ You never apply, email anyone, create accounts, or log into job sites.
   Indeed, Glassdoor, Wellfound, YC Work at a Startup or Welcome to the Jungle; their emails in
   Gmail are the only route. Never click links in emails (unsubscribe, confirm, apply).
 - Never invent a posting, a salary, a location or a company fact. If a field is unknown, leave it
-  empty (or out, for `companyBlurb` and `roleHighlights`).
+  empty (or out, for `roleHighlights`); a `companyBlurb` whose product cannot be found says so
+  plainly instead of guessing.
 - A source that fails is reported, not retried in a loop.
