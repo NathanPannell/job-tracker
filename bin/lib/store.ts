@@ -19,6 +19,7 @@ import {
   emptyFeedback,
   emptyLeads,
   emptyProposals,
+  migrateLeads,
   parseStrict,
 } from '../../hooks/lib/model.ts'
 import type {
@@ -115,7 +116,8 @@ export function writeAtomic(path: string, text: string): void {
   }
 }
 
-export function readData<N extends DataName>(dir: string, name: N): Data[N] {
+/** Reads a data file as it is on disk. */
+function readRaw<N extends DataName>(dir: string, name: N): Data[N] {
   const path = join(dir, FILES[name])
   const text = existsSync(path) ? readFileSync(path, 'utf8') : undefined
   try {
@@ -125,6 +127,14 @@ export function readData<N extends DataName>(dir: string, name: N): Data[N] {
       cause: error,
     })
   }
+}
+
+/** Reads a data file; leads in a column the board no longer has come back moved out of it. */
+export function readData<N extends DataName>(dir: string, name: N): Data[N] {
+  const value = readRaw(dir, name)
+  return name === 'leads'
+    ? (migrateLeads(value as LeadsFile, new Date().toISOString()) as Data[N])
+    : value
 }
 
 export function writeData<N extends DataName>(dir: string, name: N, value: Data[N]): void {
@@ -139,13 +149,16 @@ export type Change<R> = { write?: Partial<Data>; result: R }
  */
 export function transact<R>(dir: string, fn: (data: Data) => Change<R>): R {
   return withLock(dir, () => {
+    const stored = readRaw(dir, 'leads')
     const data: Data = {
-      leads: readData(dir, 'leads'),
+      leads: migrateLeads(stored, new Date().toISOString()),
       applications: readData(dir, 'applications'),
       feedback: readData(dir, 'feedback'),
       proposals: readData(dir, 'proposals'),
     }
-    const { write = {}, result } = fn(data)
+    const { write: changes = {}, result } = fn(data)
+    // A migration is saved by the first transaction after it, whatever that changes.
+    const write = data.leads !== stored ? { leads: data.leads, ...changes } : changes
     for (const name of Object.keys(write) as DataName[]) {
       const value = write[name]
       if (value !== undefined) writeData(dir, name, value)
