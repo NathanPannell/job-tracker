@@ -6,7 +6,9 @@ description: Weekly review of the job search — pass reasons, score corrections
 # Learn
 
 Turn a week of the person's feedback into small, explicit changes to how leads are scored and
-packages are written. You propose; the person approves in /jobs. Never edit the profile files.
+packages are written. You propose; the person approves in /jobs. Never edit the profile files
+(the submit skill alone appends the person's answers to
+`profile/knowledge-base/application-answers.md`; leave that file to it).
 
 ## Inputs
 
@@ -25,8 +27,10 @@ Never propose rules that score old postings down; that would count age twice.
 
 ## Steps
 
-1. Funnel for the last 7 days and all time, by source: found, still New, shortlisted, drafted,
-   applied, replies, interviews, passed. Note which sources produce leads the person keeps and
+1. Funnel for the last 7 days and all time, by source: found, still New, drafted, applied,
+   replies, interviews, passed. The board once had a Shortlisted column between New and
+   Drafting: older history and feedback may name `shortlisted`; count those leads as kept by
+   the person (as drafted when they went on to Drafting), never as a stage of their own. Note which sources produce leads the person keeps and
    which produce passes, including each Gmail source (`gmail:viatec`, `gmail:yc`, ...).
    From `scout/signals.md`, list companies that appeared there and look like strong fits; a
    change may add them to `learnings.md` as companies to score up or watch.

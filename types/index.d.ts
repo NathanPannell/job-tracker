@@ -2,15 +2,7 @@
 // the pane and band draw from. The hooks module, bin/jobs.mjs and the skills all follow it.
 
 export type Column =
-  | 'new'
-  | 'shortlisted'
-  | 'drafting'
-  | 'ready'
-  | 'applied'
-  | 'interviewing'
-  | 'offer'
-  | 'passed'
-  | 'archived'
+  'new' | 'drafting' | 'ready' | 'applied' | 'interviewing' | 'offer' | 'passed' | 'archived'
 
 /** Who changed a lead; `tracker` is the board itself, e.g. archiving a stale posting. */
 export type Actor = 'user' | 'scout' | 'package' | 'submit' | 'sync' | 'learn' | 'model' | 'tracker'
@@ -20,6 +12,7 @@ export type HistoryEntry = {
   by: Actor
   /** `created`, `moved`, `scored`, `snoozed`, `mentioned` or `note`. */
   action: string
+  /** Older entries may name `shortlisted`, a column the board no longer has. */
   from?: Column
   to?: Column
   note?: string
@@ -49,6 +42,11 @@ export type Lead = {
    * product by name when known. Stage, size or location only as a trailing clause.
    */
   companyBlurb?: string
+  /**
+   * What the card shows under its facts: at most ~40 characters on what the company makes or
+   * what the role is, e.g. `Scheduling software for home care`. One line, no padding.
+   */
+  tagline?: string
   /** Two to four short points on what is distinctive about this role (team, stack, comp, setup). */
   roleHighlights?: string[]
   column: Column
@@ -175,6 +173,18 @@ export type SentPrompt = {
   entered?: string
 }
 
+/**
+ * A package build the pane started as a background subagent. `agentId` is known once the engine
+ * names the agent, at the latest when its run starts with `task`.
+ */
+export type DraftRun = {
+  agentId?: string
+  leadId: string
+  company: string
+  task: string
+  at: number
+}
+
 declare module 'claude-code' {
   interface PluginState {
     'job-tracker': {
@@ -199,6 +209,8 @@ declare module 'claude-code' {
       sent: SentPrompt[]
       /** Stale leads this session already asked `jobs archive` to take; each is tried once. */
       swept: string[]
+      /** Package builds this session spawned as background subagents, until each one ends. */
+      drafts: DraftRun[]
     }
   }
 }

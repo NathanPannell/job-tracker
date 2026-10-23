@@ -25,6 +25,7 @@ import {
   eventId,
   hasBlurb,
   hasHighlights,
+  hasTagline,
   isColumn,
   markMentioned,
   missingSummaries,
@@ -186,12 +187,13 @@ export function patch(dir: string, id: string, fields: LeadPatch, by = 'model') 
   )
 }
 
-export type SummaryInput = Pick<Lead, 'id' | 'companyBlurb' | 'roleHighlights'>
+export type SummaryInput = Pick<Lead, 'id' | 'companyBlurb' | 'tagline' | 'roleHighlights'>
 
 /**
- * Without input, the open leads that lack a company blurb or role highlights, for scout to fill.
- * With an array of `{ id, companyBlurb?, roleHighlights? }`, fills the fields each lead lacks, in
- * one transaction; a field already written is kept (`patch` replaces one on purpose).
+ * Without input, the open leads that lack a company blurb, tagline or role highlights, for scout
+ * to fill. With an array of `{ id, companyBlurb?, tagline?, roleHighlights? }`, fills the fields
+ * each lead lacks, in one transaction; a field already written is kept (`patch` replaces one on
+ * purpose).
  */
 export function summaries(dir: string): ReturnType<typeof missingSummaries>
 export function summaries(
@@ -207,7 +209,7 @@ export function summaries(dir: string, input?: SummaryInput[]) {
     const updated: string[] = []
     const errors: string[] = []
     for (const entry of input as unknown[]) {
-      const { id, companyBlurb, roleHighlights } = (entry ?? {}) as Partial<SummaryInput>
+      const { id, companyBlurb, tagline, roleHighlights } = (entry ?? {}) as Partial<SummaryInput>
       if (typeof id !== 'string') {
         errors.push(`${JSON.stringify(entry)}: needs an id`)
         continue
@@ -217,6 +219,7 @@ export function summaries(dir: string, input?: SummaryInput[]) {
         value === undefined || value === '' || (Array.isArray(value) && value.length === 0)
       const fields: LeadPatch = {
         ...(!isEmpty(companyBlurb) && !(lead && hasBlurb(lead)) ? { companyBlurb } : {}),
+        ...(!isEmpty(tagline) && !(lead && hasTagline(lead)) ? { tagline } : {}),
         ...(!isEmpty(roleHighlights) && !(lead && hasHighlights(lead)) ? { roleHighlights } : {}),
       }
       const result = patchLead(leads, id, fields, at, 'scout')

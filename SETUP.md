@@ -41,26 +41,28 @@ résumés, a LaTeX install with `pdflatex`, `pdfinfo` and `pdftocairo` (MiKTeX s
 `JOB_TRACKER_DATA` (here `C:\repo\job-tracker-workspace\data`), outside every git repository.
 The repo's `.gitignore` and the `check:personal-data` CI job keep it out of git.
 
-| Path                  | What                                                                                                                                                                                                                                    |
-| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `leads.json`          | The board: one entry per posting, its column, score, reason and history                                                                                                                                                                 |
-| `applications.json`   | One entry per package and its files                                                                                                                                                                                                     |
-| `feedback.json`       | Passes, score corrections, moves, snoozes and outcomes, for `learn`                                                                                                                                                                     |
-| `proposals.json`      | Weekly learning proposals and their status                                                                                                                                                                                              |
-| `packages/<lead-id>/` | `resume.tex`, `resume.pdf`, `cover-letter.md`, `answers.md`, `company-brief.md`, `warm-intro.md`, `posting.md`, `sources.md`, `preview/` (the pane's résumé strips) and `.draft/` (the draft as written, so `learn` can see your edits) |
-| `profile/`            | The career record copied from the Resume Revamp folder, plus `preferences.md`, `learnings.md`, `target-companies.md`, `ats-boards.json` and `OPEN-QUESTIONS.md`                                                                         |
-| `scout/`              | Each run's raw candidates, `runs.md` (one line per run), `signals.md` (funding news), `gmail-cursor.json` (where Gmail reading stopped) and learn's proposal files                                                                      |
+| Path                  | What                                                                                                                                                                                                                                                                |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `leads.json`          | The board: one entry per posting, its column, score, reason and history                                                                                                                                                                                             |
+| `applications.json`   | One entry per package and its files                                                                                                                                                                                                                                 |
+| `feedback.json`       | Passes, score corrections, moves, snoozes and outcomes, for `learn`                                                                                                                                                                                                 |
+| `proposals.json`      | Weekly learning proposals and their status                                                                                                                                                                                                                          |
+| `packages/<lead-id>/` | `resume.tex`, `resume.pdf`, `cover-letter.md`, `answers.md`, `company-brief.md`, `warm-intro.md`, `posting.md`, `sources.md`, `preview/` (the pane's résumé strips) and `.draft/` (the draft as written, so `learn` can see your edits)                             |
+| `profile/`            | The career record copied from the Resume Revamp folder, plus `preferences.md`, `learnings.md`, `target-companies.md`, `ats-boards.json`, `OPEN-QUESTIONS.md` and `knowledge-base/application-answers.md` (your answers to application questions, saved by `submit`) |
+| `scout/`              | Each run's raw candidates, `runs.md` (one line per run), `signals.md` (funding news), `gmail-cursor.json` (where Gmail reading stopped) and learn's proposal files                                                                                                  |
 
 The types of every file are in `types/index.d.ts`.
 
 ## Using it
 
-- `/jobs` opens the board on tabs, one stage at a time: New → Shortlisted → Drafting → Ready to
-  review → Applied → Interviewing → Offer, with Passed and Archived behind "Passed & archived".
-  New shows the ten best first ("Show more" adds ten). Each card has a coloured fit badge (green
-  90+, amber 75–89, grey below) and its stage's next steps as labelled buttons:
-  New: Shortlist · Pass… — Shortlisted: Draft package · Back to New — Ready: Review package ·
-  Approve & submit — Applied: Got interview · Rejected · Ghosted — Interviewing: Got offer ·
+- `/jobs` opens the board on tabs, one stage at a time: New → Drafting → Ready to review →
+  Applied → Interviewing → Offer, with Passed and Archived behind "Passed & archived". New shows
+  the ten best first ("Show more" adds ten). Each card is three lines: a coloured fit badge (green
+  90+, amber 75–89, grey below) with company and role; age, source and location (remote or
+  where); and a one-line tagline of about 40 characters saying what the company makes or what
+  the role is (the fit reason until scout has written one; a longer one ends in "…"). Under them
+  are its stage's next steps as labelled buttons: New: Draft package · Pass — Drafting: Back to
+  New — Ready: Review · Approve and submit — Applied: Got interview · Rejected · Ghosted — Interviewing: Got offer ·
   Rejected — Offer: Accepted · Declined. Company decisions (Got interview, Got offer, Rejected,
   Ghosted, Accepted, Declined) move the card and record an outcome for the weekly review, never a
   pass; an archived or passed card offers "Back to <where it was>" to undo a mis-click. Click a card's name to open it: the same next steps, then
@@ -69,9 +71,8 @@ The types of every file are in `types/index.d.ts`.
   stale postings sink: 10 points a day, worked out by the hour (a day old is 10 off, two days
   20), at most 70 off. A New lead whose posting is over 7 days old moves to Archived on its own
   (history says `tracker: moved → Archived (posted over 7 days ago)`, and no feedback is
-  recorded); Shortlisted, Drafting and Ready leads stay where you put them. Age counts from the posting date when the source gives one (Greenhouse,
-  Lever and Ashby boards do), else from when scout found it. Only New, Shortlisted, Drafting and
-  Ready age; once applied, a lead keeps its fit score. Opening an aged lead shows both, e.g.
+  recorded); Drafting and Ready leads stay where you put them. Age counts from the posting date when the source gives one (Greenhouse,
+  Lever and Ashby boards do), else from when scout found it. Only New, Drafting and Ready age; once applied, a lead keeps its fit score. Opening an aged lead shows both, e.g.
   `Fit 86 → 66, posted 2d ago`. The fit score in `leads.json` never changes with age: score
   corrections, feedback and the weekly `learn` review use it, while sorting, the nudge,
   `list_leads` (its `score` field and `minScore`) and scout's add threshold use the aged score.
@@ -79,12 +80,23 @@ The types of every file are in `types/index.d.ts`.
   stale leads are archived when the board refreshes and on every `jobs add` (or by hand with
   `jobs archive`). The curve is the `DECAY_*` and `ARCHIVE_AFTER_DAYS` constants in
   `hooks/lib/model.ts`.
-- **Review package** shows the résumé PDF drawn in the pane (desktop), "Résumé vs master" (the
+- **Draft package** moves the card to Drafting at once and builds the package in a background
+  subagent, never in your conversation, so you keep triaging while it runs and several build side
+  by side (each takes several minutes). A toast says when one starts and when it ends; the card
+  moves to Ready to review unless you moved it meanwhile. Redraft package does the same. If the
+  engine will not start a subagent, the button asks your conversation to start one instead,
+  queued until the current reply ends. Asking in chat ("draft a package for Acme") uses the
+  `draft_package` tool, which starts the same background build.
+- **Review** shows the résumé PDF drawn in the pane (desktop), "Résumé vs master" (the
   diff against the master résumé), the cover letter, answers, company brief and warm-intro note.
   "Open PDF" opens the file in your PDF viewer.
-- **Approve & submit** asks Claude to run `submit`: it prefills the form in Chrome, attaches the
-  PDF and stops; you confirm in chat before anything is sent. Account creation, sign-ins and
-  CAPTCHAs are handed back to you.
+- **Approve and submit** asks Claude to run `submit` in your conversation: it fills in the form
+  in Chrome and attaches the PDF, asks you in one message for anything the package and your
+  saved answers do not cover, then shows what it entered and asks "Submit it now?". It clicks
+  submit only after your yes. Every answer you give is saved word for word, with the question
+  and date, in `profile/knowledge-base/application-answers.md`; `package` and `submit` read it
+  first, so a question you have answered once is not asked again. Account creation, sign-ins,
+  passwords, CAPTCHAs and agreements are handed back to you with everything ready to paste.
 - The band above the prompt reads `● N new leads · M ready to review · K follow-ups due`; click it
   to open the board. It is hidden when all three are zero.
 - In an unrelated conversation, the first reply ends with one short line naming the top new leads,
@@ -96,8 +108,9 @@ The types of every file are in `types/index.d.ts`.
 Ask in any session:
 
 - "Use the job-tracker:scout skill" — find and score new roles now.
-- "Use the job-tracker:package skill for lead `<id>`" — or press Draft package on the card.
-- "Use the job-tracker:submit skill for lead `<id>`" — or press Approve & submit.
+- "Draft a package for lead `<id>`" — or press Draft package on the card. Either way it runs in
+  a background subagent.
+- "Use the job-tracker:submit skill for lead `<id>`" — or press Approve and submit.
 - "Use the job-tracker:sync skill" — check Gmail and Calendar for replies; it proposes moves and
   waits for your confirmation.
 - "Use the job-tracker:learn skill" — write this week's learning proposal now; approve it under
