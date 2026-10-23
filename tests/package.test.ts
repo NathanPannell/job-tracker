@@ -158,6 +158,11 @@ describe('tools', () => {
       'Error: The subagent did not start: background tasks are disabled',
     )
     expect(w.spawns).toHaveLength(1)
+    // The card goes back where it was, and nothing blocks a later try.
+    expect(w.leads()[1]?.column).toBe('new')
+    expect(w.leads()[1]?.history.map(entry => entry.to)).toEqual(['drafting', 'new'])
+    w.refuseSpawns(undefined)
+    expect(JSON.parse(await call({ leadId: 'beta-api' }))).toEqual({ ok: true, ran: 'subagent' })
   })
 
   test('open_board opens the pane on a package and reports that it stayed open', async ($, on) => {

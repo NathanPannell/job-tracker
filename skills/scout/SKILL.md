@@ -121,7 +121,9 @@ You never apply, email anyone, create accounts, or log into job sites.
    `jobs add @<that file> --threshold 60`. It dedupes again, drops a new lead whose score, aged by
    `postedAt`, is under 60 (10 points off a day, so an older posting must fit better to get on)
    or whose posting is over 7 days old, archives New leads past 7 days, and prints `added`,
-   `updated`, `dropped`, `archived` and `alerts` (added leads whose aged `score` is 90+).
+   `updated`, `dropped`, `archived`, `alerts` (added leads whose aged `score` is 90+) and
+   `warnings` (leads added without a tagline that was over 60 characters or not one line; the
+   backfill below writes it again).
    Then backfill: `jobs summaries` lists open leads still missing a `companyBlurb`, `tagline` or
    `roleHighlights` (`{ id, company, role, url, source, missing, companyBlurb? }`: `missing` names
    the fields to write, and `companyBlurb` is there when the lead already has one). A lead whose

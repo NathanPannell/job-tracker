@@ -157,7 +157,7 @@ export function transact<R>(dir: string, fn: (data: Data) => Change<R>): R {
       proposals: readData(dir, 'proposals'),
     }
     const { write: changes = {}, result } = fn(data)
-    // A migration is saved with the first change of any kind, so it happens once.
+    // A migration is saved by the first transaction after it, whatever that changes.
     const write = data.leads !== stored ? { leads: data.leads, ...changes } : changes
     for (const name of Object.keys(write) as DataName[]) {
       const value = write[name]

@@ -155,7 +155,7 @@ function stageButtons(ctx: ViewContext, lead: Lead, suffix: string): RenderEleme
 }
 
 /** The card's third line: the tagline, or the fit reason until scout has written one. */
-const oneLiner = (lead: Lead) => (lead.tagline?.trim() || lead.fitReason).replace(/\s+/g, ' ')
+const oneLiner = (lead: Lead) => (lead.tagline?.trim() || lead.fitReason || '').replace(/\s+/g, ' ')
 
 function card(ctx: ViewContext, lead: Lead): RenderElement {
   const { Box, Text, Button } = ctx.el

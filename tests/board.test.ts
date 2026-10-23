@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 
+import { draftTask } from '../hooks/lib/model.ts'
 import type { Lead } from '../hooks/lib/model.ts'
 import { DATA, lead, PANE_PROPS, world } from './world.ts'
 
@@ -451,13 +452,25 @@ describe('kanban', () => {
     expect(await ui.find(queued)).toBeDefined()
     await ui.press({ key: 'redraft' })
     expect(prompts).toHaveLength(1)
-    expect(toasts.at(-1)).toBe('Drafting the Acme package is already queued.')
+    expect(toasts.at(-1)).toBe('The Acme package is already being drafted.')
 
     await done('t1')
     expect(await ui.find(queued)).toBeDefined()
     await $.turn.start({ text: prompts[0] ?? '', turnId: 't2' })
     expect(await ui.find(queued)).toBeUndefined()
+    // The conversation starts the subagent with the same prompt, so its run is the build's.
+    const task = draftTask(lead('acme-api', { company: 'Acme' }), false)
+    await $.turn.start({ text: task, turnId: 'c1', agentId: 'agent-c' })
     await done('t2')
+    await $.turn.complete({
+      answer: 'Package ready.',
+      durationMs: 1,
+      isAborted: false,
+      turnId: 'c1',
+      agentId: 'agent-c',
+      reason: 'answer',
+    })
+    expect(toasts.at(-1)).toBe('Acme package: Package ready.')
 
     // A prompt a hook refused is reported, not silently lost.
     refusals.push('a hook refused it')
@@ -468,12 +481,13 @@ describe('kanban', () => {
     ])
     expect(await ui.find(queued)).toBeUndefined()
 
-    // A prompt whose turn is never seen stops blocking the button after half an hour.
+    // A build whose run is never seen stops blocking the button after 45 minutes.
     refusals.length = 0
     await ui.press({ key: 'redraft' })
     await ui.press({ key: 'redraft' })
     expect(prompts).toHaveLength(3)
-    await w.clock.advance(31 * 60_000)
+    expect(toasts.at(-1)).toBe('The Acme package is already being drafted.')
+    await w.clock.advance(46 * 60_000)
     await ui.press({ key: 'redraft' })
     expect(prompts).toHaveLength(4)
   })

@@ -63,13 +63,13 @@ async function show($: EngineInterface, next: JobView) {
  * is idle, so a press during a reply looked like nothing happened: say so at once, show it as
  * queued until its turn starts, and report a prompt that did not enter.
  */
-async function sendPrompt($: EngineInterface, text: string, label: string) {
+async function sendPrompt($: EngineInterface, text: string, label: string): Promise<boolean> {
   const at = await $.clock.now()
   // An entry whose turn was never seen (the queue cleared, say) expires, so the button
   // never stays blocked.
   if ((await read($, sent)).some(one => one.text === text && isLive(one, at))) {
     $.ui.toast(`${label} is already queued.`)
-    return
+    return true
   }
   const isTurning = await read($, turning)
   await update($, sent, list => [
@@ -87,15 +87,19 @@ async function sendPrompt($: EngineInterface, text: string, label: string) {
     if (result.drop !== undefined) {
       await forget()
       $.ui.toast(`job-tracker: the prompt was not sent: ${result.drop}`)
-    } else if (result.text !== text) {
+      return false
+    }
+    if (result.text !== text) {
       const entered = result.text
       await update($, sent, list =>
         list.map(one => (one.text === text ? { ...one, entered } : one)),
       )
     }
+    return true
   } catch (error) {
     await forget()
     $.ui.toast(`job-tracker: could not send the prompt: ${String(error)}`)
+    return false
   }
 }
 
@@ -111,18 +115,44 @@ type Drafted =
  * Builds a lead's package off the person's conversation: the card moves to Drafting at once and
  * a background subagent runs the package skill, so several builds run side by side and none
  * waits for the current reply. Where the engine refuses the spawn, a pane press asks the
- * conversation to start the subagent instead (`relay`); a tool call reports the refusal.
+ * conversation to start the subagent instead (`relay`); a tool call reports the refusal. A build
+ * that does not start puts the card back where it was.
  */
 async function draftPackage($: EngineInterface, lead: Lead, relay: boolean): Promise<Drafted> {
   const at = await $.clock.now()
-  if ((await read($, drafts)).some(one => one.leadId === lead.id && at - one.at < DRAFT_FOR_MS)) {
+  const redraft = (await read($, board)).applications.some(one => one.leadId === lead.id)
+  const task = draftTask(lead, redraft)
+  // Claimed before anything slow, so a second press or tool call meanwhile starts nothing.
+  let isClaimed = false
+  await update($, drafts, list => {
+    const live = list.filter(one => at - one.at < DRAFT_FOR_MS)
+    if (live.some(one => one.leadId === lead.id)) return live
+    isClaimed = true
+    return [...live, { leadId: lead.id, company: lead.company, task, at }]
+  })
+  if (!isClaimed) {
     $.ui.toast(`The ${lead.company} package is already being drafted.`)
     return { ok: true, ran: 'already-drafting' }
   }
-  const redraft = (await read($, board)).applications.some(one => one.leadId === lead.id)
-  const moved = await act($, `Moving ${lead.company} to Drafting`, ['move', lead.id, 'drafting'])
-  if (!moved.ok) return { ok: false, error: moved.error }
-  const task = draftTask(lead, redraft)
+  const release = () => update($, drafts, list => list.filter(one => one.task !== task))
+  const by = relay ? 'user' : 'model'
+  const moved = await act($, `Moving ${lead.company} to Drafting`, [
+    'move',
+    lead.id,
+    'drafting',
+    '--by',
+    by,
+  ])
+  if (!moved.ok) {
+    await release()
+    return { ok: false, error: moved.error }
+  }
+  const putBack = async () => {
+    await release()
+    if (lead.column === 'drafting') return
+    const reason = lead.column === 'passed' ? ['--reason', lead.passReason ?? 'Not interested'] : []
+    await act($, 'Undoing the move', ['move', lead.id, lead.column, ...reason])
+  }
   const label = `Drafting the ${lead.company} package`
   let refused: string
   try {
@@ -135,10 +165,7 @@ async function draftPackage($: EngineInterface, lead: Lead, relay: boolean): Pro
       // Core answers with the agent's id. A hook that answers for it (the test kit's) gives
       // none: that run is known by its prompt when it starts (`turn.start`).
       const { agentId } = spawned
-      await update($, drafts, list => [
-        ...list.filter(one => at - one.at < DRAFT_FOR_MS),
-        { ...(agentId ? { agentId } : {}), leadId: lead.id, company: lead.company, task, at },
-      ])
+      if (agentId) await startDraft($, agentId, task)
       $.ui.toast(`${label} in the background.`)
       return { ok: true, ran: 'subagent', ...(agentId ? { agentId } : {}) }
     }
@@ -146,8 +173,12 @@ async function draftPackage($: EngineInterface, lead: Lead, relay: boolean): Pro
   } catch (error) {
     refused = String(error)
   }
-  if (!relay) return { ok: false, error: `The subagent did not start: ${refused}` }
-  await sendPrompt($, draftRelay(lead, task), label)
+  if (!relay) {
+    await putBack()
+    return { ok: false, error: `The subagent did not start: ${refused}` }
+  }
+  // The conversation's subagent runs with the same prompt, so its run is matched like ours.
+  if (!(await sendPrompt($, draftRelay(lead, task), label))) await putBack()
   return { ok: true, ran: 'conversation' }
 }
 

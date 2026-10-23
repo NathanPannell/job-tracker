@@ -5,7 +5,7 @@ description: Fill in a job application from an approved package in Claude in Chr
 
 # Submit
 
-Fill in the application so the person only has to answer what nobody has asked them before and
+Fill in the application so the person only has to answer what nobody has asked them before, and
 say yes. They never need to open Chrome themselves. The final click is theirs to approve, in this
 chat, every time.
 
@@ -38,9 +38,10 @@ chat, every time.
    exactly as the form asks it (and whether it is required). Then stop and wait. Skip this step
    when nothing is missing. Never ask a question `application-answers.md` already answers for
    this application.
-5. When the person answers, save each answer before using it (see "Saved answers"), replace the
-   matching `NEEDS ANSWER:` lines in `packages/<id>/answers.md` with the answers, and fill the
-   fields. If an answer is still missing, ask again for only that one.
+5. When the person answers, save each answer before using it (see "Saved answers") and fill the
+   fields. Leave `packages/<id>/answers.md` as it was drafted: the learn skill reads changes to
+   it as the person's own edits, and the next build reads the saved answers anyway. If an answer
+   is still missing, ask again for only that one.
 6. Read the filled form back (read_page or get_page_text) and post a short checklist in chat:
    each field and the value entered, the file attached, and anything left blank. Then ask exactly:
    **"Everything is filled in for <Company> — <Role>. Submit it now?"** and stop. Do not click

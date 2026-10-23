@@ -849,10 +849,10 @@ export function draftRelay(lead: Named, task: string): string {
   return [
     `Draft the application package for lead ${lead.id} (${lead.company} — ${lead.role}) in a`,
     'background subagent, not in this thread: call the Agent tool once with',
-    'subagent_type "general-purpose", run_in_background: true and exactly this prompt:',
-    `"${task}" Then reply in one line that the ${lead.company} package is being drafted in the`,
-    "background, and when the agent reports back, give its result in one line. Don't build any",
-    'of the package yourself.',
+    'subagent_type "general-purpose", run_in_background: true and, as its prompt, exactly the',
+    'text after "PROMPT:" below. Then reply in one line that the package is being drafted in',
+    "the background, and when the agent reports back, give its result in one line. Don't build",
+    `any of the package yourself.\n\nPROMPT: ${task}`,
   ].join(' ')
 }
 

@@ -42,8 +42,10 @@ below: nobody can answer you, so never stop to ask a question.
 
 ## Steps
 
-1. Find the lead: `jobs list` and pick the id you were given. Run
-   `jobs move <id> drafting --by package` (a card the board already moved there stays put).
+1. Find the lead: `jobs list` and pick the id you were given. If your task says the card is
+   already in Drafting (the board moved it when the build was asked for), do not move it,
+   wherever it is now: the person may have moved it since, and step 9 leaves it where they put
+   it. Otherwise run `jobs move <id> drafting --by package`.
 2. Get the posting. WebFetch its URL unless it is a LinkedIn or Indeed URL; for those, find the
    same role on the company's own careers page or ATS board instead. If the full posting cannot be
    found, say so and work from what the lead and the alert email give. Save the posting's text with

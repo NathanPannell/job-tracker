@@ -108,17 +108,27 @@ export type AddSummary = {
   archived: string[]
   /** Added leads scoring 90 or more once aged: the ones worth a push notification. */
   alerts: (Pick<Lead, 'id' | 'company' | 'role' | 'fitScore'> & { score: number })[]
+  /** Leads added without the tagline they came with, and why it was refused. */
+  warnings: string[]
 }
 
 export function add(dir: string, incoming: IncomingLead[], threshold: string | number = 60) {
   if (!Array.isArray(incoming)) throw new Error('add takes a JSON array of leads')
-  for (const one of incoming) {
+  const warnings: string[] = []
+  const checked = incoming.map(one => {
     const error = checkSummary(one)
-    if (error) throw new Error(`${one.company} — ${one.role}: ${error}`)
-  }
+    if (!error) return one
+    // A bad tagline costs only itself: the lead goes on without it, for the backfill to write.
+    const { tagline, ...rest } = one
+    if (tagline !== undefined && !checkSummary(rest)) {
+      warnings.push(`${one.company} — ${one.role}: ${error}; added without it`)
+      return rest
+    }
+    throw new Error(`${one.company} — ${one.role}: ${error}`)
+  })
   const at = now()
   return transact<AddSummary>(dir, data => {
-    const merged = addLeads(data.leads, incoming, at, Number(threshold))
+    const merged = addLeads(data.leads, checked, at, Number(threshold))
     const swept = archiveStale(merged.leads, at)
     const result = { ...merged, leads: swept.leads }
     const alerts = result.leads.leads
@@ -139,6 +149,7 @@ export function add(dir: string, incoming: IncomingLead[], threshold: string | n
         dropped: result.dropped,
         archived: swept.archived,
         alerts,
+        warnings,
       },
     }
   })

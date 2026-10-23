@@ -203,6 +203,23 @@ test('summaries lists open leads missing a blurb, tagline or highlights and fill
   assert.deepEqual(beta?.roleHighlights, ['Rust', 'Equity'])
   assert.equal(beta?.history.at(-1)?.by, 'scout')
   assert.equal(leads.find(one => one.id === 'acme-backend-developer')?.tagline, 'APIs for clinics')
+  // In add, a bad tagline costs only itself: the lead goes on without it.
+  const other = fresh()
+  const added = commands.add(other, [
+    { ...lead('Echo'), tagline: 'Two\nlines' },
+    { ...lead('Foxtrot'), tagline: 'Drone mapping' },
+  ])
+  assert.deepEqual(added.added, ['echo-backend-developer', 'foxtrot-backend-developer'])
+  assert.deepEqual(added.warnings, [
+    'Echo — Backend Developer: tagline must be one line; added without it',
+  ])
+  const echo = readData(other, 'leads').leads.find(one => one.company === 'Echo')
+  assert.equal(echo?.tagline, undefined)
+  assert.throws(
+    () =>
+      commands.add(other, [{ ...lead('Golf'), tagline: 'x'.repeat(61), companyBlurb: 3 as never }]),
+    /Golf — Backend Developer: companyBlurb must be a string/,
+  )
   const long = commands.summaries(dir, [{ id: 'gone-backend-developer', tagline: 'x'.repeat(61) }])
   assert.deepEqual((long as { errors: string[] }).errors, [
     'gone-backend-developer: tagline must be about 40 characters, not 61',

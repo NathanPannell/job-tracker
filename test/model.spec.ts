@@ -299,7 +299,10 @@ test('a draft runs as a background subagent; the conversation only relays it', (
   const relay = draftRelay(lead, task)
   assert.match(relay, /run_in_background: true/)
   assert.match(relay, /not in this thread/)
-  assert.ok(relay.includes(`"${task}"`))
+  // The prompt comes last, unquoted, so a name with a quote in it cannot cut it short.
+  assert.ok(relay.endsWith(`\n\nPROMPT: ${task}`))
+  const quoted = { ...lead, company: 'The "Best" Co' }
+  assert.ok(draftRelay(quoted, draftTask(quoted, false)).endsWith(draftTask(quoted, false)))
 })
 
 test('a move to the column a lead is already in records nothing', () => {
