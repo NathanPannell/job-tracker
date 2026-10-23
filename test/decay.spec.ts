@@ -74,7 +74,7 @@ test('a score loses ten points a day, worked out by the hour, at most a week of 
 
 test('only leads not yet applied to age', () => {
   const old = (column: Column) => effectiveScore(lead({ column, foundAt: daysAgo(2) }), NOW)
-  for (const column of ['new', 'drafting', 'ready'] as const) {
+  for (const column of ['new', 'shortlisted', 'drafting', 'ready'] as const) {
     assert.equal(old(column), 66, column)
   }
   for (const column of ['applied', 'interviewing', 'offer', 'passed', 'archived'] as const) {
@@ -153,14 +153,14 @@ test('a New lead posted over a week ago is archived; kept, snoozed, restored and
       history: [{ at: AT, by: 'user', action: 'moved', from: 'archived', to: 'new' }],
     }),
     lead({ id: 'week', foundAt: daysAgo(7) }),
-    lead({ id: 'kept', column: 'drafting', foundAt: daysAgo(9) }),
+    lead({ id: 'kept', column: 'shortlisted', foundAt: daysAgo(9) }),
     lead({ id: 'applied', column: 'applied', foundAt: daysAgo(30) }),
   )
   const { leads, archived } = archiveStale(file, AT)
   assert.deepEqual(archived, ['stale', 'woke'])
   assert.deepEqual(
     leads.leads.map(one => one.column),
-    ['archived', 'new', 'archived', 'new', 'new', 'drafting', 'applied'],
+    ['archived', 'new', 'archived', 'new', 'new', 'shortlisted', 'applied'],
   )
   const moved = leads.leads[2] as Lead
   assert.equal(moved.snoozedUntil, undefined)
@@ -250,7 +250,7 @@ test('scout adds an old posting only when its aged score clears the threshold, a
 test('feedback and corrections carry the fit score, not the aged one', () => {
   const file = board(lead({ postedAt: daysAgo(28) }))
   assert.equal(correctScore(file, 'acme-backend', 'too-high', AT).event?.fitScore, 86)
-  assert.equal(moveLead(file, 'acme-backend', 'drafting', AT, 'user').event?.fitScore, 86)
+  assert.equal(moveLead(file, 'acme-backend', 'shortlisted', AT, 'user').event?.fitScore, 86)
   const patched = patchLead(file, 'acme-backend', { postedAt: daysAgo(2) }, AT, 'scout')
   assert.equal(patched.leads.leads[0]?.postedAt, daysAgo(2))
 })

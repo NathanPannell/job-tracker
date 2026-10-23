@@ -24,9 +24,8 @@ const USAGE = `jobs <command> [args] [--data <dir>]
   score <id> too-high|too-low
   snooze <id> <days>
   patch <id> <json|@file> [--by actor]   change fields of a lead
-  summaries [<json|@file>]               open leads missing companyBlurb/tagline/roleHighlights;
-                                         with [{ id, companyBlurb?, tagline?, roleHighlights? }],
-                                         fill them
+  summaries [<json|@file>]               open leads missing companyBlurb/roleHighlights; with
+                                         [{ id, companyBlurb?, roleHighlights? }], fill them
   mention <id>...                        mark leads as mentioned to the person
   feedback <json|@file>                  { leadId, kind, reason? }
   package <id> [--column ready] [--draft-id id] [--redraft]

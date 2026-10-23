@@ -4,14 +4,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface } from 'claude-code'
 
 import type { JobBoard, JobPackage, PackageTab } from '../../types/index.d.ts'
-import {
-  emptyApplications,
-  emptyLeads,
-  emptyProposals,
-  isArchivable,
-  migrateLeads,
-  parseOr,
-} from './model.ts'
+import { emptyApplications, emptyLeads, emptyProposals, isArchivable, parseOr } from './model.ts'
 import type { ApplicationsFile, LeadsFile, ProposalsFile } from './model.ts'
 
 export const PANE = 'jobs'
@@ -66,11 +59,7 @@ export async function refresh($: EngineInterface, sweep = true): Promise<JobBoar
     ])
     next = {
       dataDir: dir,
-      // The CLI saves the same migration with its next write.
-      leads: migrateLeads(
-        { version: 1, leads: parseOr<LeadsFile>(leads, emptyLeads).leads ?? [] },
-        new Date(loadedAt).toISOString(),
-      ).leads,
+      leads: parseOr<LeadsFile>(leads, emptyLeads).leads ?? [],
       applications: parseOr<ApplicationsFile>(applications, emptyApplications).applications ?? [],
       proposals: parseOr<ProposalsFile>(proposals, emptyProposals).proposals ?? [],
       loadedAt,

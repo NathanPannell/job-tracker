@@ -9,17 +9,13 @@ import {
   columnLeads,
   correctScore,
   counts,
-  draftRelay,
-  draftTask,
   emptyFeedback,
   emptyLeads,
-  isArchivable,
   isColumn,
   isSameRole,
   leadId,
   leadsToMention,
   markMentioned,
-  migrateLeads,
   moveLead,
   neighbour,
   normalizeUrl,
@@ -29,7 +25,6 @@ import {
   missingSummaries,
   patchLead,
   snoozeLead,
-  TAGLINE_LIMIT,
 } from '../hooks/lib/model.ts'
 import type { IncomingLead, Lead, LeadsFile } from '../hooks/lib/model.ts'
 
@@ -73,7 +68,7 @@ test('addLeads dedupes by id and by URL, keeps the column, drops below the thres
   )
   assert.deepEqual(first.added, ['acme-backend-developer'])
   assert.deepEqual(first.dropped, ['low-backend-developer'])
-  const moved = moveLead(first.leads, 'acme-backend-developer', 'drafting', AT, 'user').leads
+  const moved = moveLead(first.leads, 'acme-backend-developer', 'shortlisted', AT, 'user').leads
   const again = addLeads(
     moved,
     [
@@ -89,7 +84,7 @@ test('addLeads dedupes by id and by URL, keeps the column, drops below the thres
   assert.deepEqual(again.added, [])
   assert.deepEqual(again.updated, ['acme-backend-developer', 'acme-backend-developer'])
   assert.equal(again.leads.leads.length, 1)
-  assert.equal(again.leads.leads[0]?.column, 'drafting')
+  assert.equal(again.leads.leads[0]?.column, 'shortlisted')
   assert.equal(again.leads.leads[0]?.comp, 'CAD 90k')
 })
 
@@ -128,7 +123,7 @@ test('moveLead records history and a feedback event; passing needs a reason', ()
 
 test('neighbour walks the pipeline and brings closed cards back to New', () => {
   assert.equal(neighbour('new', -1), undefined)
-  assert.equal(neighbour('new', 1), 'drafting')
+  assert.equal(neighbour('new', 1), 'shortlisted')
   assert.equal(neighbour('offer', 1), undefined)
   assert.equal(neighbour('passed', -1), 'new')
   assert.equal(neighbour('passed', 1), undefined)
@@ -209,100 +204,27 @@ test('patchLead and addLeads keep a company blurb and role highlights', () => {
   assert.deepEqual(filled?.roleHighlights, ['One'])
 })
 
-test('missingSummaries lists open leads without a blurb, tagline or highlights', () => {
+test('missingSummaries lists open leads without a blurb or highlights', () => {
   const file = seeded([
-    { companyBlurb: 'a', tagline: 't', roleHighlights: ['b'] },
-    { companyBlurb: 'a', tagline: 't' },
+    { companyBlurb: 'a', roleHighlights: ['b'] },
+    { companyBlurb: 'a' },
     { roleHighlights: [] },
     {},
-    { companyBlurb: ' ', tagline: ' ', roleHighlights: [' '] },
-    { companyBlurb: 'Makes farm sensors.', roleHighlights: ['b'] },
+    { companyBlurb: ' ', roleHighlights: [' '] },
   ])
   const ids = file.leads.map(one => one.id)
   const closed = moveLead(file, ids[3] as string, 'archived', AT, 'user').leads
-  const missing = missingSummaries(closed)
   assert.deepEqual(
-    missing.map(one => [one.id, one.missing]),
-    [
-      [ids[1], ['roleHighlights']],
-      [ids[2], ['companyBlurb', 'tagline', 'roleHighlights']],
-      [ids[4], ['companyBlurb', 'tagline', 'roleHighlights']],
-      [ids[5], ['tagline']],
-    ],
+    missingSummaries(closed).map(one => one.id),
+    [ids[1], ids[2], ids[4]],
   )
-  assert.deepEqual(Object.keys(missing[1] ?? {}), [
+  assert.deepEqual(Object.keys(missingSummaries(closed)[0] ?? {}), [
     'id',
     'company',
     'role',
     'url',
     'source',
-    'missing',
   ])
-  // A tagline can be written from the blurb, so it comes along.
-  assert.equal(missing[3]?.companyBlurb, 'Makes farm sensors.')
-})
-
-test('a tagline is one short line; addLeads fills one a lead lacks and keeps one it has', () => {
-  const file = seeded()
-  const id = file.leads[0]?.id as string
-  const tagged = patchLead(file, id, { tagline: 'Billing APIs for dental clinics' }, AT, 'scout')
-  assert.equal(tagged.leads.leads[0]?.tagline, 'Billing APIs for dental clinics')
-  assert.equal(tagged.leads.leads[0]?.history.at(-1)?.note, 'tagline')
-  for (const [tagline, error] of [
-    [3, /must be a string/],
-    ['Two\nlines', /one line/],
-    ['x'.repeat(TAGLINE_LIMIT + 1), /about 40 characters, not 61/],
-  ] as const) {
-    assert.match(patchLead(file, id, { tagline } as never, AT, 'scout').error ?? '', error)
-  }
-  const kept = addLeads(tagged.leads, [incoming('Co0', { tagline: 'Other' })], AT, 0)
-  assert.equal(kept.leads.leads[0]?.tagline, 'Billing APIs for dental clinics')
-  const filled = addLeads(file, [incoming('Co0', { tagline: 'Farm sensors' })], AT, 0)
-  assert.equal(filled.leads.leads[0]?.tagline, 'Farm sensors')
-  const blank = addLeads(file, [incoming('Co0', { tagline: ' ' })], AT, 0)
-  assert.equal(blank.leads.leads[0]?.tagline, undefined)
-})
-
-test('leads in the removed Shortlisted column move to New and stay out of the stale sweep', () => {
-  const file = seeded([{}, {}])
-  assert.equal(migrateLeads(file, AT), file)
-  const legacy = board(
-    { ...(file.leads[0] as Lead), column: 'shortlisted' as Lead['column'] },
-    file.leads[1] as Lead,
-  )
-  const migrated = migrateLeads(legacy, AT)
-  assert.deepEqual(
-    migrated.leads.map(one => one.column),
-    ['new', 'new'],
-  )
-  assert.deepEqual(migrated.leads[0]?.history.at(-1), {
-    at: AT,
-    by: 'tracker',
-    action: 'moved',
-    to: 'new',
-    note: 'shortlisted was removed from the board',
-  })
-  assert.equal(migrated.leads[1], legacy.leads[1])
-  const weekOn = Date.parse(AT) + 9 * 86_400_000
-  assert.equal(isArchivable(migrated.leads[0] as Lead, weekOn), false)
-  assert.equal(isArchivable(migrated.leads[1] as Lead, weekOn), true)
-})
-
-test('a draft runs as a background subagent; the conversation only relays it', () => {
-  const lead = { id: 'acme-api', company: 'Acme', role: 'Backend Developer' }
-  const task = draftTask(lead, false)
-  assert.match(task, /job-tracker:package skill .* lead acme-api \(Acme — Backend Developer\)/)
-  assert.match(task, /already in Drafting/)
-  assert.match(task, /NEEDS ANSWER/)
-  assert.doesNotMatch(task, /--redraft/)
-  assert.match(draftTask(lead, true), /register it with --redraft/)
-  const relay = draftRelay(lead, task)
-  assert.match(relay, /run_in_background: true/)
-  assert.match(relay, /not in this thread/)
-  // The prompt comes last, unquoted, so a name with a quote in it cannot cut it short.
-  assert.ok(relay.endsWith(`\n\nPROMPT: ${task}`))
-  const quoted = { ...lead, company: 'The "Best" Co' }
-  assert.ok(draftRelay(quoted, draftTask(quoted, false)).endsWith(draftTask(quoted, false)))
 })
 
 test('a move to the column a lead is already in records nothing', () => {

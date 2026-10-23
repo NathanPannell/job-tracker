@@ -25,7 +25,6 @@ import {
   eventId,
   hasBlurb,
   hasHighlights,
-  hasTagline,
   isColumn,
   markMentioned,
   missingSummaries,
@@ -108,27 +107,17 @@ export type AddSummary = {
   archived: string[]
   /** Added leads scoring 90 or more once aged: the ones worth a push notification. */
   alerts: (Pick<Lead, 'id' | 'company' | 'role' | 'fitScore'> & { score: number })[]
-  /** Leads added without the tagline they came with, and why it was refused. */
-  warnings: string[]
 }
 
 export function add(dir: string, incoming: IncomingLead[], threshold: string | number = 60) {
   if (!Array.isArray(incoming)) throw new Error('add takes a JSON array of leads')
-  const warnings: string[] = []
-  const checked = incoming.map(one => {
+  for (const one of incoming) {
     const error = checkSummary(one)
-    if (!error) return one
-    // A bad tagline costs only itself: the lead goes on without it, for the backfill to write.
-    const { tagline, ...rest } = one
-    if (tagline !== undefined && !checkSummary(rest)) {
-      warnings.push(`${one.company} — ${one.role}: ${error}; added without it`)
-      return rest
-    }
-    throw new Error(`${one.company} — ${one.role}: ${error}`)
-  })
+    if (error) throw new Error(`${one.company} — ${one.role}: ${error}`)
+  }
   const at = now()
   return transact<AddSummary>(dir, data => {
-    const merged = addLeads(data.leads, checked, at, Number(threshold))
+    const merged = addLeads(data.leads, incoming, at, Number(threshold))
     const swept = archiveStale(merged.leads, at)
     const result = { ...merged, leads: swept.leads }
     const alerts = result.leads.leads
@@ -149,7 +138,6 @@ export function add(dir: string, incoming: IncomingLead[], threshold: string | n
         dropped: result.dropped,
         archived: swept.archived,
         alerts,
-        warnings,
       },
     }
   })
@@ -198,13 +186,12 @@ export function patch(dir: string, id: string, fields: LeadPatch, by = 'model') 
   )
 }
 
-export type SummaryInput = Pick<Lead, 'id' | 'companyBlurb' | 'tagline' | 'roleHighlights'>
+export type SummaryInput = Pick<Lead, 'id' | 'companyBlurb' | 'roleHighlights'>
 
 /**
- * Without input, the open leads that lack a company blurb, tagline or role highlights, for scout
- * to fill. With an array of `{ id, companyBlurb?, tagline?, roleHighlights? }`, fills the fields
- * each lead lacks, in one transaction; a field already written is kept (`patch` replaces one on
- * purpose).
+ * Without input, the open leads that lack a company blurb or role highlights, for scout to fill.
+ * With an array of `{ id, companyBlurb?, roleHighlights? }`, fills the fields each lead lacks, in
+ * one transaction; a field already written is kept (`patch` replaces one on purpose).
  */
 export function summaries(dir: string): ReturnType<typeof missingSummaries>
 export function summaries(
@@ -220,7 +207,7 @@ export function summaries(dir: string, input?: SummaryInput[]) {
     const updated: string[] = []
     const errors: string[] = []
     for (const entry of input as unknown[]) {
-      const { id, companyBlurb, tagline, roleHighlights } = (entry ?? {}) as Partial<SummaryInput>
+      const { id, companyBlurb, roleHighlights } = (entry ?? {}) as Partial<SummaryInput>
       if (typeof id !== 'string') {
         errors.push(`${JSON.stringify(entry)}: needs an id`)
         continue
@@ -230,7 +217,6 @@ export function summaries(dir: string, input?: SummaryInput[]) {
         value === undefined || value === '' || (Array.isArray(value) && value.length === 0)
       const fields: LeadPatch = {
         ...(!isEmpty(companyBlurb) && !(lead && hasBlurb(lead)) ? { companyBlurb } : {}),
-        ...(!isEmpty(tagline) && !(lead && hasTagline(lead)) ? { tagline } : {}),
         ...(!isEmpty(roleHighlights) && !(lead && hasHighlights(lead)) ? { roleHighlights } : {}),
       }
       const result = patchLead(leads, id, fields, at, 'scout')
