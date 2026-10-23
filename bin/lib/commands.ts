@@ -389,8 +389,8 @@ export function registerPackage(
         ...(stays
           ? {
               notice:
-                `Package registered, but the card stays in ${COLUMN_TITLES[ends]}: it left ` +
-                `Drafting while the package was being built, so it was not moved to ` +
+                `Package registered, but the card stays in ${COLUMN_TITLES[ends]}, where it ` +
+                `was put by hand: only a card still in Drafting is moved to ` +
                 `${COLUMN_TITLES[column]}.`,
             }
           : {}),
