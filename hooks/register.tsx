@@ -207,7 +207,8 @@ export const register: Register = on => {
           fitReason: { type: 'string', description: 'One line: why this score' },
           companyBlurb: {
             type: 'string',
-            description: 'One sentence: what the company builds, for whom, stage or size if known',
+            description:
+              'One sentence on what the company makes: product category, who it is for, flagship product by name if known. Stage or size only as a trailing clause, never alone',
           },
           roleHighlights: {
             type: 'array',

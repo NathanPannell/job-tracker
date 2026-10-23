@@ -86,15 +86,26 @@ You never apply, email anyone, create accounts, or log into job sites.
    posting's age: the board ages scores itself from `postedAt`.
    For each posting you keep (60+), also write what the person sees when they open the card;
    `fitReason` stays the match one-liner on the card:
-   - `companyBlurb`: one sentence on what the company builds and for whom, with stage or size
-     when the posting or the company's own site says so, e.g.
-     `Builds scheduling software for home-care agencies; Series A, ~60 people.`
+   - `companyBlurb`: one sentence that says concretely what the company makes: the product
+     category, who it is for, and the flagship product or app by name when one is known. Stage,
+     size or location may follow as a second clause, never on their own. E.g.
+     `Builds scheduling software for home-care agencies; Series A, ~60 people.`,
+     `Creates consumer mobile productivity apps; its main app is RevenueLion.` or
+     `Fintech offering banking for startups; Command is its LLM-powered financial assistant.`
+     Not `Vancouver-based startup of 1-10 employees, hiring and growing fast.`: size, location,
+     funding and "fast-growing" or "hiring" say nothing about the product, so never pad with them.
+     When the posting does not say what the company makes, look it up before writing: the
+     company's own site first, then a WebSearch for the company, whose results from its Wellfound
+     or LinkedIn company page, app store listing or press coverage usually name the product (read
+     the search results only; the Rules below still forbid visiting those sites). If it still
+     cannot be found, say so plainly, e.g. `What <Company> builds isn't stated in the posting or
+     on its site; Vancouver, 1-10 people.`
    - `roleHighlights`: 2-4 short points (under 15 words each) on what is distinctive about this
      role: team, product, stack, comp or equity, remote setup, anything unusual. Not the
      generic duties every posting lists.
    Take both from the posting's `description` and, where that is thin, the company's own posting
-   or careers page (never LinkedIn or Indeed). Never invent a fact: leave a field out rather than
-   guess.
+   or careers page (never LinkedIn or Indeed), plus the lookup above for `companyBlurb`. Never
+   invent a fact: leave `roleHighlights` out rather than guess.
 5. Write the scored list to `$JOB_TRACKER_DATA/scout/candidates-<YYYYMMDD-HHMM>.json` as a JSON array of
    `{ company, role, url, source, location, comp, fitScore, fitReason, companyBlurb?, roleHighlights?, postedAt?, closesAt? }`
    (`postedAt` as the source gave it, ISO; omit it when unknown) and run
@@ -132,5 +143,6 @@ You never apply, email anyone, create accounts, or log into job sites.
   Indeed, Glassdoor, Wellfound, YC Work at a Startup or Welcome to the Jungle; their emails in
   Gmail are the only route. Never click links in emails (unsubscribe, confirm, apply).
 - Never invent a posting, a salary, a location or a company fact. If a field is unknown, leave it
-  empty (or out, for `companyBlurb` and `roleHighlights`).
+  empty (or out, for `roleHighlights`); a `companyBlurb` whose product cannot be found says so
+  plainly instead of guessing.
 - A source that fails is reported, not retried in a loop.
