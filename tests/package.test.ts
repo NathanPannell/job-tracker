@@ -93,21 +93,19 @@ describe('tools', () => {
     await $.tool.call({
       tool: 'mcp__job-tracker__update_lead',
       id: 'acme-api',
-      column: 'drafting',
+      column: 'shortlisted',
       notes: 'Ask about the team',
     })
-    expect(w.leads()[0]?.column).toBe('drafting')
+    expect(w.leads()[0]?.column).toBe('shortlisted')
     expect(w.leads()[0]?.notes).toBe('Ask about the team')
 
     await $.tool.call({
       tool: 'mcp__job-tracker__update_lead',
       id: 'acme-api',
       companyBlurb: 'Builds billing APIs for clinics.',
-      tagline: 'Billing APIs for clinics',
       roleHighlights: ['Owns the payments service', 'Fully remote in Canada'],
     })
     expect(w.leads()[0]?.companyBlurb).toBe('Builds billing APIs for clinics.')
-    expect(w.leads()[0]?.tagline).toBe('Billing APIs for clinics')
     expect(w.leads()[0]?.roleHighlights).toEqual([
       'Owns the payments service',
       'Fully remote in Canada',
@@ -129,40 +127,6 @@ describe('tools', () => {
       column: 'nowhere',
     })
     expect(String((bad as { result?: unknown }).result)).toContain('unknown column')
-  })
-
-  test('draft_package moves the card and builds it in a background subagent', async ($, on) => {
-    const w = world(on, { leads: [lead('acme-api', { company: 'Acme' }), lead('beta-api')] })
-    await $.session.start({ cwd: '.', surface: 'desktop', isInteractive: true })
-    const call = async (args: Record<string, unknown>) =>
-      String(
-        (
-          (await $.tool.call({ tool: 'mcp__job-tracker__draft_package', ...args })) as {
-            result?: unknown
-          }
-        ).result,
-      )
-    const started = JSON.parse(await call({ leadId: 'acme-api' })) as Record<string, unknown>
-    expect(started).toEqual({ ok: true, ran: 'subagent' })
-    expect(w.leads()[0]?.column).toBe('drafting')
-    expect(w.spawns[0]?.prompt).toContain('lead acme-api (Acme — Backend Developer)')
-    expect(JSON.parse(await call({ leadId: 'acme-api' }))).toEqual({
-      ok: true,
-      ran: 'already-drafting',
-    })
-    expect(await call({})).toBe('Error: leadId is required')
-    expect(await call({ leadId: 'nope' })).toBe('Error: no lead nope')
-    // A tool call does not relay a refused spawn to the conversation: it says so.
-    w.refuseSpawns('background tasks are disabled')
-    expect(await call({ leadId: 'beta-api' })).toBe(
-      'Error: The subagent did not start: background tasks are disabled',
-    )
-    expect(w.spawns).toHaveLength(1)
-    // The card goes back where it was, and nothing blocks a later try.
-    expect(w.leads()[1]?.column).toBe('new')
-    expect(w.leads()[1]?.history.map(entry => entry.to)).toEqual(['drafting', 'new'])
-    w.refuseSpawns(undefined)
-    expect(JSON.parse(await call({ leadId: 'beta-api' }))).toEqual({ ok: true, ran: 'subagent' })
   })
 
   test('open_board opens the pane on a package and reports that it stayed open', async ($, on) => {

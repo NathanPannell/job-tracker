@@ -1,8 +1,6 @@
 import { describe, expect, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 
-import { draftTask } from '../hooks/lib/model.ts'
-import type { Lead } from '../hooks/lib/model.ts'
 import { DATA, lead, PANE_PROPS, world } from './world.ts'
 
 const ACTING = ['terminal', 'desktop'] as const
@@ -18,129 +16,25 @@ const pane = {
 
 describe('kanban', () => {
   for (const surface of ACTING) {
-    test(`a New card is two rows and a tagline; Draft package builds it in a background subagent (${surface})`, async ($, on) => {
-      const w = world(on, {
-        leads: [
-          lead('acme-api', {
-            company: 'Acme',
-            location: 'Remote (Canada)',
-            tagline: 'Billing APIs for dental clinics across Canada',
-          }),
-          lead('beta-api', { company: 'Beta', fitScore: 70 }),
-        ],
-      })
-      const toasts: string[] = []
-      on('ui.toast', (_, e) => {
-        toasts.push(e.text)
-        return { value: undefined }
-      })
-      const prompts: string[] = []
-      on('prompt.submit', (_, e) => {
-        prompts.push(e.text)
-        return { text: e.text }
-      })
-      on('turn.start', (_, e) => ({ turnId: e.turnId }))
-      on('turn.complete', (_, e) => ({ text: e.answer }))
+    test(`a card is shortlisted and sent back with labelled buttons, each move recorded (${surface})`, async ($, on) => {
+      const w = world(on, { leads: [lead('acme-api', { company: 'Acme' })] })
       await start($)
       const ui = await $.ui.mount({ ...pane, surface })
-      expect(await ui.find({ key: 'tab:new', text: /New 2/ })).toBeDefined()
-      expect(await ui.find({ key: 'tab:shortlisted' })).toBeUndefined()
-      expect(await ui.find({ text: /1h · Ashby board · Remote \(Canada\)/ })).toBeDefined()
-      // The tagline is one line of at most 40 characters, clipped with an ellipsis.
-      const tagline = await ui.find({ type: 'Text', text: /^Billing APIs/ })
-      expect(tagline?.text).toBe('Billing APIs for dental clinics across…')
-      expect(tagline?.props.wrap).toBe('truncate-end')
-      // Until scout writes one, the card falls back to the fit reason.
-      expect(await ui.find({ type: 'Text', text: /^Backend APIs in Victoria$/ })).toBeDefined()
-      expect(await ui.find({ key: 'draft:acme-api', text: /^Draft package$/ })).toBeDefined()
-      expect(await ui.find({ key: 'pass:acme-api', text: /^Pass$/ })).toBeDefined()
-      expect(await ui.find({ key: 'shortlist:acme-api' })).toBeUndefined()
+      expect(await ui.find({ key: 'tab:new', text: /New 1/ })).toBeDefined()
 
-      // Two drafts start side by side, neither in the conversation.
-      await ui.press({ key: 'draft:acme-api' })
-      await ui.press({ key: 'draft:beta-api' })
-      expect(w.leads().map(one => one.column)).toEqual(['drafting', 'drafting'])
-      expect(w.spawns).toHaveLength(2)
-      expect(w.spawns[0]?.prompt).toContain('job-tracker:package skill')
-      expect(w.spawns[0]?.prompt).toContain('lead acme-api (Acme — Backend Developer)')
-      expect(w.spawns[0]?.prompt).not.toContain('--redraft')
-      expect(prompts).toEqual([])
-      expect(toasts).toEqual([
-        'Drafting the Acme package in the background.',
-        'Drafting the Beta package in the background.',
-      ])
-      expect(await ui.find({ key: 'tab:drafting', text: /Drafting 2/ })).toBeDefined()
-      expect(await ui.find({ text: /Package being drafted/ })).toBeDefined()
+      await ui.press({ key: 'shortlist:acme-api' })
+      expect(w.leads()[0]?.column).toBe('shortlisted')
+      expect(await ui.find({ key: 'tab:shortlisted', text: /Shortlisted 1/ })).toBeDefined()
 
-      // A second press while it builds starts nothing.
-      await ui.press({ key: 'open:acme-api' })
-      await ui.press({ key: 'redraft' })
-      expect(w.spawns).toHaveLength(2)
-      expect(toasts.at(-1)).toBe('The Acme package is already being drafted.')
-
-      // Its end is the subagent's own turn: a toast says how it went.
-      for (const [n, spawn] of w.spawns.entries()) {
-        await $.turn.start({ text: spawn.prompt, turnId: `a-${n + 1}`, agentId: `agent-${n + 1}` })
-      }
-      await $.turn.complete({
-        answer: 'Package ready: résumé, cover letter and answers.\nReview it in /jobs.',
-        durationMs: 1,
-        isAborted: false,
-        turnId: 'a-1',
-        agentId: 'agent-1',
-        reason: 'answer',
-      })
-      expect(toasts.at(-1)).toBe('Acme package: Package ready: résumé, cover letter and answers.')
-      await $.turn.complete({
-        answer: '',
-        durationMs: 1,
-        isAborted: true,
-        turnId: 'a-2',
-        agentId: 'agent-2',
-        reason: 'aborted',
-      })
-      expect(toasts.at(-1)).toBe(
-        'The Beta package build stopped (aborted); Draft package starts it again.',
-      )
-      // An agent this pane did not start is not reported.
-      await $.turn.complete({
-        answer: 'Other work.',
-        durationMs: 1,
-        isAborted: false,
-        turnId: 'a-3',
-        agentId: 'agent-9',
-        reason: 'answer',
-      })
-      expect(toasts).toHaveLength(5)
-      // Once it ended, it can be drafted again.
-      await ui.press({ key: 'redraft' })
-      expect(w.spawns).toHaveLength(3)
-      expect(w.feedback().map(event => [event.kind, event.to])).toEqual([
-        ['move', 'drafting'],
-        ['move', 'drafting'],
-      ])
+      await ui.press({ key: 'tab:shortlisted' })
+      expect(await ui.find({ key: 'draft:acme-api', text: /Draft package/ })).toBeDefined()
+      await ui.press({ key: 'back-new:acme-api' })
+      expect(w.leads()[0]?.column).toBe('new')
+      expect(w.feedback().map(event => event.kind)).toEqual(['move', 'move'])
+      expect(w.leads()[0]?.history.map(entry => entry.to)).toEqual(['shortlisted', 'new'])
       await ui.unmount()
     })
   }
-
-  test('a lead stored in the removed Shortlisted column shows in New', async ($, on) => {
-    const legacy = 'shortlisted' as Lead['column']
-    world(on, {
-      leads: [
-        lead('acme-api', {
-          company: 'Acme',
-          column: legacy,
-          history: [{ at: '2026-10-19T12:00:00.000Z', by: 'user', action: 'moved', to: legacy }],
-        }),
-      ],
-    })
-    await start($)
-    const ui = await $.ui.mount({ ...pane, surface: 'desktop' })
-    expect(await ui.find({ key: 'tab:new', text: /New 1/ })).toBeDefined()
-    await ui.press({ key: 'open:acme-api' })
-    expect(await ui.find({ text: /user: moved → shortlisted/ })).toBeDefined()
-    expect(await ui.find({ text: /tracker: moved → New \(shortlisted was removed/ })).toBeDefined()
-  })
 
   for (const surface of ACTING) {
     test(`tabs show one stage at a time and open on New (${surface})`, async ($, on) => {
@@ -328,7 +222,7 @@ describe('kanban', () => {
         lead('stale-1', { company: 'Stale', postedAt: '2026-10-12T12:00:00.000Z' }),
         lead('kept-2', {
           company: 'Kept',
-          column: 'drafting',
+          column: 'shortlisted',
           postedAt: '2026-10-01T12:00:00.000Z',
         }),
         lead('fresh-3', { company: 'Fresh' }),
@@ -338,7 +232,7 @@ describe('kanban', () => {
     expect(w.runs.filter(argv => argv[2] === 'archive')).toHaveLength(1)
     expect(w.leads().map(one => [one.id, one.column])).toEqual([
       ['stale-1', 'archived'],
-      ['kept-2', 'drafting'],
+      ['kept-2', 'shortlisted'],
       ['fresh-3', 'new'],
     ])
     expect(w.leads()[0]?.history.at(-1)?.by).toBe('tracker')
@@ -372,8 +266,8 @@ describe('kanban', () => {
     expect(w.leads().find(one => one.id === 'acme-api')?.snoozedUntil).toBeDefined()
   })
 
-  test('a Ready card offers Review and Approve and submit; approving asks in chat, redrafting builds aside', async ($, on) => {
-    const w = world(on, {
+  test('draft and approve send prompts in the person’s name; the final submit stays in chat', async ($, on) => {
+    world(on, {
       leads: [lead('acme-api', { company: 'Acme', column: 'ready' })],
       applications: [
         {
@@ -393,26 +287,17 @@ describe('kanban', () => {
     })
     await start($)
     const ui = await $.ui.mount({ ...pane, surface: 'desktop' })
-    expect(await ui.find({ key: 'review:acme-api', text: /^Review$/ })).toBeDefined()
-    expect(await ui.find({ key: 'submit:acme-api', text: /^Approve and submit$/ })).toBeDefined()
-    expect(
-      (await ui.findAll({ type: 'Button' })).filter(one => /:acme-api$/.test(String(one.key))),
-    ).toHaveLength(3)
     await ui.press({ key: 'open:acme-api' })
     await ui.press({ key: 'submit' })
     expect(prompts[0]?.text).toContain('job-tracker:submit')
-    expect(prompts[0]?.text).toContain('ask me in one message for anything it is missing')
     expect(prompts[0]?.text).toContain('stop before the final submit')
     expect(prompts[0]?.origin).toEqual(expect.objectContaining({ kind: 'plugin', asUser: true }))
     await ui.press({ key: 'redraft' })
-    expect(prompts).toHaveLength(1)
-    expect(w.spawns[0]?.prompt).toContain('register it with --redraft')
-    expect(w.leads()[0]?.column).toBe('drafting')
+    expect(prompts[1]?.text).toContain('job-tracker:package')
   })
 
-  test('where no subagent can start, Draft asks the conversation to start one, queued until its turn', async ($, on) => {
-    const w = world(on, { leads: [lead('acme-api', { company: 'Acme' })] })
-    w.refuseSpawns('background tasks are disabled')
+  test('a Draft press during a reply says it is queued until its own turn starts', async ($, on) => {
+    const w = world(on, { leads: [lead('acme-api', { company: 'Acme', column: 'shortlisted' })] })
     const toasts: string[] = []
     on('ui.toast', (_, e) => {
       toasts.push(e.text)
@@ -436,59 +321,42 @@ describe('kanban', () => {
       })
     await start($)
     const ui = await $.ui.mount({ ...pane, surface: 'desktop' })
-    await ui.press({ key: 'open:acme-api' })
+    await ui.press({ key: 'tab:shortlisted' })
 
     // A plugin's prompt waits for the running reply: the press says so instead of doing nothing.
     await $.turn.start({ text: 'what is new on my board?', turnId: 't1' })
-    await ui.press({ key: 'draft' })
-    expect(w.leads()[0]?.column).toBe('drafting')
-    expect(w.spawns).toEqual([])
+    await ui.press({ key: 'draft:acme-api' })
     expect(prompts).toHaveLength(1)
-    expect(prompts[0]).toContain('in a background subagent, not in this thread')
-    expect(prompts[0]).toContain('run_in_background: true')
-    expect(prompts[0]).toContain('job-tracker:package skill')
+    expect(prompts[0]).toContain('job-tracker:package')
     expect(toasts).toEqual(['Drafting the Acme package once Claude finishes the current reply.'])
     const queued = { type: 'Text', text: /^Drafting the Acme package: queued…$/ } as const
     expect(await ui.find(queued)).toBeDefined()
-    await ui.press({ key: 'redraft' })
+    await ui.press({ key: 'draft:acme-api' })
     expect(prompts).toHaveLength(1)
-    expect(toasts.at(-1)).toBe('The Acme package is already being drafted.')
+    expect(toasts.at(-1)).toBe('Drafting the Acme package is already queued.')
 
     await done('t1')
     expect(await ui.find(queued)).toBeDefined()
     await $.turn.start({ text: prompts[0] ?? '', turnId: 't2' })
     expect(await ui.find(queued)).toBeUndefined()
-    // The conversation starts the subagent with the same prompt, so its run is the build's.
-    const task = draftTask(lead('acme-api', { company: 'Acme' }), false)
-    await $.turn.start({ text: task, turnId: 'c1', agentId: 'agent-c' })
     await done('t2')
-    await $.turn.complete({
-      answer: 'Package ready.',
-      durationMs: 1,
-      isAborted: false,
-      turnId: 'c1',
-      agentId: 'agent-c',
-      reason: 'answer',
-    })
-    expect(toasts.at(-1)).toBe('Acme package: Package ready.')
 
     // A prompt a hook refused is reported, not silently lost.
     refusals.push('a hook refused it')
-    await ui.press({ key: 'redraft' })
+    await ui.press({ key: 'draft:acme-api' })
     expect(toasts.slice(-2)).toEqual([
       'Drafting the Acme package in the conversation.',
       'job-tracker: the prompt was not sent: a hook refused it',
     ])
     expect(await ui.find(queued)).toBeUndefined()
 
-    // A build whose run is never seen stops blocking the button after 45 minutes.
+    // A prompt whose turn is never seen stops blocking the button after half an hour.
     refusals.length = 0
-    await ui.press({ key: 'redraft' })
-    await ui.press({ key: 'redraft' })
+    await ui.press({ key: 'draft:acme-api' })
+    await ui.press({ key: 'draft:acme-api' })
     expect(prompts).toHaveLength(3)
-    expect(toasts.at(-1)).toBe('The Acme package is already being drafted.')
-    await w.clock.advance(46 * 60_000)
-    await ui.press({ key: 'redraft' })
+    await w.clock.advance(31 * 60_000)
+    await ui.press({ key: 'draft:acme-api' })
     expect(prompts).toHaveLength(4)
   })
 
@@ -497,7 +365,7 @@ describe('kanban', () => {
     await start($)
     const ui = await $.ui.mount({ ...pane, surface: 'mobile' })
     expect(await ui.find({ key: 'tab:new' })).toBeDefined()
-    expect(await ui.find({ key: 'draft:acme-api' })).toBeUndefined()
+    expect(await ui.find({ key: 'shortlist:acme-api' })).toBeUndefined()
     expect(await ui.find({ key: 'refresh' })).toBeUndefined()
     await ui.press({ key: 'tab:applied' })
     expect(await ui.find({ key: 'card:beta-api' })).toBeDefined()

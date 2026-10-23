@@ -3,7 +3,6 @@ import { test } from 'node:test'
 
 import type { Lead } from '../hooks/lib/model.ts'
 import {
-  columnTitle,
   defaultStage,
   PIPELINE,
   previousColumn,
@@ -45,25 +44,16 @@ test('every stage offers one highlighted next step, and outcomes say what happen
     assert.ok(actions.filter(one => one.primary).length <= 1, column)
     assert.equal(new Set(actions.map(one => one.key)).size, actions.length, column)
   }
-  for (const column of ['new', 'ready', 'applied', 'interviewing', 'offer'] as const) {
+  for (const column of [
+    'new',
+    'shortlisted',
+    'ready',
+    'applied',
+    'interviewing',
+    'offer',
+  ] as const) {
     assert.ok(STAGE_ACTIONS[column][0]?.primary, column)
   }
-  // The main flow: New drafts or passes; Ready is reviewed, then approved and submitted.
-  assert.deepEqual(
-    STAGE_ACTIONS.new.map(one => [one.label, one.kind]),
-    [
-      ['Draft package', 'draft'],
-      ['Pass', 'pass'],
-    ],
-  )
-  assert.deepEqual(
-    STAGE_ACTIONS.ready.map(one => [one.label, one.kind]),
-    [
-      ['Review', 'review'],
-      ['Approve and submit', 'submit'],
-    ],
-  )
-  assert.ok(!(PIPELINE as readonly string[]).includes('shortlisted'))
   const outcomes = Object.values(STAGE_ACTIONS)
     .flat()
     .filter(one => one.kind === 'outcome')
@@ -99,9 +89,4 @@ test('a closed lead remembers the column it came from', () => {
     previousColumn({ column: 'passed', history: [{ ...moved('new', 'passed'), from: undefined }] }),
     undefined,
   )
-  // History from before Shortlisted was removed names it; there is no going back there.
-  const legacy = 'shortlisted' as Lead['column']
-  assert.equal(previousColumn({ column: 'passed', history: [moved(legacy, 'passed')] }), undefined)
-  assert.equal(columnTitle(legacy), 'shortlisted')
-  assert.equal(columnTitle('ready'), 'Ready to review')
 })
