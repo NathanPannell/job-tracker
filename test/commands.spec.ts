@@ -229,8 +229,11 @@ test('a package is registered with its diff, draft snapshot and files, then subm
   writeFileSync(join(pkg, 'resume.tex'), 'line one\nline 2\nline three\n')
   writeFileSync(join(pkg, 'cover-letter.md'), 'Dear Acme')
   assert.throws(() => commands.registerPackage(dir, id, { column: 'bogus' }), /Unknown column/)
+  commands.move(dir, id, 'drafting', { by: 'package' })
   const app = commands.registerPackage(dir, id, { draftId: 'r-123' })
   assert.equal(app.status, 'ready')
+  assert.equal(app.column, 'ready')
+  assert.equal(app.notice, undefined)
   assert.equal(app.warmIntroDraftId, 'r-123')
   assert.deepEqual(Object.keys(app.files).sort(), ['coverLetter', 'resumeDiff', 'resumeTex'])
   assert.match(readFileSync(join(pkg, 'resume.diff'), 'utf8'), /\+line 2/)
@@ -256,6 +259,61 @@ test('a package is registered with its diff, draft snapshot and files, then subm
   assert.equal(commands.resumeDiff(dir, 'missing'), '')
   assert.throws(() => commands.registerPackage(fresh(), 'x'), /No package folder/)
 })
+
+/** A lead in Drafting with a package on disk, as the package skill leaves it before step 9. */
+const drafted = () => {
+  const dir = fresh()
+  commands.add(dir, [lead('Acme')])
+  const id = 'acme-backend-developer'
+  commands.move(dir, id, 'drafting', { by: 'package' })
+  const pkg = join(dir, 'packages', id)
+  mkdirSync(pkg, { recursive: true })
+  writeFileSync(join(dir, 'profile', 'master-resume.tex'), 'line one\nline two\n')
+  writeFileSync(join(pkg, 'resume.tex'), 'line one\nline 2\n')
+  writeFileSync(join(pkg, 'cover-letter.md'), 'Dear Acme')
+  return { dir, id, pkg }
+}
+
+test('package moves a card still in Drafting to Ready to review', () => {
+  const { dir, id } = drafted()
+  const result = commands.registerPackage(dir, id)
+  assert.equal(result.column, 'ready')
+  assert.equal(result.notice, undefined)
+  const card = readData(dir, 'leads').leads[0]
+  assert.equal(card?.column, 'ready')
+  assert.deepEqual(card?.history.at(-1), {
+    at: card?.history.at(-1)?.at,
+    by: 'package',
+    action: 'moved',
+    from: 'drafting',
+    to: 'ready',
+  })
+})
+
+for (const [column, options] of [
+  ['archived', {}],
+  ['passed', { reason: 'score too high' }],
+  ['shortlisted', {}],
+] as const) {
+  test(`package registers the files but leaves a card moved to ${column} mid-build`, () => {
+    const { dir, id, pkg } = drafted()
+    commands.move(dir, id, column, options)
+    const feedback = readData(dir, 'feedback').events.length
+    const result = commands.registerPackage(dir, id, { draftId: 'r-1' })
+    assert.equal(result.column, column)
+    assert.match(result.notice ?? '', new RegExp(`stays in ${column}`, 'i'))
+    assert.equal(result.status, 'drafting')
+    assert.equal(result.warmIntroDraftId, 'r-1')
+    assert.deepEqual(Object.keys(result.files).sort(), ['coverLetter', 'resumeDiff', 'resumeTex'])
+    assert.ok(existsSync(join(pkg, 'resume.diff')))
+    assert.ok(existsSync(join(pkg, '.draft', 'cover-letter.md')))
+    assert.equal(readData(dir, 'applications').applications[0]?.leadId, id)
+    const card = readData(dir, 'leads').leads[0]
+    assert.equal(card?.column, column)
+    assert.equal(card?.history.at(-1)?.by, 'user')
+    assert.equal(readData(dir, 'feedback').events.length, feedback)
+  })
+}
 
 test('proposals are approved into the profile files or rejected', () => {
   const dir = fresh()

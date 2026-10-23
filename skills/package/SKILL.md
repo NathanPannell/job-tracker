@@ -69,9 +69,14 @@ You never submit, send an email, or invent a fact.
 9. Register the package: `jobs package <id>` (add `--draft-id <gmail draft id>` when you drafted
    one, `--redraft` when you rebuilt a package the person already saw). It renders the résumé
    preview for the pane, writes `resume.diff` against the master, snapshots the draft for the
-   learning loop and moves the card to Ready to review.
+   learning loop and moves the card to Ready to review — but only if the card is still in
+   Drafting. The person keeps triaging the board while you build; if they moved the card
+   elsewhere meanwhile (Archived, Passed or any other column), the files are still registered and
+   the card stays where they put it. The output then has a `notice` and `column` says where the
+   card is. That is not a failure: do not move the card yourself or retry.
 10. Reply briefly: what is in the package, any `NEEDS ANSWER` items and gaps, and "Review it in
-    /jobs → the card → Review package."
+    /jobs → the card → Review package." If step 9 printed a `notice`, say the package is saved and
+    the card stays in its column (name it) because they moved it during the build.
 
 ## Rules
 
