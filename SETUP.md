@@ -86,15 +86,17 @@ days ago)` or `(score 46, below 50)`, and no feedback is recorded). A lead you m
   it is marked Ghosted on its own, as if you had pressed Ghosted: the card moves to Archived
   (history says `tracker: moved → Archived (no reply 1 month after applying (ghosted))`) and the
   same outcome, `rejection: no reply (ghosted)`, is recorded for the weekly review, with
-  `by: "tracker"` so `learn` can tell it from one you marked. A toast names the leads it ghosted.
-  The month counts from the time `jobs submitted` recorded on the application, else from the
-  card's last move into Applied. Only Applied is swept: a lead with any recorded outcome (a reply
+  `by: "tracker"` so `learn` can tell it from one you marked. A toast names the leads it ghosted,
+  and for a week the board lists them above the tabs (each opens its card), since a scheduled
+  scout run may be the one that ghosted them; scout also sends a push notification and says so in
+  its reply. The month counts in UTC from the later of the time `jobs submitted` recorded on the
+  application and the card's last move into Applied. Only Applied is swept: a lead with any recorded outcome (a reply
   `sync` found, an interview), one that has been in Interviewing or Offer, and one you put back
   in Applied by hand are left alone, as is every other column. A reply that comes later still
   moves the card on: `sync` also reads leads the board ghosted, and "Back to Applied" on the
   archived card undoes it. Like the stale-lead archive it runs when the board refreshes, on every
   `jobs add` and on `jobs archive`, never on a timer. The threshold is `GHOST_AFTER_MONTHS` in
-  `hooks/lib/model.ts`.
+  `hooks/lib/model.ts` (and `GHOST_NOTICE_DAYS` how long the board lists them).
 - **Draft package** moves the card to Drafting at once and builds the package in a background
   subagent, never in your conversation, so you keep triaging while it runs and several build side
   by side (each takes several minutes). A toast says when one starts and when it ends; the card

@@ -120,8 +120,10 @@ You never apply, email anyone, create accounts, or log into job sites.
    (`postedAt` as the source gave it, ISO; omit it when unknown) and run
    `jobs add @<that file> --threshold 60`. It dedupes again, drops a new lead whose score, aged by
    `postedAt`, is under 60 (10 points off a day, so an older posting must fit better to get on)
-   or whose posting is over 7 days old, archives New leads past 7 days or scoring below 50 as aged, and prints `added`,
-   `updated`, `dropped`, `archived`, `alerts` (added leads whose aged `score` is 90+) and
+   or whose posting is over 7 days old, archives New leads past 7 days or scoring below 50 as aged,
+   marks Applied leads with no reply a month after submitting ghosted, and prints `added`,
+   `updated`, `dropped`, `archived`, `ghosted` (ids of those applications), `alerts` (added leads
+   whose aged `score` is 90+) and
    `warnings` (leads added without a tagline that was over 60 characters or not one line; the
    backfill below writes it again).
    Then backfill: `jobs summaries` lists open leads still missing a `companyBlurb`, `tagline` or
@@ -147,12 +149,14 @@ You never apply, email anyone, create accounts, or log into job sites.
    to `$JOB_TRACKER_DATA/scout/signals.md`: `<date> · <company> · <event> · <board or "no public board"> · <url>`.
    Never edit `target-companies.md`; the weekly learn review proposes additions from `signals.md`.
 8. If `alerts` is not empty, send one PushNotification naming them, e.g.
-   `2 strong job leads: <Company> — <Role> (<score>), ... Open /jobs.` Send none
-   otherwise.
+   `2 strong job leads: <Company> — <Role> (<score>), ... Open /jobs.` If `ghosted` is not
+   empty, send one more naming them (`jobs list --column archived` has their company and role),
+   e.g. `Marked ghosted, no reply a month after applying: <Company> — <Role>. Back to Applied on
+   the card undoes it.` Send none otherwise.
 9. Append one line to `$JOB_TRACKER_DATA/scout/runs.md`:
-   `<ISO time> · <n> found per source (ats a, local b, gmail c [per gmail source], web d, hn e) · signals s · boards added b · added x · dropped y · errors: ...`
+   `<ISO time> · <n> found per source (ats a, local b, gmail c [per gmail source], web d, hn e) · signals s · boards added b · added x · dropped y · ghosted g · errors: ...`
 10. Reply in three lines or fewer: how many were added, the best two with scores, new boards from
-    signals, and any source that failed. Do not paste the whole list.
+    signals, any applications marked ghosted, and any source that failed. Do not paste the whole list.
 
 ## Rules
 

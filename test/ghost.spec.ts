@@ -10,6 +10,7 @@ import {
   ghostSilent,
   isGhostable,
   previousColumn,
+  recentlyGhosted,
 } from '../hooks/lib/model.ts'
 import type {
   Application,
@@ -80,7 +81,7 @@ test('a month is a calendar month, its day clamped to the shorter month', () => 
   )
 })
 
-test('the submission time comes from the application, else the last move into Applied', () => {
+test('the submission time is the later of the application and the last move into Applied', () => {
   const moved = lead({ history: [applied('2026-09-01T00:00:00.000Z')] })
   assert.equal(
     appliedTime(moved, application(moved.id, '2026-09-03T00:00:00.000Z')),
@@ -88,6 +89,11 @@ test('the submission time comes from the application, else the last move into Ap
   )
   assert.equal(appliedTime(moved, application(moved.id)), Date.parse('2026-09-01T00:00:00.000Z'))
   assert.equal(appliedTime(moved), Date.parse('2026-09-01T00:00:00.000Z'))
+  // Applied again by hand after an old submission: counts from the move.
+  assert.equal(
+    appliedTime(moved, application(moved.id, '2026-08-01T00:00:00.000Z')),
+    Date.parse('2026-09-01T00:00:00.000Z'),
+  )
   assert.equal(appliedTime(lead({ history: [] })), undefined)
 })
 
@@ -96,7 +102,7 @@ test('an Applied lead is ghostable a month after submitting, not a minute before
   assert.equal(isGhostable(at(0), undefined, NOW), true)
   assert.equal(isGhostable(at(MINUTE), undefined, NOW), true)
   assert.equal(isGhostable(at(-MINUTE), undefined, NOW), false)
-  // The application's submission time wins over the move.
+  // A later submission time on the application counts over the move.
   const old = at(MINUTE)
   assert.equal(isGhostable(old, application(old.id, before(1, -MINUTE)), NOW), false)
   assert.equal(
@@ -189,4 +195,47 @@ test('ghostSilent returns the same files when nothing is due', () => {
   assert.equal(result.leads, file)
   assert.equal(result.feedback, feedback)
   assert.deepEqual(result.ghosted, [])
+})
+
+test('the board lists the leads it ghosted in the last week, newest first', () => {
+  const ghost = (id: string, days: number, fields: Partial<Lead> = {}): Lead => {
+    const at = new Date(NOW - days * 86_400_000).toISOString()
+    const entry = { at, by: 'tracker' as const, action: 'moved', from: 'applied' as const }
+    return lead({
+      id,
+      column: 'archived',
+      history: [
+        applied(before(2)),
+        { ...entry, to: 'archived', note: 'no reply 1 month after applying (ghosted)' },
+      ],
+      ...fields,
+    })
+  }
+  const restored = ghost('restored', 1)
+  restored.column = 'applied'
+  restored.history.push({ at: AT, by: 'user', action: 'moved', from: 'archived', to: 'applied' })
+  const file = board(
+    ghost('older', 3),
+    ghost('newer', 1),
+    ghost('stale', 8),
+    restored,
+    // Ghosted by hand: the person already knows.
+    ghost('by-hand', 1, {
+      history: [
+        {
+          at: AT,
+          by: 'user',
+          action: 'moved',
+          from: 'applied',
+          to: 'archived',
+          note: 'rejection: no reply (ghosted)',
+        },
+      ],
+    }),
+    lead({ id: 'waiting' }),
+  )
+  assert.deepEqual(
+    recentlyGhosted(file, NOW).map(one => one.id),
+    ['newer', 'older'],
+  )
 })

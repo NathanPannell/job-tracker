@@ -543,17 +543,23 @@ describe('kanban', () => {
       by: 'tracker',
     })
     expect(toasts).toEqual([
-      'Marked ghosted (no reply a month after applying): Quiet. Now in Archived; "Back to Applied" on the card undoes it.',
+      'Marked ghosted (no reply a month after applying): Quiet (Backend Developer). Now in Archived; "Back to Applied" on the card undoes it.',
     ])
     const ui = await $.ui.mount({ ...pane, surface: 'desktop' })
     await ui.press({ key: 'tab:applied' })
     expect(await ui.find({ key: 'card:quiet-1' })).toBeUndefined()
     expect(await ui.find({ key: 'card:recent-2' })).toBeDefined()
+    // The board names it for a week, for a person who missed the toast; it opens the card.
+    expect((await ui.find({ key: 'ghost-notice:quiet-1' }))?.props.label).toBe(
+      'Quiet · Backend Developer',
+    )
+    expect(await ui.find({ key: 'ghost-notice:heard-4' })).toBeUndefined()
+    await ui.press({ key: 'ghost-notice:quiet-1' })
     // Undone by hand, it stays in Applied through later refreshes.
-    await ui.press({ key: 'closed' })
-    await ui.press({ key: 'tab:archived' })
-    await ui.press({ key: 'restore:quiet-1' })
+    await ui.press({ key: 'restore' })
+    expect(w.leads()[0]?.column).toBe('applied')
     await ui.press({ key: 'refresh' })
+    expect(await ui.find({ key: 'ghost-notice:quiet-1' })).toBeUndefined()
     expect(w.leads()[0]?.column).toBe('applied')
     expect(toasts).toHaveLength(1)
   })

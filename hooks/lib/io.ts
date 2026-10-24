@@ -107,7 +107,10 @@ export async function refresh($: EngineInterface, sweep = true): Promise<JobBoar
 function ghostedToast($: EngineInterface, before: JobBoard, value: unknown) {
   const ids = (value as { ghosted?: unknown } | null)?.ghosted
   if (!Array.isArray(ids) || ids.length === 0) return
-  const names = ids.map(id => before.leads.find(lead => lead.id === id)?.company ?? String(id))
+  const names = ids.map(id => {
+    const lead = before.leads.find(one => one.id === id)
+    return lead ? `${lead.company} (${lead.role})` : String(id)
+  })
   $.ui.toast(
     `Marked ghosted (no reply a month after applying): ${names.join(', ')}. ` +
       'Now in Archived; "Back to Applied" on the card undoes it.',

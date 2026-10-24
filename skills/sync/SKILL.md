@@ -12,7 +12,7 @@ Keep the board in step with the inbox and the calendar. You read; the person dec
 1. CLI: `node "$JOB_TRACKER_HOME/bin/jobs.ts" <command>`. Get the leads in Applied and
    Interviewing (`jobs list --column applied`, `jobs list --column interviewing`), plus Ready to
    review (an invite can arrive before the card moves) and the Archived leads the board marked
-   ghosted after a month without a reply (`jobs list --column archived`, those whose last
+   ghosted after a month without a reply (`jobs list --column archived`, those whose last `moved`
    history entry is by `tracker` with a note ending `(ghosted)`): a late reply still counts.
 2. For each, search Gmail for the last 30 days by company name and the posting's domain, plus
    generic searches: `newer_than:30d (subject:application OR subject:interview OR "unfortunately"

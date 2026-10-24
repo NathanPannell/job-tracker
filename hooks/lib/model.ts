@@ -9,6 +9,7 @@ import type {
   Column,
   FeedbackEvent,
   FeedbackFile,
+  HistoryEntry,
   Lead,
   LeadsFile,
   ProposalsFile,
@@ -274,24 +275,26 @@ export function archiveStale(
 export const GHOST_AFTER_MONTHS = 1
 
 /** The history note on a lead the board ghosted; the sync skill looks for it. */
-export const GHOST_NOTE = `no reply ${GHOST_AFTER_MONTHS} month after applying (ghosted)`
+export const GHOST_NOTE = `no reply ${GHOST_AFTER_MONTHS} month${GHOST_AFTER_MONTHS === 1 ? '' : 's'} after applying (ghosted)`
+/** How many days the board names the applications it ghosted, for a person who missed the toast. */
+export const GHOST_NOTICE_DAYS = 7
 
 /** Columns a lead reaches only after the company replied, or after the person settled it. */
 const SETTLED: readonly string[] = ['interviewing', 'offer', 'passed', 'archived']
 
 /**
- * When a lead was submitted: the time `jobs submitted` recorded on its application, else (for
- * leads moved to Applied by hand or before that was recorded) its last move into Applied.
+ * When a lead was submitted: the later of the time `jobs submitted` recorded on its application
+ * and its last move into Applied (a lead moved back and applied again by hand counts from then).
  */
 export function appliedTime(
   lead: Pick<Lead, 'history'>,
   application?: Pick<Application, 'submittedAt'>,
 ): number | undefined {
-  const submitted = Date.parse(application?.submittedAt ?? '')
-  if (!Number.isNaN(submitted)) return submitted
   const moved = lead.history.findLast(entry => entry.action === 'moved' && entry.to === 'applied')
-  const at = Date.parse(moved?.at ?? '')
-  return Number.isNaN(at) ? undefined : at
+  const times = [application?.submittedAt, moved?.at]
+    .map(at => Date.parse(at ?? ''))
+    .filter(at => !Number.isNaN(at))
+  return times.length > 0 ? Math.max(...times) : undefined
 }
 
 /** `time` plus `months` calendar months (UTC), the day clamped to the month: Jan 31 → Feb 28. */
@@ -326,6 +329,27 @@ export function isGhostable(
   }
   if (moves.some(entry => entry.to === 'interviewing' || entry.to === 'offer')) return false
   return !events.some(event => event.leadId === lead.id && event.kind === 'outcome')
+}
+
+/** Whether this history entry is the board ghosting a lead (`ghostSilent`). */
+export const isGhostEntry = (entry: HistoryEntry) =>
+  entry.by === 'tracker' &&
+  entry.action === 'moved' &&
+  entry.to === 'archived' &&
+  (entry.note ?? '').endsWith('(ghosted)')
+
+/**
+ * Leads the board ghosted in the last `GHOST_NOTICE_DAYS` and still in Archived, most recent
+ * first: the board names them, so a ghosting done by a scheduled run nobody watched is seen.
+ */
+export function recentlyGhosted(file: LeadsFile, now: number): Lead[] {
+  const ghostedAt = (lead: Lead) => {
+    const last = lead.history.findLast(entry => entry.action === 'moved')
+    return lead.column === 'archived' && last && isGhostEntry(last) ? Date.parse(last.at) : NaN
+  }
+  return file.leads
+    .filter(lead => now - ghostedAt(lead) <= GHOST_NOTICE_DAYS * DAY_MS)
+    .sort((a, b) => ghostedAt(b) - ghostedAt(a))
 }
 
 /**
