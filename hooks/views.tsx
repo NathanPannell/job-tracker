@@ -35,6 +35,7 @@ export type Actions = {
   move: (lead: Lead, to: Column) => void
   outcome: (lead: Lead, to: Column, reason: string) => void
   askPass: (lead: Lead) => void
+  cancelPass: () => void
   pass: (lead: Lead, reason: string) => void
   score: (lead: Lead, correction: 'too-high' | 'too-low') => void
   draft: (lead: Lead) => void
@@ -51,6 +52,8 @@ export type ViewContext = {
   now: number
   columns: number
   busy: string | null
+  /** The lead whose pass reasons are open; null when none. */
+  passing: string | null
   /** What the pane's buttons sent to the conversation that has not started yet. */
   queued: string[]
   /** Undefined on a surface that only reads. */
@@ -106,11 +109,16 @@ function badge(ctx: ViewContext, lead: Lead, key: string): RenderElement {
 /** Runs one of a stage's actions on a lead. */
 function run(ctx: ViewContext, lead: Lead, action: StageAction): void {
   const act = ctx.act
+  if (!act) return
+  // Opening the reasons writes nothing, so a write still running does not hold it up.
+  if (action.kind === 'pass') {
+    act.askPass(lead)
+    return
+  }
   // While an earlier press is still being written, a second one would record it twice.
-  if (!act || ctx.busy) return
+  if (ctx.busy) return
   if (action.kind === 'move') act.move(lead, action.to)
   else if (action.kind === 'outcome') act.outcome(lead, action.to, action.reason)
-  else if (action.kind === 'pass') act.askPass(lead)
   else if (action.kind === 'draft') act.draft(lead)
   else if (action.kind === 'review') act.review(lead)
   else act.submit(lead)
@@ -149,6 +157,39 @@ function stageButtons(ctx: ViewContext, lead: Lead, suffix: string): RenderEleme
   ))
 }
 
+/** Whether the lead's stage offers Pass among its own actions (New does). */
+const passInStage = (lead: Lead) => STAGE_ACTIONS[lead.column].some(one => one.kind === 'pass')
+
+/**
+ * The reasons a pass is recorded with, drawn under the row whose Pass opened them: one more
+ * press records the pass for the weekly review.
+ */
+function passReasons(ctx: ViewContext, lead: Lead, suffix: string): RenderElement | null {
+  const { Box, Text, Button } = ctx.el
+  const act = ctx.act
+  if (!act || ctx.passing !== lead.id) return null
+  return (
+    <Box key={`reasons${suffix}`} flexDirection="row" gap={1} flexWrap="wrap" alignItems="center">
+      <Text key={`why${suffix}`} color="warning">
+        Why pass?
+      </Text>
+      {PASS_REASONS.map(reason => (
+        <Button
+          key={`reason:${reason}${suffix}`}
+          label={reason}
+          onPress={() => act.pass(lead, reason)}
+        />
+      ))}
+      <Button
+        key={`cancel-pass${suffix}`}
+        dimColor
+        label="Cancel"
+        onPress={() => act.cancelPass()}
+      />
+    </Box>
+  )
+}
+
 /** The card's third line: the tagline, or the fit reason until scout has written one. */
 const oneLiner = (lead: Lead) => (lead.tagline?.trim() || lead.fitReason || '').replace(/\s+/g, ' ')
 
@@ -178,6 +219,7 @@ function card(ctx: ViewContext, lead: Lead): RenderElement {
           {stageButtons(ctx, lead, `:${lead.id}`)}
         </Box>
       )}
+      {passInStage(lead) && passReasons(ctx, lead, `:${lead.id}`)}
     </Box>
   )
 }
@@ -266,7 +308,7 @@ export function leadSummary(lead: Pick<Lead, 'companyBlurb' | 'roleHighlights'>)
     .join('\n\n')
 }
 
-export function leadView(ctx: ViewContext, id: string, passing: boolean): RenderElement {
+export function leadView(ctx: ViewContext, id: string): RenderElement {
   const { Box, Text, Button, Link, Markdown } = ctx.el
   const lead = ctx.board.leads.find(one => one.id === id)
   if (!lead) {
@@ -287,6 +329,10 @@ export function leadView(ctx: ViewContext, id: string, passing: boolean): Render
   ].filter(Boolean)
   const summary = leadSummary(lead)
   const act = ctx.act
+  const passing = ctx.passing === lead.id
+  // The reasons open under the row that holds the lead's Pass button.
+  const passFromStage = passInStage(lead)
+  const passFromOther = lead.column !== 'passed' && !passFromStage
   return (
     <Box flexDirection="column" gap={1}>
       {header(ctx, `${lead.company} — ${lead.role}`, true)}
@@ -330,11 +376,13 @@ export function leadView(ctx: ViewContext, id: string, passing: boolean): Render
               <Button key="review-any" label="Review package" onPress={() => act.review(lead)} />
             )}
           </Box>
+          {passFromStage && passReasons(ctx, lead, '')}
           <Box key="other" flexDirection="row" gap={1} flexWrap="wrap">
-            {lead.column !== 'passed' && lead.column !== 'new' && (
+            {passFromOther && (
               <Button
                 key="pass-any"
-                label={passing ? 'Pass: pick a reason' : 'Pass…'}
+                label="Pass…"
+                variant={passing ? 'primary' : undefined}
                 onPress={() => act.askPass(lead)}
               />
             )}
@@ -349,17 +397,7 @@ export function leadView(ctx: ViewContext, id: string, passing: boolean): Render
               />
             )}
           </Box>
-          {passing && (
-            <Box key="reasons" flexDirection="row" gap={1} flexWrap="wrap">
-              {PASS_REASONS.map(reason => (
-                <Button
-                  key={`reason:${reason}`}
-                  label={reason}
-                  onPress={() => act.pass(lead, reason)}
-                />
-              ))}
-            </Box>
-          )}
+          {passFromOther && passReasons(ctx, lead, '')}
           <Box key="feedback" flexDirection="row" gap={1} flexWrap="wrap" alignItems="center">
             <Text dimColor>Feedback</Text>
             <Button

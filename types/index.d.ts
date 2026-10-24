@@ -151,7 +151,7 @@ export type PackageTab = 'resume' | 'diff' | 'cover' | 'answers' | 'brief' | 'in
 
 export type JobView =
   | { kind: 'board' }
-  | { kind: 'lead'; id: string; passing?: boolean }
+  | { kind: 'lead'; id: string }
   | { kind: 'package'; id: string; tab: PackageTab }
   | { kind: 'proposals' }
 
@@ -207,6 +207,8 @@ declare module 'claude-code' {
       /** True once this session's first user prompt was seen. */
       nudged: boolean
       busy: string | null
+      /** The lead whose pass reasons are open, on its card or its own page; null when none. */
+      passing: string | null
       /** True while a main-loop turn runs: a prompt sent now waits for it to end. */
       turning: boolean
       /** Prompts the pane sent whose turn has not started yet. */

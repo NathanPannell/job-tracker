@@ -36,6 +36,7 @@ const pendingTurn = atom(
 )
 const nudged = atom({ plugin: 'job-tracker', key: 'nudged' } as const, false)
 const busy = atom({ plugin: 'job-tracker', key: 'busy' } as const, null as string | null)
+const passing = atom({ plugin: 'job-tracker', key: 'passing' } as const, null as string | null)
 const turning = atom({ plugin: 'job-tracker', key: 'turning' } as const, false)
 const sent = atom({ plugin: 'job-tracker', key: 'sent' } as const, [] as SentPrompt[])
 const drafts = atom({ plugin: 'job-tracker', key: 'drafts' } as const, [] as DraftRun[])
@@ -57,6 +58,8 @@ const isJobPrompt = (text: string) => /job-tracker|\/jobs\b/i.test(text)
 const openPane = ($: EngineInterface) => $.ui.open({ id: PANE, title: 'Jobs' })
 
 async function show($: EngineInterface, next: JobView) {
+  // Reasons opened on a card stay with that card, not with the page the person goes to.
+  await update($, passing, () => null)
   await update($, view, () => next)
   if (next.kind === 'package') await loadPackage($, next.id)
 }
@@ -367,11 +370,16 @@ function actions($: EngineInterface): Actions {
           JSON.stringify({ leadId: lead.id, kind: 'outcome', reason }),
         ])
       })(),
-    askPass: lead => void show($, { kind: 'lead', id: lead.id, passing: true }),
+    // Opens the reasons where the press was, on the card or the lead's page; a second press
+    // closes them. It writes nothing, so a write still running does not hold it up.
+    askPass: lead => void update($, passing, id => (id === lead.id ? null : lead.id)),
+    cancelPass: () => void update($, passing, () => null),
     pass: (lead, reason) =>
-      void act($, `Passing on ${lead.company}`, ['pass', lead.id, reason]).then(result =>
-        result.ok ? leave($, lead) : show($, { kind: 'lead', id: lead.id }),
-      ),
+      void act($, `Passing on ${lead.company}`, ['pass', lead.id, reason]).then(async result => {
+        if (!result.ok) return
+        await update($, passing, id => (id === lead.id ? null : id))
+        await leave($, lead)
+      }),
     score: (lead, correction) =>
       void act($, 'Recording the correction', ['score', lead.id, correction]).then(result => {
         if (result.ok) $.ui.toast(`Noted: ${lead.company} scored ${correction.replace('-', ' ')}`)
@@ -501,7 +509,7 @@ export const register: Register = on => {
 
   on('command.run', { command: 'jobs' }, async $ => {
     await refresh($)
-    await update($, view, () => ({ kind: 'board' }) as JobView)
+    await show($, { kind: 'board' })
     const opened = await openPane($)
     const c = counts({ version: 1, leads: (await read($, board)).leads }, await $.clock.now())
     return {
@@ -722,7 +730,7 @@ function paneFailure($: EngineInterface, e: RenderInput<'Pane'>, why: string) {
           key="pane-reset"
           label="Back to the board"
           onPress={() =>
-            void update($, view, () => ({ kind: 'board' }) as JobView)
+            void show($, { kind: 'board' })
               .then(() => update($, stage, () => null))
               .then(() => update($, shown, () => PAGE))
               .then(() => refresh($))
@@ -748,6 +756,7 @@ async function drawPane($: EngineInterface, e: RenderInput<'Pane'>) {
     now: current.loadedAt,
     columns: e.props.bodyColumns,
     busy: await read($, busy),
+    passing: await read($, passing),
     queued: (await read($, sent)).filter(one => isLive(one, now)).map(one => one.label),
     act: isReadOnly ? undefined : all,
     nav: {
@@ -759,7 +768,7 @@ async function drawPane($: EngineInterface, e: RenderInput<'Pane'>) {
       more: all.more,
     },
   }
-  if (at.kind === 'lead') return leadView(ctx, at.id, at.passing === true)
+  if (at.kind === 'lead') return leadView(ctx, at.id)
   if (at.kind === 'package') return packageView(ctx, at.id, at.tab, await read($, pkg))
   if (at.kind === 'proposals') return proposalsView(ctx)
   return boardView(ctx, {
