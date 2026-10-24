@@ -704,7 +704,8 @@ const RETIRED_COLUMNS: Readonly<Record<string, Column>> = { shortlisted: 'new' }
 /**
  * Moves leads out of a column the board no longer has (Shortlisted, into New), with a history
  * entry saying so. That entry also keeps such a lead from being archived as stale, since the
- * person chose to keep it. Returns `file` itself when nothing moved.
+ * person chose to keep it. Also drops the date a lead was snoozed until, from before snoozing
+ * was removed. Returns `file` itself when nothing changed.
  */
 export function migrateLeads(file: LeadsFile, at: string): LeadsFile {
   const retired = (lead: Lead): Column | undefined => RETIRED_COLUMNS[lead.column]

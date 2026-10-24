@@ -13,7 +13,8 @@ packages are written. You propose; the person approves in /jobs. Never edit the 
 ## Inputs
 
 - CLI: `node "$JOB_TRACKER_HOME/bin/jobs.ts" <command>`; data folder `$JOB_TRACKER_DATA`.
-- `feedback.json` (pass reasons, score-too-high / score-too-low, moves, outcomes),
+- `feedback.json` (pass reasons, score-too-high / score-too-low, moves, outcomes; older events
+  may include `snooze`, from before snoozing was removed),
   `leads.json` (source, score, column, history), `applications.json`, `jobs edits` (diffs between
   each drafted package and the person's edited version), `scout/runs.md`, `scout/signals.md`
   (funding and hiring news the scout found, with or without a public job board),
