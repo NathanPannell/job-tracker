@@ -139,14 +139,12 @@ test('the nudge names the best leads by aged score, with that score', () => {
   assert.match(nudgeContext(named, NOW), /Stale — Backend Developer \(score 75\)/)
 })
 
-test('a New lead posted over a week ago or scoring below 50 is archived; kept, snoozed, restored and applied stay', () => {
+test('a New lead posted over a week ago or scoring below 50 is archived; kept, restored and applied stay', () => {
   assert.equal(isStale(lead({ foundAt: daysAgo(7) }), NOW), false)
   assert.equal(isStale(lead({ foundAt: hoursAgo(7 * 24 + 1) }), NOW), true)
   assert.equal(isStale(lead({ postedAt: daysAgo(8), foundAt: AT }), NOW), true)
   const file = board(
     lead({ id: 'stale', postedAt: daysAgo(8) }),
-    lead({ id: 'snoozed', foundAt: daysAgo(9), snoozedUntil: daysAgo(-2) }),
-    lead({ id: 'woke', foundAt: daysAgo(9), snoozedUntil: daysAgo(1) }),
     lead({
       id: 'restored',
       foundAt: daysAgo(9),
@@ -154,28 +152,24 @@ test('a New lead posted over a week ago or scoring below 50 is archived; kept, s
     }),
     lead({ id: 'week', foundAt: daysAgo(7) }),
     // Aged scores: 86 - 40 = 46 goes and 90 - 40 = 50 stays; a fresh 49 goes; a lead the person
-    // marked too low, or snoozed, stays at 46.
+    // marked too low stays at 46.
     lead({ id: 'low', foundAt: daysAgo(4) }),
     lead({ id: 'fifty', fitScore: 90, foundAt: daysAgo(4) }),
     lead({ id: 'too-low', foundAt: daysAgo(4), scoreCorrection: 'too-low' }),
-    lead({ id: 'low-snoozed', foundAt: daysAgo(4), snoozedUntil: daysAgo(-1) }),
     lead({ id: 'fresh-low', fitScore: 49, foundAt: hoursAgo(1) }),
     lead({ id: 'kept', column: 'drafting', foundAt: daysAgo(9) }),
     lead({ id: 'kept-low', column: 'ready', foundAt: daysAgo(5) }),
     lead({ id: 'applied', column: 'applied', foundAt: daysAgo(30) }),
   )
   const { leads, archived } = archiveStale(file, AT)
-  assert.deepEqual(archived, ['stale', 'woke', 'week', 'low', 'fresh-low'])
+  assert.deepEqual(archived, ['stale', 'week', 'low', 'fresh-low'])
   assert.deepEqual(
     leads.leads.map(one => one.column),
     [
       'archived',
       'new',
       'archived',
-      'new',
       'archived',
-      'archived',
-      'new',
       'new',
       'new',
       'archived',
@@ -184,12 +178,10 @@ test('a New lead posted over a week ago or scoring below 50 is archived; kept, s
       'applied',
     ],
   )
-  assert.equal(leads.leads[5]?.history.at(-1)?.note, 'score 46, below 50')
-  assert.equal(leads.leads[4]?.history.at(-1)?.note, 'score 16, below 50')
+  assert.equal(leads.leads[3]?.history.at(-1)?.note, 'score 46, below 50')
+  assert.equal(leads.leads[2]?.history.at(-1)?.note, 'score 16, below 50')
   // Past a week, the age is the reason given, whatever the score.
-  assert.equal(leads.leads[0]?.history.at(-1)?.note, 'posted over 7 days ago')
-  const moved = leads.leads[2] as Lead
-  assert.equal(moved.snoozedUntil, undefined)
+  const moved = leads.leads[0] as Lead
   assert.deepEqual(moved.history.at(-1), {
     at: AT,
     by: 'tracker',

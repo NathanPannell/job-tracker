@@ -376,10 +376,6 @@ function actions($: EngineInterface): Actions {
       void act($, 'Recording the correction', ['score', lead.id, correction]).then(result => {
         if (result.ok) $.ui.toast(`Noted: ${lead.company} scored ${correction.replace('-', ' ')}`)
       }),
-    snooze: (lead, days) =>
-      void act($, `Snoozing ${lead.company}`, ['snooze', lead.id, String(days)]).then(result =>
-        result.ok ? leave($, lead) : undefined,
-      ),
     draft: lead => void draftPackage($, lead, true, () => leave($, lead)),
     review: (lead, tab: PackageTab = 'resume') =>
       void show($, { kind: 'package', id: lead.id, tab }),
@@ -429,7 +425,7 @@ export const register: Register = on => {
     await $.tool.register({
       name: 'update_lead',
       description:
-        "Changes one lead on the person's job board: move it to a column, rescore it, add notes, set a follow-up or snooze date, or write its company blurb, tagline and role highlights. Moving to passed needs passReason. fitScore is the fit before ageing (the board takes points off for age itself), so never set it from the aged score list_leads shows.",
+        "Changes one lead on the person's job board: move it to a column, rescore it, add notes, set a follow-up date, or write its company blurb, tagline and role highlights. Moving to passed needs passReason. fitScore is the fit before ageing (the board takes points off for age itself), so never set it from the aged score list_leads shows.",
       inputSchema: {
         type: 'object',
         required: ['id'],
@@ -457,7 +453,6 @@ export const register: Register = on => {
           notes: { type: 'string' },
           passReason: { type: 'string' },
           followUpAt: { type: 'string', description: 'ISO date' },
-          snoozedUntil: { type: 'string', description: 'ISO date' },
         },
       },
     })

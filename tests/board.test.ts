@@ -378,16 +378,16 @@ describe('kanban', () => {
     expect(w.runs.filter(argv => argv[2] === 'archive')).toHaveLength(0)
   })
 
-  test('score corrections and snoozes are feedback events', async ($, on) => {
+  test('a score correction is a feedback event; there is no snooze', async ($, on) => {
     const w = world(on, { leads: [lead('acme-api'), lead('beta-api')] })
     await start($)
     const ui = await $.ui.mount({ ...pane, surface: 'desktop' })
     await ui.press({ key: 'open:acme-api' })
     await ui.press({ key: 'too-high' })
-    await ui.select({ key: 'snooze', value: '7' })
-    expect(w.feedback().map(event => event.kind)).toEqual(['score-too-high', 'snooze'])
+    expect(w.feedback().map(event => event.kind)).toEqual(['score-too-high'])
     expect(w.leads().find(one => one.id === 'acme-api')?.scoreCorrection).toBe('too-high')
-    expect(w.leads().find(one => one.id === 'acme-api')?.snoozedUntil).toBeDefined()
+    expect(await ui.find({ key: 'snooze' })).toBeUndefined()
+    expect(await ui.find({ text: /snooze/i })).toBeUndefined()
   })
 
   test('a Ready card offers Review and Approve and submit; approving prefills in the background, then asks in chat', async ($, on) => {
@@ -763,11 +763,6 @@ describe('kanban', () => {
     expect(await ui.find({ key: 'submit' })).toBeDefined()
     await ui.press({ key: 'submit' })
     expect(await boardTab(ui)).toBe('tab:ready')
-
-    // Snoozing: back on New.
-    await openOn('tab:new', 'b-2')
-    await ui.select({ key: 'snooze', value: '3' })
-    expect(await boardTab(ui)).toBe('tab:new')
     await ui.unmount()
   })
 
@@ -788,9 +783,6 @@ describe('kanban', () => {
     await ui.press({ key: 'pass' })
     await ui.press({ key: 'reason:Too senior' })
     expect(toasts).toHaveLength(2)
-    expect(await boardTab(ui)).toBeUndefined()
-    await ui.select({ key: 'snooze', value: '3' })
-    expect(toasts).toHaveLength(3)
     expect(await boardTab(ui)).toBeUndefined()
   })
 
@@ -899,7 +891,6 @@ describe('band', () => {
         lead('c-3', { column: 'ready' }),
         lead('d-4', { column: 'applied', followUpAt: '2026-10-01T00:00:00.000Z' }),
         lead('e-5', { column: 'applied', followUpAt: '2026-12-01T00:00:00.000Z' }),
-        lead('f-6', { snoozedUntil: '2026-12-01T00:00:00.000Z' }),
       ],
     })
     await start($)

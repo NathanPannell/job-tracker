@@ -215,7 +215,7 @@ export const isStale = (lead: Pick<Lead, 'foundAt' | 'postedAt'>, now: number) =
 
 type Archivable = Pick<
   Lead,
-  'column' | 'fitScore' | 'foundAt' | 'postedAt' | 'snoozedUntil' | 'history' | 'scoreCorrection'
+  'column' | 'fitScore' | 'foundAt' | 'postedAt' | 'history' | 'scoreCorrection'
 >
 
 /**
@@ -231,14 +231,12 @@ function archiveReason(lead: Archivable, now: number): string | undefined {
 }
 
 /**
- * Whether `archiveStale` takes this lead: in New, past a week or scoring below 50 as aged, not
- * snoozed, and never moved back into New by hand (a lead restored with "Back to New" stays
- * restored).
+ * Whether `archiveStale` takes this lead: in New, past a week or scoring below 50 as aged, and
+ * never moved back into New by hand (a lead restored with "Back to New" stays restored).
  */
 export const isArchivable = (lead: Archivable, now: number) =>
   lead.column === 'new' &&
   archiveReason(lead, now) !== undefined &&
-  !isSnoozed(lead, now) &&
   !lead.history.some(entry => entry.action === 'moved' && entry.to === 'new')
 
 /**
@@ -258,7 +256,6 @@ export function archiveStale(
     return {
       ...lead,
       column: 'archived' as const,
-      snoozedUntil: undefined,
       history: [
         ...lead.history,
         {
@@ -410,7 +407,6 @@ export function moveLead(
     ...lead,
     column: to,
     passReason: to === 'passed' ? extra.passReason : lead.passReason,
-    snoozedUntil: to === lead.column ? lead.snoozedUntil : undefined,
     history: [
       ...lead.history,
       { at, by, action: 'moved', from, to, ...(extra.note ? { note: extra.note } : {}) },
@@ -455,26 +451,6 @@ export function correctScore(
   return { leads: replaceLead(file, corrected), event }
 }
 
-export function snoozeLead(file: LeadsFile, id: string, until: string, at: string): MoveResult {
-  const lead = file.leads.find(one => one.id === id)
-  if (!lead) return { leads: file, error: `No lead ${id}` }
-  const snoozed: Lead = {
-    ...lead,
-    snoozedUntil: until,
-    history: [...lead.history, { at, by: 'user', action: 'snoozed', note: until }],
-  }
-  const event: FeedbackEvent = {
-    id: eventId(at, id, 'snooze'),
-    at,
-    leadId: id,
-    kind: 'snooze',
-    reason: until,
-    source: lead.source,
-    fitScore: lead.fitScore,
-  }
-  return { leads: replaceLead(file, snoozed), event }
-}
-
 export type LeadPatch = Partial<
   Pick<
     Lead,
@@ -486,7 +462,6 @@ export type LeadPatch = Partial<
     | 'roleHighlights'
     | 'notes'
     | 'followUpAt'
-    | 'snoozedUntil'
     | 'comp'
     | 'location'
     | 'url'
@@ -505,7 +480,6 @@ const PATCH_KEYS: readonly (keyof LeadPatch)[] = [
   'roleHighlights',
   'notes',
   'followUpAt',
-  'snoozedUntil',
   'comp',
   'location',
   'url',
@@ -730,19 +704,24 @@ const RETIRED_COLUMNS: Readonly<Record<string, Column>> = { shortlisted: 'new' }
 /**
  * Moves leads out of a column the board no longer has (Shortlisted, into New), with a history
  * entry saying so. That entry also keeps such a lead from being archived as stale, since the
- * person chose to keep it. Returns `file` itself when nothing moved.
+ * person chose to keep it. Also drops the date a lead was snoozed until, from before snoozing
+ * was removed. Returns `file` itself when nothing changed.
  */
 export function migrateLeads(file: LeadsFile, at: string): LeadsFile {
   const retired = (lead: Lead): Column | undefined => RETIRED_COLUMNS[lead.column]
-  if (!file.leads.some(retired)) return file
+  // Snoozing was removed: a lead keeps its history, but not the date it was snoozed until.
+  const hasSnoozeDate = (lead: Lead) => 'snoozedUntil' in lead
+  if (!file.leads.some(lead => retired(lead) || hasSnoozeDate(lead))) return file
   return {
     ...file,
     leads: file.leads.map(lead => {
+      const { snoozedUntil, ...kept } = lead as Lead & { snoozedUntil?: string }
+      void snoozedUntil
       const to = retired(lead)
-      if (!to) return lead
+      if (!to) return hasSnoozeDate(lead) ? kept : lead
       const note = `${lead.column} was removed from the board`
       return {
-        ...lead,
+        ...kept,
         column: to,
         history: [...lead.history, { at, by: 'tracker' as const, action: 'moved', to, note }],
       }
@@ -763,9 +742,6 @@ export function appendEvent(file: FeedbackFile, event: FeedbackEvent): FeedbackF
   return { ...file, events: [...file.events, event] }
 }
 
-export const isSnoozed = (lead: Pick<Lead, 'snoozedUntil'>, now: number) =>
-  lead.snoozedUntil !== undefined && Date.parse(lead.snoozedUntil) > now
-
 export type Counts = { newLeads: number; readyToReview: number; followUpsDue: number }
 
 export function counts(file: LeadsFile, now: number): Counts {
@@ -773,7 +749,7 @@ export function counts(file: LeadsFile, now: number): Counts {
   let readyToReview = 0
   let followUpsDue = 0
   for (const lead of file.leads) {
-    if (lead.column === 'new' && !isSnoozed(lead, now)) newLeads += 1
+    if (lead.column === 'new') newLeads += 1
     if (lead.column === 'ready') readyToReview += 1
     const isWaiting = lead.column === 'applied' || lead.column === 'interviewing'
     if (isWaiting && lead.followUpAt !== undefined && Date.parse(lead.followUpAt) <= now) {
@@ -798,24 +774,19 @@ export function bandText(c: Counts): string | undefined {
 export const byScore = (now: number) => (a: Lead, b: Lead) =>
   effectiveScore(b, now) - effectiveScore(a, now) || b.fitScore - a.fitScore
 
-/** Leads in a column, best first; snoozed ones last. */
+/** Leads in a column, best first. */
 export function columnLeads(file: LeadsFile, column: Column, now: number): Lead[] {
   const best = byScore(now)
   return file.leads
     .filter(lead => lead.column === column)
-    .sort(
-      (a, b) =>
-        Number(isSnoozed(a, now)) - Number(isSnoozed(b, now)) ||
-        best(a, b) ||
-        a.company.localeCompare(b.company),
-    )
+    .sort((a, b) => best(a, b) || a.company.localeCompare(b.company))
 }
 
 export const NUDGE_QUIET_MS = 3 * 60 * 60 * 1000
 export const NUDGE_TOP = 3
 
 /**
- * The leads to mention once in an unrelated conversation: new, unsnoozed, never mentioned,
+ * The leads to mention once in an unrelated conversation: new, never mentioned,
  * best first; none when any lead was mentioned in the last three hours.
  */
 export function leadsToMention(file: LeadsFile, now: number): Lead[] {
@@ -825,7 +796,7 @@ export function leadsToMention(file: LeadsFile, now: number): Lead[] {
   )
   if (now - lastMention < NUDGE_QUIET_MS) return []
   return file.leads
-    .filter(lead => lead.column === 'new' && !lead.mentionedAt && !isSnoozed(lead, now))
+    .filter(lead => lead.column === 'new' && !lead.mentionedAt)
     .sort(byScore(now))
     .slice(0, NUDGE_TOP)
 }

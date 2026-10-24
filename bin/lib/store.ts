@@ -129,7 +129,10 @@ function readRaw<N extends DataName>(dir: string, name: N): Data[N] {
   }
 }
 
-/** Reads a data file; leads in a column the board no longer has come back moved out of it. */
+/**
+ * Reads a data file; leads come back migrated (`migrateLeads`): out of a column the board no
+ * longer has, and without a snooze date.
+ */
 export function readData<N extends DataName>(dir: string, name: N): Data[N] {
   const value = readRaw(dir, name)
   return name === 'leads'

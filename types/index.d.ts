@@ -10,7 +10,7 @@ export type Actor = 'user' | 'scout' | 'package' | 'submit' | 'sync' | 'learn' |
 export type HistoryEntry = {
   at: string
   by: Actor
-  /** `created`, `moved`, `scored`, `snoozed`, `mentioned` or `note`. */
+  /** `created`, `moved`, `scored`, `mentioned` or `note` (`snoozed` in older history). */
   action: string
   /** Older entries may name `shortlisted`, a column the board no longer has. */
   from?: Column
@@ -56,7 +56,6 @@ export type Lead = {
   postedAt?: string
   /** When the nudge named this lead in a conversation. */
   mentionedAt?: string
-  snoozedUntil?: string
   followUpAt?: string
   /** The person's correction of the score, kept beside the original. */
   scoreCorrection?: 'too-high' | 'too-low'
@@ -96,6 +95,7 @@ export type Application = {
 
 export type ApplicationsFile = { version: 1; applications: Application[] }
 
+/** `snooze` only in events recorded before snoozing was removed; none are recorded now. */
 export type FeedbackKind =
   'pass' | 'score-too-high' | 'score-too-low' | 'move' | 'snooze' | 'outcome' | 'package-edit'
 

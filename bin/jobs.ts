@@ -22,7 +22,6 @@ const USAGE = `jobs <command> [args] [--data <dir>]
   move <id> <column> [--reason r] [--by actor] [--note n]
   pass <id> <reason>
   score <id> too-high|too-low
-  snooze <id> <days>
   patch <id> <json|@file> [--by actor]   change fields of a lead
   summaries [<json|@file>]               open leads missing companyBlurb/tagline/roleHighlights;
                                          with [{ id, companyBlurb?, tagline?, roleHighlights? }],
@@ -89,8 +88,6 @@ async function main(argv: string[]): Promise<unknown> {
       return commands.move(dir, need(args[0], 'id'), 'passed', { reason: need(args[1], 'reason') })
     case 'score':
       return commands.score(dir, need(args[0], 'id'), need(args[1], 'correction'))
-    case 'snooze':
-      return commands.snooze(dir, need(args[0], 'id'), need(args[1], 'days'))
     case 'patch':
       return commands.patch(
         dir,

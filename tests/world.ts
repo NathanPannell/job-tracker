@@ -13,7 +13,6 @@ import {
   markMentioned,
   moveLead,
   patchLead,
-  snoozeLead,
 } from '../hooks/lib/model.ts'
 import type {
   Application,
@@ -140,10 +139,6 @@ export function world(
         return commit(moveLead(file, id, 'passed', at, 'user', { passReason: second }))
       case 'score':
         return commit(correctScore(file, id, second as 'too-high' | 'too-low', at))
-      case 'snooze':
-        return commit(
-          snoozeLead(file, id, new Date(NOW + Number(second) * 86_400_000).toISOString(), at),
-        )
       case 'patch':
         return commit(patchLead(file, id, JSON.parse(second), at, 'model'))
       case 'mention':
