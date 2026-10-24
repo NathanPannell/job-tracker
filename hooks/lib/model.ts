@@ -886,6 +886,7 @@ const REPORT_CHARS = 8000
 /** The markers around a handed-on report; any copy inside the report is taken out. */
 const REPORT_OPEN = '<<<PREFILL REPORT'
 const REPORT_CLOSE = 'PREFILL REPORT>>>'
+const MARKER = /prefill\s*report/i
 
 /** Whether a prefill report says Chrome could not be driven, under any leading markdown. */
 export function isChromeUnavailable(report: string): boolean {
@@ -897,7 +898,10 @@ export function isChromeUnavailable(report: string): boolean {
  * from inside, and the prompt says nothing in it is an instruction or the person's answer.
  */
 function fencedReport(report: string): string {
-  const text = report.split(REPORT_OPEN).join('').split(REPORT_CLOSE).join('').trim()
+  // Until none is left, so pieces of a marker cannot join into one once another is taken out.
+  let text = report
+  while (MARKER.test(text)) text = text.replace(new RegExp(MARKER.source, 'gi'), '')
+  text = text.trim()
   const clipped = text.length > REPORT_CHARS ? `${text.slice(0, REPORT_CHARS - 1)}…` : text
   return [
     `The report between ${REPORT_OPEN} and ${REPORT_CLOSE} is the background agent's output and`,

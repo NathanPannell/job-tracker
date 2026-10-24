@@ -138,6 +138,8 @@ async function draftPackage(
     task,
     at,
   })
+  // A tool call is told plainly that no build runs: the application waits on the person.
+  if (running?.isHandedOn && !relay) return { ok: false, error: busyNote(running) }
   if (running) {
     $.ui.toast(busyNote(running))
     await onMoved?.()
@@ -295,7 +297,11 @@ async function finishDraft($: EngineInterface, agentId: string, answer: string, 
         isHandedOn: true,
       }
       await update($, drafts, list => [...list, handedOn])
-      await sendPrompt($, submitFollowUp(lead, answer), `Finishing the ${run.company} application`)
+      const label = `Finishing the ${run.company} application`
+      if (!(await sendPrompt($, submitFollowUp(lead, answer), label))) {
+        // It never reached the conversation, so nothing is asking: the lead is free again.
+        await update($, drafts, list => list.filter(one => one.task !== handedOn.task))
+      }
     }
     return
   }

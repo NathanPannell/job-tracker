@@ -558,6 +558,60 @@ describe('kanban', () => {
     )
   })
 
+  test('a handed-on prefill holds the lead from draft_package, and a dropped hand-off frees it', async ($, on) => {
+    const w = world(on, {
+      leads: [lead('acme-api', { company: 'Acme', column: 'ready' })],
+      applications: [
+        {
+          leadId: 'acme-api',
+          dir: 'packages/acme-api',
+          createdAt: '',
+          updatedAt: '',
+          files: {},
+          status: 'ready',
+        },
+      ],
+    })
+    let drop: string | undefined
+    on('prompt.submit', (_, e) => (drop ? { drop } : { text: e.text }))
+    on('turn.start', (_, e) => ({ turnId: e.turnId }))
+    on('turn.complete', (_, e) => ({ text: e.answer }))
+    const prefill = async (n: number) => {
+      await ui.press({ key: 'submit:acme-api' })
+      await $.turn.start({
+        text: w.spawns.at(-1)?.prompt ?? '',
+        turnId: `p-${n}`,
+        agentId: `a-${n}`,
+      })
+      await $.turn.complete({
+        answer: 'Tab: Acme — https://jobs.example/acme',
+        durationMs: 1,
+        isAborted: false,
+        turnId: `p-${n}`,
+        agentId: `a-${n}`,
+        reason: 'answer',
+      })
+    }
+    await start($)
+    const ui = await $.ui.mount({ ...pane, surface: 'desktop' })
+
+    // Handed on: the model is told no build runs, rather than that one does.
+    await prefill(1)
+    const held = await $.tool.call({ tool: 'mcp__job-tracker__draft_package', leadId: 'acme-api' })
+    expect(String((held as { result?: unknown }).result)).toBe(
+      'Error: The Acme application is prefilled; Claude asks about it in the conversation.',
+    )
+    expect(w.spawns).toHaveLength(1)
+
+    // A hand-off that never reached the conversation holds nothing.
+    await w.clock.advance(46 * 60_000)
+    drop = 'a hook refused it'
+    await prefill(2)
+    drop = undefined
+    await ui.press({ key: 'submit:acme-api' })
+    expect(w.spawns).toHaveLength(3)
+  })
+
   test('where no subagent can start, Draft asks the conversation to start one, queued until its turn', async ($, on) => {
     const w = world(on, { leads: [lead('acme-api', { company: 'Acme' })] })
     w.refuseSpawns('background tasks are disabled')
