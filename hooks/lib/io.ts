@@ -49,8 +49,8 @@ async function readText($: EngineInterface, path: string): Promise<string | unde
 
 /**
  * Reads the data files into the board value the pane and band draw from. A New lead whose
- * posting has passed a week is archived first (one `jobs archive`, only when there is one), so
- * the board never shows it; nothing runs on a timer.
+ * posting has passed a week, or whose aged score fell below 50, is archived first (one `jobs
+ * archive`, only when there is one), so the board never shows it; nothing runs on a timer.
  */
 export async function refresh($: EngineInterface, sweep = true): Promise<JobBoard> {
   const dir = await dataDir($)
@@ -80,7 +80,7 @@ export async function refresh($: EngineInterface, sweep = true): Promise<JobBoar
   }
   await update($, board, () => next)
   if (!sweep) return next
-  // Each stale lead is tried once a session: a failed or empty archive is not respawned.
+  // Each archivable lead is tried once a session: a failed or empty archive is not respawned.
   const tried = await read($, swept)
   const stale = next.leads
     .filter(lead => isArchivable(lead, loadedAt) && !tried.includes(lead.id))

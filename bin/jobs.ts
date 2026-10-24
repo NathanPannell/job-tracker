@@ -18,7 +18,7 @@ const USAGE = `jobs <command> [args] [--data <dir>]
   add <json|@file> [--threshold 60]      merge scouted leads (array), threshold on the aged score;
                                          archives stale New leads; prints
                                          added/updated/dropped/archived/alerts
-  archive                                move New leads posted over 7 days ago to Archived
+  archive                                move New leads posted over 7 days ago or scoring below 50 to Archived
   move <id> <column> [--reason r] [--by actor] [--note n]
   pass <id> <reason>
   score <id> too-high|too-low

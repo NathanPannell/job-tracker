@@ -153,9 +153,12 @@ test('a New lead posted over a week ago or scoring below 50 is archived; kept, s
       history: [{ at: AT, by: 'user', action: 'moved', from: 'archived', to: 'new' }],
     }),
     lead({ id: 'week', foundAt: daysAgo(7) }),
-    // Aged scores: 86 - 40 = 46 goes, 90 - 40 = 50 stays, as does a fresh 49 scout let in.
+    // Aged scores: 86 - 40 = 46 goes and 90 - 40 = 50 stays; a fresh 49 goes; a lead the person
+    // marked too low, or snoozed, stays at 46.
     lead({ id: 'low', foundAt: daysAgo(4) }),
     lead({ id: 'fifty', fitScore: 90, foundAt: daysAgo(4) }),
+    lead({ id: 'too-low', foundAt: daysAgo(4), scoreCorrection: 'too-low' }),
+    lead({ id: 'low-snoozed', foundAt: daysAgo(4), snoozedUntil: daysAgo(-1) }),
     lead({ id: 'fresh-low', fitScore: 49, foundAt: hoursAgo(1) }),
     lead({ id: 'kept', column: 'drafting', foundAt: daysAgo(9) }),
     lead({ id: 'kept-low', column: 'ready', foundAt: daysAgo(5) }),
@@ -172,6 +175,8 @@ test('a New lead posted over a week ago or scoring below 50 is archived; kept, s
       'new',
       'archived',
       'archived',
+      'new',
+      'new',
       'new',
       'archived',
       'drafting',

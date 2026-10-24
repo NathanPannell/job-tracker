@@ -211,7 +211,7 @@ declare module 'claude-code' {
       turning: boolean
       /** Prompts the pane sent whose turn has not started yet. */
       sent: SentPrompt[]
-      /** Stale leads this session already asked `jobs archive` to take; each is tried once. */
+      /** Archivable leads this session already asked `jobs archive` to take; each is tried once. */
       swept: string[]
       /** Package builds this session spawned as background subagents, until each one ends. */
       drafts: DraftRun[]

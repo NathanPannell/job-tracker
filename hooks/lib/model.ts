@@ -215,13 +215,16 @@ export const isStale = (lead: Pick<Lead, 'foundAt' | 'postedAt'>, now: number) =
 
 type Archivable = Pick<
   Lead,
-  'column' | 'fitScore' | 'foundAt' | 'postedAt' | 'snoozedUntil' | 'history'
+  'column' | 'fitScore' | 'foundAt' | 'postedAt' | 'snoozedUntil' | 'history' | 'scoreCorrection'
 >
 
-/** Why `archiveStale` takes a lead: its posting is past a week, or its aged score below 50. */
+/**
+ * Why `archiveStale` takes a lead: its posting is past a week, or its aged score below 50,
+ * unless the person said the score is too low.
+ */
 function archiveReason(lead: Archivable, now: number): string | undefined {
   if (isStale(lead, now)) return `posted over ${ARCHIVE_AFTER_DAYS} days ago`
-  if (effectiveScore(lead, now) < ARCHIVE_BELOW_SCORE) {
+  if (lead.scoreCorrection !== 'too-low' && effectiveScore(lead, now) < ARCHIVE_BELOW_SCORE) {
     return `score ${effectiveScore(lead, now)}, below ${ARCHIVE_BELOW_SCORE}`
   }
   return undefined
