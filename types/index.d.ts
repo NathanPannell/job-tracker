@@ -178,6 +178,8 @@ export type SentPrompt = {
  * names the agent, at the latest when its run starts with `task`.
  */
 export type DraftRun = {
+  /** A package build (absent, from before prefills) or an application's background prefill. */
+  kind?: 'draft' | 'submit'
   agentId?: string
   leadId: string
   company: string

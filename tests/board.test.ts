@@ -386,7 +386,7 @@ describe('kanban', () => {
     expect(w.leads().find(one => one.id === 'acme-api')?.snoozedUntil).toBeDefined()
   })
 
-  test('a Ready card offers Review and Approve and submit; approving asks in chat, redrafting builds aside', async ($, on) => {
+  test('a Ready card offers Review and Approve and submit; approving prefills in the background, then asks in chat', async ($, on) => {
     const w = world(on, {
       leads: [lead('acme-api', { company: 'Acme', column: 'ready' })],
       applications: [
@@ -405,6 +405,13 @@ describe('kanban', () => {
       prompts.push({ text: e.text, origin: e.origin })
       return { text: e.text }
     })
+    const toasts: string[] = []
+    on('ui.toast', (_, e) => {
+      toasts.push(e.text)
+      return { value: undefined }
+    })
+    on('turn.start', (_, e) => ({ turnId: e.turnId }))
+    on('turn.complete', (_, e) => ({ text: e.answer }))
     await start($)
     const ui = await $.ui.mount({ ...pane, surface: 'desktop' })
     expect(await ui.find({ key: 'review:acme-api', text: /^Review$/ })).toBeDefined()
@@ -414,16 +421,121 @@ describe('kanban', () => {
     ).toHaveLength(3)
     await ui.press({ key: 'open:acme-api' })
     await ui.press({ key: 'submit' })
-    expect(prompts[0]?.text).toContain('job-tracker:submit')
-    expect(prompts[0]?.text).toContain('ask me in one message for anything it is missing')
-    expect(prompts[0]?.text).toContain('stop before the final submit')
-    expect(prompts[0]?.origin).toEqual(expect.objectContaining({ kind: 'plugin', asUser: true }))
+    // The Chrome work runs aside: nothing reaches the conversation yet.
+    expect(prompts).toEqual([])
+    expect(w.spawns).toHaveLength(1)
+    expect(w.spawns[0]?.prompt).toContain('job-tracker:submit skill to prefill')
+    expect(w.spawns[0]?.prompt).toContain('"In the background" section')
+    expect(w.spawns[0]?.prompt).toContain('never click the final submit')
+    expect(toasts.at(-1)).toBe(
+      'Prefilling the Acme application in Chrome in the background; Claude asks here before submitting.',
+    )
     expect(await boardTab(ui)).toBe('tab:ready')
+    // A second press, or a redraft, while it runs starts nothing.
+    await ui.press({ key: 'submit:acme-api' })
     await ui.press({ key: 'open:acme-api' })
     await ui.press({ key: 'redraft' })
+    expect(w.spawns).toHaveLength(1)
+    expect(toasts.at(-1)).toBe('The Acme application is already being prefilled.')
+
+    // Its report goes to the conversation, which asks and submits on the person's yes.
+    const report = 'Tab: Acme — https://jobs.example/acme\nStopped at: filled, ready for review'
+    await $.turn.start({ text: w.spawns[0]?.prompt ?? '', turnId: 'p-1', agentId: 'agent-p' })
+    await $.turn.complete({
+      answer: report,
+      durationMs: 1,
+      isAborted: false,
+      turnId: 'p-1',
+      agentId: 'agent-p',
+      reason: 'answer',
+    })
     expect(prompts).toHaveLength(1)
-    expect(w.spawns[0]?.prompt).toContain('register it with --redraft')
+    expect(prompts[0]?.text).toContain('prefilled in Chrome by a background agent')
+    expect(prompts[0]?.text).toContain('from step 4')
+    expect(prompts[0]?.text).toContain('only after my yes here')
+    expect(prompts[0]?.text).toContain(`REPORT:\n${report}`)
+    expect(prompts[0]?.origin).toEqual(expect.objectContaining({ kind: 'plugin', asUser: true }))
+    expect(w.leads()[0]?.column).toBe('ready')
+
+    // Once it ended, the lead can be redrafted.
+    await ui.press({ key: 'open:acme-api' })
+    await ui.press({ key: 'redraft' })
+    expect(w.spawns[1]?.prompt).toContain('register it with --redraft')
     expect(w.leads()[0]?.column).toBe('drafting')
+  })
+
+  test('a prefill that cannot start, stops or finds no Chrome hands the application to the conversation', async ($, on) => {
+    const w = world(on, {
+      leads: [lead('acme-api', { company: 'Acme', column: 'ready' })],
+      applications: [
+        {
+          leadId: 'acme-api',
+          dir: 'packages/acme-api',
+          createdAt: '',
+          updatedAt: '',
+          files: {},
+          status: 'ready',
+        },
+      ],
+    })
+    const prompts: string[] = []
+    on('prompt.submit', (_, e) => {
+      prompts.push(e.text)
+      return { text: e.text }
+    })
+    const toasts: string[] = []
+    on('ui.toast', (_, e) => {
+      toasts.push(e.text)
+      return { value: undefined }
+    })
+    on('turn.start', (_, e) => ({ turnId: e.turnId }))
+    on('turn.complete', (_, e) => ({ text: e.answer }))
+    const end = (n: number, answer: string, reason: 'answer' | 'aborted') =>
+      $.turn.complete({
+        answer,
+        durationMs: 1,
+        isAborted: reason === 'aborted',
+        turnId: `p-${n}`,
+        agentId: `agent-${n}`,
+        reason,
+      })
+    await start($)
+    const ui = await $.ui.mount({ ...pane, surface: 'desktop' })
+
+    // Refused: the conversation does all of it, as before.
+    w.refuseSpawns('background tasks are disabled')
+    await ui.press({ key: 'submit:acme-api' })
+    expect(prompts).toHaveLength(1)
+    expect(prompts[0]).toContain('Use the job-tracker:submit skill: prefill the application')
+    expect(prompts[0]).toContain('stop before the final submit')
+    w.refuseSpawns(undefined)
+    await $.turn.start({ text: prompts[0] ?? '', turnId: 't-1' })
+    await $.turn.complete({
+      answer: 'Asked.',
+      durationMs: 1,
+      isAborted: false,
+      turnId: 't-1',
+      reason: 'answer',
+    })
+
+    // Stopped: a toast, and the next press starts it again.
+    await ui.press({ key: 'submit:acme-api' })
+    await $.turn.start({ text: w.spawns[0]?.prompt ?? '', turnId: 'p-1', agentId: 'agent-1' })
+    await end(1, '', 'aborted')
+    expect(toasts.at(-1)).toBe(
+      'The Acme application prefill stopped (aborted); Approve and submit starts it again.',
+    )
+    expect(prompts).toHaveLength(1)
+
+    // No Chrome in the background: the conversation does all of it, with the reason.
+    await ui.press({ key: 'submit:acme-api' })
+    expect(w.spawns).toHaveLength(2)
+    await $.turn.start({ text: w.spawns[1]?.prompt ?? '', turnId: 'p-2', agentId: 'agent-2' })
+    await end(2, 'CHROME UNAVAILABLE: no browser is connected', 'answer')
+    expect(prompts).toHaveLength(2)
+    expect(prompts[1]).toContain('Use the job-tracker:submit skill: prefill the application')
+    expect(prompts[1]).toContain('could not drive Chrome, so do all of it here')
+    expect(prompts[1]).toContain('no browser is connected')
   })
 
   test('where no subagent can start, Draft asks the conversation to start one, queued until its turn', async ($, on) => {

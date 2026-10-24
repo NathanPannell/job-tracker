@@ -14,6 +14,9 @@ import {
   isColumn,
   leadsToMention,
   nudgeContext,
+  submitFollowUp,
+  submitRelay,
+  submitTask,
 } from './lib/model.ts'
 import type { Column, Lead } from './lib/model.ts'
 import { boardView, leadView, packageView, PAGE, proposalsView } from './views.tsx'
@@ -128,15 +131,15 @@ async function draftPackage(
   const redraft = (await read($, board)).applications.some(one => one.leadId === lead.id)
   const task = draftTask(lead, redraft)
   // Claimed before anything slow, so a second press or tool call meanwhile starts nothing.
-  let isClaimed = false
-  await update($, drafts, list => {
-    const live = list.filter(one => at - one.at < DRAFT_FOR_MS)
-    if (live.some(one => one.leadId === lead.id)) return live
-    isClaimed = true
-    return [...live, { leadId: lead.id, company: lead.company, task, at }]
+  const running = await claimRun($, {
+    kind: 'draft',
+    leadId: lead.id,
+    company: lead.company,
+    task,
+    at,
   })
-  if (!isClaimed) {
-    $.ui.toast(`The ${lead.company} package is already being drafted.`)
+  if (running) {
+    $.ui.toast(busyNote(running))
     await onMoved?.()
     return { ok: true, ran: 'already-drafting' }
   }
@@ -190,6 +193,65 @@ async function draftPackage(
   return { ok: true, ran: 'conversation' }
 }
 
+/**
+ * Claims a lead for one background run, before anything slow, so a second press or tool call
+ * meanwhile starts nothing: answers the run already going for that lead, if there is one.
+ */
+async function claimRun($: EngineInterface, run: DraftRun): Promise<DraftRun | undefined> {
+  let running: DraftRun | undefined
+  await update($, drafts, list => {
+    const live = list.filter(one => run.at - one.at < DRAFT_FOR_MS)
+    running = live.find(one => one.leadId === run.leadId)
+    return running ? live : [...live, run]
+  })
+  return running
+}
+
+/** What a press says when the lead already has a background run going. */
+const busyNote = (run: DraftRun) =>
+  run.kind === 'submit'
+    ? `The ${run.company} application is already being prefilled.`
+    : `The ${run.company} package is already being drafted.`
+
+/**
+ * Prefills an approved package's application in Chrome off the person's conversation: a
+ * background subagent runs the submit skill's slow part and never submits. Its report goes to
+ * the conversation when it ends (`finishDraft`), where the person answers what is missing and
+ * says yes. Where the engine refuses the spawn, the conversation is asked to do all of it.
+ */
+async function submitApplication($: EngineInterface, lead: Lead) {
+  const at = await $.clock.now()
+  const task = submitTask(lead)
+  const running = await claimRun($, {
+    kind: 'submit',
+    leadId: lead.id,
+    company: lead.company,
+    task,
+    at,
+  })
+  if (running) {
+    $.ui.toast(busyNote(running))
+    return
+  }
+  const label = `Prefilling the ${lead.company} application`
+  try {
+    const spawned = await $.agent.spawn({
+      prompt: task,
+      description: `Prefill ${lead.company} application`,
+      subagentType: 'general-purpose',
+    })
+    if (spawned.deny === undefined) {
+      if (spawned.agentId) await startDraft($, spawned.agentId, task)
+      $.ui.toast(`${label} in Chrome in the background; Claude asks here before submitting.`)
+      return
+    }
+  } catch {
+    // the conversation does it instead, below
+  }
+  await update($, drafts, list => list.filter(one => one.task !== task))
+  await sendPrompt($, submitRelay(lead), label)
+}
+
 /** A subagent's run started: a build spawned without an id learns it from its prompt. */
 async function startDraft($: EngineInterface, agentId: string, text: string) {
   const list = await read($, drafts)
@@ -199,12 +261,26 @@ async function startDraft($: EngineInterface, agentId: string, text: string) {
   await update($, drafts, runs => runs.map((one, n) => (n === at ? { ...one, agentId } : one)))
 }
 
-/** A package build's subagent ended: the board shows where its card went, a toast says how. */
+/**
+ * A background run's subagent ended. A package build: the board shows where its card went, a
+ * toast says how. A prefill: its report goes to the conversation, which asks before submitting.
+ */
 async function finishDraft($: EngineInterface, agentId: string, answer: string, reason: string) {
   const run = (await read($, drafts)).find(one => one.agentId === agentId)
   if (!run) return
   await update($, drafts, list => list.filter(one => one.agentId !== agentId))
   await refresh($)
+  if (run.kind === 'submit') {
+    const lead = (await read($, board)).leads.find(one => one.id === run.leadId)
+    if (reason === 'answer' && lead) {
+      await sendPrompt($, submitFollowUp(lead, answer), `Finishing the ${run.company} application`)
+    } else {
+      $.ui.toast(
+        `The ${run.company} application prefill stopped (${reason}); Approve and submit starts it again.`,
+      )
+    }
+    return
+  }
   const line = answer.trim().split('\n')[0]?.trim() ?? ''
   $.ui.toast(
     reason === 'answer'
@@ -283,15 +359,8 @@ function actions($: EngineInterface): Actions {
     draft: lead => void draftPackage($, lead, true, () => leave($, lead)),
     review: (lead, tab: PackageTab = 'resume') =>
       void show($, { kind: 'package', id: lead.id, tab }),
-    // Back to the board first: the prompt can wait for the current reply to end.
-    submit: lead =>
-      void leave($, lead).then(() =>
-        sendPrompt(
-          $,
-          `I approved the package for lead ${lead.id} (${lead.company} — ${lead.role}) on the job board. Use the job-tracker:submit skill: prefill the application, ask me in one message for anything it is missing, and stop before the final submit so I can confirm here.`,
-          `Prefilling the ${lead.company} application`,
-        ),
-      ),
+    // Back to the board first: a relayed prompt can wait for the current reply to end.
+    submit: lead => void leave($, lead).then(() => submitApplication($, lead)),
     openPdf: path => void openFile($, path),
     decide: (id, decision) =>
       void act($, decision === 'approve' ? 'Applying the proposal' : 'Rejecting the proposal', [

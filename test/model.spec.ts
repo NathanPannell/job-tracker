@@ -29,6 +29,10 @@ import {
   missingSummaries,
   patchLead,
   snoozeLead,
+  CHROME_UNAVAILABLE,
+  submitFollowUp,
+  submitRelay,
+  submitTask,
   TAGLINE_LIMIT,
 } from '../hooks/lib/model.ts'
 import type { IncomingLead, Lead, LeadsFile } from '../hooks/lib/model.ts'
@@ -303,6 +307,28 @@ test('a draft runs as a background subagent; the conversation only relays it', (
   assert.ok(relay.endsWith(`\n\nPROMPT: ${task}`))
   const quoted = { ...lead, company: 'The "Best" Co' }
   assert.ok(draftRelay(quoted, draftTask(quoted, false)).endsWith(draftTask(quoted, false)))
+})
+
+test('a prefill runs aside and never submits; its report goes to the conversation', () => {
+  const lead = { id: 'acme-api', company: 'Acme', role: 'Backend Developer' }
+  const task = submitTask(lead)
+  assert.match(
+    task,
+    /job-tracker:submit skill to prefill .* lead acme-api \(Acme — Backend Developer\)/,
+  )
+  assert.match(task, /never click the final submit/)
+  assert.match(task, new RegExp(CHROME_UNAVAILABLE))
+  assert.match(submitRelay(lead), /stop before the final submit so I can confirm here/)
+  const next = submitFollowUp(lead, '  Tab: Acme — https://jobs.example\n')
+  assert.match(next, /from step 4/)
+  assert.match(next, /only after my yes here/)
+  assert.ok(next.endsWith('REPORT:\nTab: Acme — https://jobs.example'))
+  assert.ok(submitFollowUp(lead, '').endsWith('REPORT:\n(no report)'))
+  const long = submitFollowUp(lead, 'x'.repeat(9000))
+  assert.ok(long.endsWith(`${'x'.repeat(7999)}…`))
+  const here = submitFollowUp(lead, `${CHROME_UNAVAILABLE}: no browser`)
+  assert.ok(here.startsWith(submitRelay(lead)))
+  assert.match(here, /do all of it here/)
 })
 
 test('a move to the column a lead is already in records nothing', () => {
