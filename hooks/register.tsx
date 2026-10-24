@@ -509,7 +509,7 @@ export const register: Register = on => {
 
   on('command.run', { command: 'jobs' }, async $ => {
     await refresh($)
-    await update($, view, () => ({ kind: 'board' }) as JobView)
+    await show($, { kind: 'board' })
     const opened = await openPane($)
     const c = counts({ version: 1, leads: (await read($, board)).leads }, await $.clock.now())
     return {
@@ -730,7 +730,7 @@ function paneFailure($: EngineInterface, e: RenderInput<'Pane'>, why: string) {
           key="pane-reset"
           label="Back to the board"
           onPress={() =>
-            void update($, view, () => ({ kind: 'board' }) as JobView)
+            void show($, { kind: 'board' })
               .then(() => update($, stage, () => null))
               .then(() => update($, shown, () => PAGE))
               .then(() => refresh($))

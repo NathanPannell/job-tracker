@@ -284,6 +284,23 @@ describe('kanban', () => {
     })
   }
 
+  test('reasons left open on a card stay only where the card can still pass', async ($, on) => {
+    const w = world(on, { leads: [lead('acme-api', { company: 'Acme' })] })
+    on('turn.start', (_, e) => ({ turnId: e.turnId }))
+    await start($)
+    const ui = await $.ui.mount({ ...pane, surface: 'desktop' })
+    await ui.press({ key: 'pass:acme-api' })
+    await ui.press({ key: 'draft:acme-api' })
+    expect(w.leads()[0]?.column).toBe('drafting')
+    await ui.press({ key: 'tab:drafting' })
+    expect(await ui.find({ key: 'card:acme-api' })).toBeDefined()
+    expect(await ui.find({ text: /Why pass\?/ })).toBeUndefined()
+    await ui.press({ key: 'open:acme-api' })
+    await ui.press({ key: 'pass-any' })
+    expect(await ui.find({ key: 'reason:Too senior' })).toBeDefined()
+    await ui.unmount()
+  })
+
   test('a rejection is an outcome, not a pass, and can be undone in place', async ($, on) => {
     const w = world(on, { leads: [lead('acme-api', { company: 'Acme', column: 'applied' })] })
     await start($)

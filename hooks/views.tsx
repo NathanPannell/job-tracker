@@ -157,6 +157,9 @@ function stageButtons(ctx: ViewContext, lead: Lead, suffix: string): RenderEleme
   ))
 }
 
+/** Whether the lead's stage offers Pass among its own actions (New does). */
+const passInStage = (lead: Lead) => STAGE_ACTIONS[lead.column].some(one => one.kind === 'pass')
+
 /**
  * The reasons a pass is recorded with, drawn under the row whose Pass opened them: one more
  * press records the pass for the weekly review.
@@ -216,7 +219,7 @@ function card(ctx: ViewContext, lead: Lead): RenderElement {
           {stageButtons(ctx, lead, `:${lead.id}`)}
         </Box>
       )}
-      {passReasons(ctx, lead, `:${lead.id}`)}
+      {passInStage(lead) && passReasons(ctx, lead, `:${lead.id}`)}
     </Box>
   )
 }
@@ -328,7 +331,8 @@ export function leadView(ctx: ViewContext, id: string): RenderElement {
   const act = ctx.act
   const passing = ctx.passing === lead.id
   // The reasons open under the row that holds the lead's Pass button.
-  const passInStage = STAGE_ACTIONS[lead.column].some(action => action.kind === 'pass')
+  const passFromStage = passInStage(lead)
+  const passFromOther = lead.column !== 'passed' && !passFromStage
   return (
     <Box flexDirection="column" gap={1}>
       {header(ctx, `${lead.company} — ${lead.role}`, true)}
@@ -372,9 +376,9 @@ export function leadView(ctx: ViewContext, id: string): RenderElement {
               <Button key="review-any" label="Review package" onPress={() => act.review(lead)} />
             )}
           </Box>
-          {passInStage && passReasons(ctx, lead, '')}
+          {passFromStage && passReasons(ctx, lead, '')}
           <Box key="other" flexDirection="row" gap={1} flexWrap="wrap">
-            {lead.column !== 'passed' && !passInStage && (
+            {passFromOther && (
               <Button
                 key="pass-any"
                 label="Pass…"
@@ -393,7 +397,7 @@ export function leadView(ctx: ViewContext, id: string): RenderElement {
               />
             )}
           </Box>
-          {!passInStage && passReasons(ctx, lead, '')}
+          {passFromOther && passReasons(ctx, lead, '')}
           <Box key="feedback" flexDirection="row" gap={1} flexWrap="wrap" alignItems="center">
             <Text dimColor>Feedback</Text>
             <Button
