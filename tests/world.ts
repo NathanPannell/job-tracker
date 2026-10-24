@@ -52,6 +52,9 @@ export type World = {
   clock: ReturnType<typeof mock.clock>
   files: Map<string, string>
   runs: string[][]
+  spawns: { prompt: string; description?: string; subagentType?: string }[]
+  /** Makes every later spawn refused with `reason`; undefined lets them start again. */
+  refuseSpawns: (reason: string | undefined) => void
   leads: () => Lead[]
   feedback: () => FeedbackFile['events']
 }
@@ -76,6 +79,7 @@ export function world(
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('command.register', (_, e) => ({ value: { command: e.name } }))
   on('tool.register', (_, e) => ({ value: { tool: `mcp__job-tracker__${e.name}` } }))
+  on('ui.log', () => ({ value: undefined }))
   on('fs.read', (_, e) => {
     const text = files.get(e.path.replace(/^[A-Za-z]:/, '').replace(/\\/g, '/'))
     return text === undefined ? { deny: `ENOENT ${e.path}` } : { value: text }
@@ -90,6 +94,16 @@ export function world(
     if (result.event) put('feedback.json', appendEvent(feedbackFile(), result.event))
     return { exitCode: 0, stdout: '{}', stderr: '' }
   }
+
+  // A subagent starts. Core would answer with its id; the kit hands the plugin none, so a test
+  // raises the run's `turn.start` (with its prompt) and `turn.complete` under an id of its own.
+  const spawns: { prompt: string; description?: string; subagentType?: string }[] = []
+  let refusal: string | undefined
+  on('agent.spawn', (_, e) => {
+    if (refusal !== undefined) return { deny: refusal }
+    spawns.push({ prompt: e.prompt, description: e.description, subagentType: e.subagentType })
+    return { model: 'test-model' }
+  })
 
   on('process.run', (_, e) => ({
     value: { ...run([...e.argv]), isStdoutTruncated: false, isStderrTruncated: false },
@@ -145,6 +159,10 @@ export function world(
     clock,
     files,
     runs,
+    spawns,
+    refuseSpawns: reason => {
+      refusal = reason
+    },
     leads: () => leadsFile().leads,
     feedback: () => feedbackFile().events,
   }

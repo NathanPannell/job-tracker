@@ -84,8 +84,8 @@ You never apply, email anyone, create accounts, or log into job sites.
    the two or three biggest factors, e.g. `Backend APIs + applied AI, hybrid in their city; asks 3+ yrs`.
    Keep `comp` as posted ("" if none) and `location` as posted. Score the fit only, not the
    posting's age: the board ages scores itself from `postedAt`.
-   For each posting you keep (60+), also write what the person sees when they open the card;
-   `fitReason` stays the match one-liner on the card:
+   For each posting you keep (60+), also write what the person sees on the card and when they
+   open it (`fitReason` shows there as "Why this score"):
    - `companyBlurb`: one sentence that says concretely what the company makes: the product
      category, who it is for, and the flagship product or app by name when one is known. Stage,
      size or location may follow as a second clause, never on their own. E.g.
@@ -100,27 +100,43 @@ You never apply, email anyone, create accounts, or log into job sites.
      the search results only; the Rules below still forbid visiting those sites). If it still
      cannot be found, say so plainly, e.g. `What <Company> builds isn't stated in the posting or
      on its site; <City>, 1-10 people.`
+   - `tagline`: the card's one-liner, **at most 40 characters** (count them), on one line. The
+     same rule as `companyBlurb`: say what they make, never pad. Name the product or the
+     category and who it is for, or what the role is when that is what stands out. No company
+     name (the card already shows it), no size, stage, funding, location or "fast-growing", no
+     full stop. E.g. `Scheduling software for home-care agencies` is too long; `Home-care
+     scheduling software` fits. `Business banking for startups`, `Consumer productivity apps`,
+     `LLM evals platform; owns the eval API`. Write it from the `companyBlurb` once that is
+     settled. When what the company builds cannot be found, use what the role is instead, e.g.
+     `Backend APIs for an unnamed fintech`.
    - `roleHighlights`: 2-4 short points (under 15 words each) on what is distinctive about this
      role: team, product, stack, comp or equity, remote setup, anything unusual. Not the
      generic duties every posting lists.
-   Take both from the posting's `description` and, where that is thin, the company's own posting
+   Take them from the posting's `description` and, where that is thin, the company's own posting
    or careers page (never LinkedIn or Indeed), plus the lookup above for `companyBlurb`. Never
    invent a fact: leave `roleHighlights` out rather than guess.
 5. Write the scored list to `$JOB_TRACKER_DATA/scout/candidates-<YYYYMMDD-HHMM>.json` as a JSON array of
-   `{ company, role, url, source, location, comp, fitScore, fitReason, companyBlurb?, roleHighlights?, postedAt?, closesAt? }`
+   `{ company, role, url, source, location, comp, fitScore, fitReason, companyBlurb?, tagline?, roleHighlights?, postedAt?, closesAt? }`
    (`postedAt` as the source gave it, ISO; omit it when unknown) and run
    `jobs add @<that file> --threshold 60`. It dedupes again, drops a new lead whose score, aged by
    `postedAt`, is under 60 (10 points off a day, so an older posting must fit better to get on)
    or whose posting is over 7 days old, archives New leads past 7 days, and prints `added`,
-   `updated`, `dropped`, `archived` and `alerts` (added leads whose aged `score` is 90+).
-   Then backfill: `jobs summaries` lists open leads still missing a `companyBlurb` or
-   `roleHighlights` (`{ id, company, role, url, source }`). For each, read the posting at `url`
-   (when it is a LinkedIn or Indeed link, find the role on the company's own careers page or ATS
-   board instead; if you cannot find it, write only a missing `companyBlurb`, from the lookup
-   above), write the missing fields by the same rules, save them as
+   `updated`, `dropped`, `archived`, `alerts` (added leads whose aged `score` is 90+) and
+   `warnings` (leads added without a tagline that was over 60 characters or not one line; the
+   backfill below writes it again).
+   Then backfill: `jobs summaries` lists open leads still missing a `companyBlurb`, `tagline` or
+   `roleHighlights` (`{ id, company, role, url, source, missing, companyBlurb? }`: `missing` names
+   the fields to write, and `companyBlurb` is there when the lead already has one). A lead whose
+   only missing field is `tagline` needs no lookup: write the tagline from its `companyBlurb` by
+   the rule above, for every such lead. For each other lead, read the posting at `url` (when it
+   is a LinkedIn or Indeed link, find the role on the company's own careers page or ATS board
+   instead; if you cannot find it, write only a missing `companyBlurb` and `tagline`, from the
+   lookup above), and write the missing fields by the same rules. Save them as
    `$JOB_TRACKER_DATA/scout/summaries-<YYYYMMDD-HHMM>.json`, an array of
-   `{ id, companyBlurb?, roleHighlights? }`, and run `jobs summaries @<that file>`. It prints the
-   `updated` ids and any `errors`. At most 15 leads per run; the rest wait for the next one.
+   `{ id, companyBlurb?, tagline?, roleHighlights? }`, and run `jobs summaries @<that file>`. It
+   prints the `updated` ids and any `errors` (a tagline over 60 characters is refused: shorten
+   it and run again). At most 15 leads that need a lookup per run; the rest wait for the next
+   one. Taglines written from a blurb do not count towards the 15.
 6. Run `jobs gmail done <newest>` only when all of these hold: the Gmail source returned without
    an error, `newest` is not null, and `jobs add` in step 5 succeeded. Otherwise skip it: the next
    run reads the same mail again (dedupe keeps the board clean).

@@ -32,7 +32,6 @@ export type {
 
 export const COLUMNS = [
   'new',
-  'shortlisted',
   'drafting',
   'ready',
   'applied',
@@ -45,7 +44,6 @@ export const COLUMNS = [
 /** The columns of the board's main row, in order; Passed and Archived sit apart. */
 export const PIPELINE: readonly Column[] = [
   'new',
-  'shortlisted',
   'drafting',
   'ready',
   'applied',
@@ -55,7 +53,6 @@ export const PIPELINE: readonly Column[] = [
 
 export const COLUMN_TITLES: Record<Column, string> = {
   new: 'New',
-  shortlisted: 'Shortlisted',
   drafting: 'Drafting',
   ready: 'Ready to review',
   applied: 'Applied',
@@ -64,6 +61,10 @@ export const COLUMN_TITLES: Record<Column, string> = {
   passed: 'Passed',
   archived: 'Archived',
 }
+
+/** A column's title, or the name itself for one the board no longer has (`shortlisted`). */
+export const columnTitle = (column: string): string =>
+  isColumn(column) ? COLUMN_TITLES[column] : column
 
 /**
  * What a card offers in each column, the column's next step first. `move` goes to `to`;
@@ -83,17 +84,13 @@ const backTo = (to: Column): StageAction => ({
 
 export const STAGE_ACTIONS: Record<Column, readonly StageAction[]> = {
   new: [
-    { key: 'shortlist', label: 'Shortlist', kind: 'move', to: 'shortlisted', primary: true },
-    { key: 'pass', label: 'Pass…', kind: 'pass' },
-  ],
-  shortlisted: [
     { key: 'draft', label: 'Draft package', kind: 'draft', primary: true },
-    backTo('new'),
+    { key: 'pass', label: 'Pass', kind: 'pass' },
   ],
-  drafting: [backTo('shortlisted')],
+  drafting: [backTo('new')],
   ready: [
-    { key: 'review', label: 'Review package', kind: 'review', primary: true },
-    { key: 'submit', label: 'Approve & submit', kind: 'submit' },
+    { key: 'review', label: 'Review', kind: 'review', primary: true },
+    { key: 'submit', label: 'Approve and submit', kind: 'submit' },
   ],
   // What a company decided is an outcome, never a pass: passes are the person's own choices,
   // which the weekly review reads as such. Reasons follow the sync skill's "<kind>: <line>".
@@ -167,7 +164,8 @@ export function previousColumn(lead: Pick<Lead, 'column' | 'history'>): Column |
   const last = [...lead.history]
     .reverse()
     .find(entry => entry.action === 'moved' && entry.to === lead.column)
-  return last?.from && last.from !== lead.column ? last.from : undefined
+  // An entry from before Shortlisted was removed may name it: there is no going back there.
+  return last?.from && last.from !== lead.column && isColumn(last.from) ? last.from : undefined
 }
 
 /** The stage the board opens on: New while it has leads, else the first stage that has any. */
@@ -187,7 +185,7 @@ export const ARCHIVE_AFTER_DAYS = 7
 /** The most age takes off: a week's worth, where a lead the person kept stops sinking. */
 export const DECAY_MAX_POINTS = DECAY_POINTS_PER_DAY * ARCHIVE_AFTER_DAYS
 /** Columns whose leads age: not applied yet, so a stale posting is less worth the time. */
-export const DECAYING_COLUMNS: readonly Column[] = ['new', 'shortlisted', 'drafting', 'ready']
+export const DECAYING_COLUMNS: readonly Column[] = ['new', 'drafting', 'ready']
 
 const DAY_MS = 86_400_000
 const HOUR_MS = 3_600_000
@@ -227,8 +225,8 @@ export const isArchivable = (
   !lead.history.some(entry => entry.action === 'moved' && entry.to === 'new')
 
 /**
- * Archives New leads whose posting is over a week old. Only New: a lead the person shortlisted
- * or is drafting stays where they put it. No feedback event, since the person made no call.
+ * Archives New leads whose posting is over a week old. Only New: a lead the person is drafting
+ * or moved on stays where they put it. No feedback event, since the person made no call.
  */
 export function archiveStale(
   file: LeadsFile,
@@ -466,6 +464,7 @@ export type LeadPatch = Partial<
     | 'fitScore'
     | 'fitReason'
     | 'companyBlurb'
+    | 'tagline'
     | 'roleHighlights'
     | 'notes'
     | 'followUpAt'
@@ -484,6 +483,7 @@ const PATCH_KEYS: readonly (keyof LeadPatch)[] = [
   'fitScore',
   'fitReason',
   'companyBlurb',
+  'tagline',
   'roleHighlights',
   'notes',
   'followUpAt',
@@ -543,11 +543,21 @@ export function patchLead(
   return { leads: replaceLead(next.leads, updated), event: next.event }
 }
 
-/** Why a company blurb or role highlights are malformed; undefined when they are fine or absent. */
-export function checkSummary(fields: Pick<Lead, 'companyBlurb' | 'roleHighlights'>) {
-  const { companyBlurb, roleHighlights } = fields
+/** The length a tagline aims for; the card clips a longer one with an ellipsis. */
+export const TAGLINE_CHARS = 40
+/** A tagline longer than this is a sentence, not a tagline, and is refused. */
+export const TAGLINE_LIMIT = 60
+
+/** Why a summary field is malformed; undefined when they are fine or absent. */
+export function checkSummary(fields: Pick<Lead, 'companyBlurb' | 'tagline' | 'roleHighlights'>) {
+  const { companyBlurb, tagline, roleHighlights } = fields
   if (companyBlurb !== undefined && typeof companyBlurb !== 'string') {
     return 'companyBlurb must be a string'
+  }
+  if (tagline !== undefined && typeof tagline !== 'string') return 'tagline must be a string'
+  if (tagline !== undefined && /[\r\n]/.test(tagline)) return 'tagline must be one line'
+  if (tagline !== undefined && tagline.trim().length > TAGLINE_LIMIT) {
+    return `tagline must be about ${TAGLINE_CHARS} characters, not ${tagline.trim().length}`
   }
   if (
     roleHighlights !== undefined &&
@@ -558,17 +568,40 @@ export function checkSummary(fields: Pick<Lead, 'companyBlurb' | 'roleHighlights
   return undefined
 }
 
-/** Whether a lead has a company blurb or role highlights worth showing (blank ones are not). */
+/** Whether a lead has a summary field worth showing (blank ones are not). */
 export const hasBlurb = (lead: Pick<Lead, 'companyBlurb'>) => Boolean(lead.companyBlurb?.trim())
+export const hasTagline = (lead: Pick<Lead, 'tagline'>) => Boolean(lead.tagline?.trim())
 export const hasHighlights = (lead: Pick<Lead, 'roleHighlights'>) =>
   (lead.roleHighlights ?? []).some(one => one.trim() !== '')
 
-/** Leads still in play (not passed or archived) that lack a company blurb or role highlights. */
+export type SummaryField = 'companyBlurb' | 'tagline' | 'roleHighlights'
+
+/**
+ * Leads still in play (not passed or archived) that lack a company blurb, tagline or role
+ * highlights: the fields each lacks, and its blurb when it has one, since a tagline can be
+ * written from the blurb without reading the posting again.
+ */
 export function missingSummaries(file: LeadsFile) {
   return file.leads
     .filter(lead => lead.column !== 'passed' && lead.column !== 'archived')
-    .filter(lead => !hasBlurb(lead) || !hasHighlights(lead))
-    .map(({ id, company, role, url, source }) => ({ id, company, role, url, source }))
+    .map(lead => {
+      const missing: SummaryField[] = [
+        ...(hasBlurb(lead) ? [] : ['companyBlurb' as const]),
+        ...(hasTagline(lead) ? [] : ['tagline' as const]),
+        ...(hasHighlights(lead) ? [] : ['roleHighlights' as const]),
+      ]
+      const { id, company, role, url, source, companyBlurb } = lead
+      return {
+        id,
+        company,
+        role,
+        url,
+        source,
+        missing,
+        ...(hasBlurb(lead) ? { companyBlurb } : {}),
+      }
+    })
+    .filter(one => one.missing.length > 0)
 }
 
 export type IncomingLead = Omit<
@@ -611,6 +644,7 @@ export function addLeads(
         closesAt: one.closesAt ?? existing.closesAt,
         // Fills a summary the card lacks; never replaces one already written.
         ...(!hasBlurb(existing) && one.companyBlurb ? { companyBlurb: one.companyBlurb } : {}),
+        ...(!hasTagline(existing) && one.tagline?.trim() ? { tagline: one.tagline } : {}),
         ...(!hasHighlights(existing) && one.roleHighlights?.length
           ? { roleHighlights: one.roleHighlights }
           : {}),
@@ -670,6 +704,32 @@ const uniqueId = (leads: readonly Lead[], id: string) => {
   let candidate = id
   for (let n = 2; leads.some(lead => lead.id === candidate); n += 1) candidate = `${id}-${n}`
   return candidate
+}
+
+/** Columns the board once had, and where their leads go now. */
+const RETIRED_COLUMNS: Readonly<Record<string, Column>> = { shortlisted: 'new' }
+
+/**
+ * Moves leads out of a column the board no longer has (Shortlisted, into New), with a history
+ * entry saying so. That entry also keeps such a lead from being archived as stale, since the
+ * person chose to keep it. Returns `file` itself when nothing moved.
+ */
+export function migrateLeads(file: LeadsFile, at: string): LeadsFile {
+  const retired = (lead: Lead): Column | undefined => RETIRED_COLUMNS[lead.column]
+  if (!file.leads.some(retired)) return file
+  return {
+    ...file,
+    leads: file.leads.map(lead => {
+      const to = retired(lead)
+      if (!to) return lead
+      const note = `${lead.column} was removed from the board`
+      return {
+        ...lead,
+        column: to,
+        history: [...lead.history, { at, by: 'tracker' as const, action: 'moved', to, note }],
+      }
+    }),
+  }
 }
 
 const replaceLead = (file: LeadsFile, lead: Lead): LeadsFile => ({
@@ -762,6 +822,37 @@ export function nudgeContext(leads: readonly Lead[], now: number): string {
     'Then end your reply with exactly one short line (under 30 words) that names these new job',
     `leads and says they are on the board at /jobs: ${named}.`,
     'Do not mention job leads anywhere else in the reply, and do not act on them unless asked.',
+  ].join(' ')
+}
+
+type Named = Pick<Lead, 'id' | 'company' | 'role'>
+
+/**
+ * The task a background subagent gets to build one lead's package. Building never runs in the
+ * person's own conversation: it takes several minutes and would hold the chat while it does.
+ */
+export function draftTask(lead: Named, redraft: boolean): string {
+  return [
+    `Use the job-tracker:package skill to build the application package for lead ${lead.id}`,
+    `(${lead.company} — ${lead.role}); its steps are in $JOB_TRACKER_HOME/skills/package/SKILL.md.`,
+    'The card is already in Drafting.',
+    redraft ? 'This rebuilds a package the person already saw: register it with --redraft.' : '',
+    'You run in the background and nobody can answer a question here: where the record has no',
+    'answer, write NEEDS ANSWER as the skill says, and finish with its brief reply.',
+  ]
+    .filter(Boolean)
+    .join(' ')
+}
+
+/** What the person's conversation is asked when the pane could not start the subagent itself. */
+export function draftRelay(lead: Named, task: string): string {
+  return [
+    `Draft the application package for lead ${lead.id} (${lead.company} — ${lead.role}) in a`,
+    'background subagent, not in this thread: call the Agent tool once with',
+    'subagent_type "general-purpose", run_in_background: true and, as its prompt, exactly the',
+    'text after "PROMPT:" below. Then reply in one line that the package is being drafted in',
+    "the background, and when the agent reports back, give its result in one line. Don't build",
+    `any of the package yourself.\n\nPROMPT: ${task}`,
   ].join(' ')
 }
 
