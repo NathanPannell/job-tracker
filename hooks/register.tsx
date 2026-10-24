@@ -536,8 +536,11 @@ export const register: Register = on => {
   // A drawing that fails (throws, overruns its budget, or returns a tree the surface refuses)
   // shows why and a way back to the board, never a blank pane.
   on('ui.render', { component: 'Pane', requestId: 'jobs' }, async ($, e) => {
+    const started = await $.clock.now()
     try {
-      return await drawPane($, e)
+      const tree = await drawPane($, e)
+      await noteFirstDraw($, e.surface, started)
+      return tree
     } catch (error) {
       return paneFailure($, e, describeError(error))
     }
@@ -545,6 +548,24 @@ export const register: Register = on => {
     const { kind, message } = next.error
     return paneFailure($, e, `${kind}${message ? `: ${message}` : ''}`)
   })
+}
+
+/** Whether this load's first drawing of the pane has been reported. */
+let isFirstDrawNoted = false
+
+/**
+ * Says once a load that the pane drew, on which surface and how fast, so a blank pane with no
+ * such line is one the hook never ran for, and a blank pane after it one the surface refused.
+ */
+async function noteFirstDraw($: EngineInterface, surface: string, started: number) {
+  if (isFirstDrawNoted) return
+  isFirstDrawNoted = true
+  const ms = Math.round((await $.clock.now()) - started)
+  try {
+    $.ui.log(`job-tracker: the board drew on ${surface} in ${ms} ms`)
+  } catch {
+    // a report that cannot go out does not stop the drawing
+  }
 }
 
 /** An error as one line and the head of its stack. */

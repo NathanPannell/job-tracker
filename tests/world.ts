@@ -52,6 +52,8 @@ export type World = {
   clock: ReturnType<typeof mock.clock>
   files: Map<string, string>
   runs: string[][]
+  /** Lines the mod logged with `$.ui.log`, in order. */
+  logs: string[]
   spawns: { prompt: string; description?: string; subagentType?: string }[]
   /** Makes every later spawn refused with `reason`; undefined lets them start again. */
   refuseSpawns: (reason: string | undefined) => void
@@ -79,7 +81,11 @@ export function world(
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('command.register', (_, e) => ({ value: { command: e.name } }))
   on('tool.register', (_, e) => ({ value: { tool: `mcp__job-tracker__${e.name}` } }))
-  on('ui.log', () => ({ value: undefined }))
+  const logs: string[] = []
+  on('ui.log', (_, e) => {
+    logs.push(e.text)
+    return { value: undefined }
+  })
   on('fs.read', (_, e) => {
     const text = files.get(e.path.replace(/^[A-Za-z]:/, '').replace(/\\/g, '/'))
     return text === undefined ? { deny: `ENOENT ${e.path}` } : { value: text }
@@ -159,6 +165,7 @@ export function world(
     clock,
     files,
     runs,
+    logs,
     spawns,
     refuseSpawns: reason => {
       refusal = reason
