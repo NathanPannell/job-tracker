@@ -16,6 +16,16 @@ const pane = {
   props: PANE_PROPS,
 }
 
+type Mounted = Awaited<ReturnType<Engine['ui']['mount']>>
+
+/** The board's selected stage tab, as its key (`tab:new`); undefined off the board. */
+async function boardTab(ui: Pick<Mounted, 'find' | 'findAll'>): Promise<string | undefined> {
+  if (await ui.find({ key: 'back' })) return undefined
+  const tabs = await ui.findAll({ type: 'Button' })
+  const at = tabs.find(one => /^tab:/.test(String(one.key)) && one.props.variant === 'primary')
+  return at ? String(at.key) : undefined
+}
+
 describe('kanban', () => {
   for (const surface of ACTING) {
     test(`a New card is two rows and a tagline; Draft package builds it in a background subagent (${surface})`, async ($, on) => {
@@ -77,6 +87,7 @@ describe('kanban', () => {
       await ui.press({ key: 'redraft' })
       expect(w.spawns).toHaveLength(2)
       expect(toasts.at(-1)).toBe('The Acme package is already being drafted.')
+      expect(await boardTab(ui)).toBe('tab:drafting')
 
       // Its end is the subagent's own turn: a toast says how it went.
       for (const [n, spawn] of w.spawns.entries()) {
@@ -113,6 +124,7 @@ describe('kanban', () => {
       })
       expect(toasts).toHaveLength(5)
       // Once it ended, it can be drafted again.
+      await ui.press({ key: 'open:acme-api' })
       await ui.press({ key: 'redraft' })
       expect(w.spawns).toHaveLength(3)
       expect(w.feedback().map(event => [event.kind, event.to])).toEqual([
@@ -175,6 +187,8 @@ describe('kanban', () => {
       expect(await ui.find({ key: 'reason:Too senior' })).toBeDefined()
       await ui.press({ key: 'reason:Too senior' })
       expect(w.leads()[0]?.column).toBe('passed')
+      // Done with it: back on the New tab, where it was.
+      expect(await boardTab(ui)).toBe('tab:new')
       expect(w.leads()[0]?.passReason).toBe('Too senior')
       expect(w.feedback()).toEqual([
         expect.objectContaining({
@@ -404,6 +418,8 @@ describe('kanban', () => {
     expect(prompts[0]?.text).toContain('ask me in one message for anything it is missing')
     expect(prompts[0]?.text).toContain('stop before the final submit')
     expect(prompts[0]?.origin).toEqual(expect.objectContaining({ kind: 'plugin', asUser: true }))
+    expect(await boardTab(ui)).toBe('tab:ready')
+    await ui.press({ key: 'open:acme-api' })
     await ui.press({ key: 'redraft' })
     expect(prompts).toHaveLength(1)
     expect(w.spawns[0]?.prompt).toContain('register it with --redraft')
@@ -442,6 +458,13 @@ describe('kanban', () => {
     await $.turn.start({ text: 'what is new on my board?', turnId: 't1' })
     await ui.press({ key: 'draft' })
     expect(w.leads()[0]?.column).toBe('drafting')
+    // Back on New at once, before the queued prompt has even started.
+    expect(await boardTab(ui)).toBe('tab:new')
+    const redraft = async () => {
+      await ui.press({ key: 'tab:drafting' })
+      await ui.press({ key: 'open:acme-api' })
+      await ui.press({ key: 'redraft' })
+    }
     expect(w.spawns).toEqual([])
     expect(prompts).toHaveLength(1)
     expect(prompts[0]).toContain('in a background subagent, not in this thread')
@@ -450,7 +473,7 @@ describe('kanban', () => {
     expect(toasts).toEqual(['Drafting the Acme package once Claude finishes the current reply.'])
     const queued = { type: 'Text', text: /^Drafting the Acme package: queued…$/ } as const
     expect(await ui.find(queued)).toBeDefined()
-    await ui.press({ key: 'redraft' })
+    await redraft()
     expect(prompts).toHaveLength(1)
     expect(toasts.at(-1)).toBe('The Acme package is already being drafted.')
 
@@ -474,7 +497,7 @@ describe('kanban', () => {
 
     // A prompt a hook refused is reported, not silently lost.
     refusals.push('a hook refused it')
-    await ui.press({ key: 'redraft' })
+    await redraft()
     expect(toasts.slice(-2)).toEqual([
       'Drafting the Acme package in the conversation.',
       'job-tracker: the prompt was not sent: a hook refused it',
@@ -483,13 +506,102 @@ describe('kanban', () => {
 
     // A build whose run is never seen stops blocking the button after 45 minutes.
     refusals.length = 0
-    await ui.press({ key: 'redraft' })
-    await ui.press({ key: 'redraft' })
+    await redraft()
+    await redraft()
     expect(prompts).toHaveLength(3)
     expect(toasts.at(-1)).toBe('The Acme package is already being drafted.')
     await w.clock.advance(46 * 60_000)
-    await ui.press({ key: 'redraft' })
+    await redraft()
     expect(prompts).toHaveLength(4)
+  })
+
+  test('a press that settles a lead goes back to the board on its tab; feedback stays', async ($, on) => {
+    const w = world(on, {
+      leads: [
+        lead('a-1', { company: 'Alpha', fitScore: 95 }),
+        lead('b-2', { company: 'Beta', fitScore: 90 }),
+        lead('c-3', { company: 'Gamma', column: 'applied' }),
+        lead('d-4', { company: 'Delta', column: 'ready' }),
+        lead('e-5', { company: 'Echo', column: 'drafting' }),
+      ],
+      applications: [
+        {
+          leadId: 'd-4',
+          dir: 'packages/d-4',
+          createdAt: '',
+          updatedAt: '',
+          files: {},
+          status: 'ready',
+        },
+      ],
+    })
+    on('prompt.submit', (_, e) => ({ text: e.text }))
+    await start($)
+    const ui = await $.ui.mount({ ...pane, surface: 'desktop' })
+    const columnOf = (id: string) => w.leads().find(one => one.id === id)?.column
+    const openOn = async (tab: string, id: string) => {
+      await ui.press({ key: tab })
+      await ui.press({ key: `open:${id}` })
+      expect(await boardTab(ui)).toBeUndefined()
+    }
+
+    // Feedback on the lead keeps it open.
+    await openOn('tab:new', 'a-1')
+    await ui.press({ key: 'too-low' })
+    expect(await boardTab(ui)).toBeUndefined()
+    // Archive: back on New, where the next lead waits.
+    await ui.press({ key: 'archive' })
+    expect(columnOf('a-1')).toBe('archived')
+    expect(await boardTab(ui)).toBe('tab:new')
+    expect(await ui.find({ key: 'card:b-2' })).toBeDefined()
+
+    // An outcome: back on Applied.
+    await openOn('tab:applied', 'c-3')
+    await ui.press({ key: 'interview' })
+    expect(columnOf('c-3')).toBe('interviewing')
+    expect(await boardTab(ui)).toBe('tab:applied')
+
+    // A move back a stage: back on Drafting.
+    await openOn('tab:drafting', 'e-5')
+    await ui.press({ key: 'back-new' })
+    expect(columnOf('e-5')).toBe('new')
+    expect(await boardTab(ui)).toBe('tab:drafting')
+
+    // Approve and submit from the package: back on Ready to review.
+    await openOn('tab:ready', 'd-4')
+    await ui.press({ key: 'review' })
+    expect(await ui.find({ key: 'submit' })).toBeDefined()
+    await ui.press({ key: 'submit' })
+    expect(await boardTab(ui)).toBe('tab:ready')
+
+    // Snoozing: back on New.
+    await openOn('tab:new', 'b-2')
+    await ui.select({ key: 'snooze', value: '3' })
+    expect(await boardTab(ui)).toBe('tab:new')
+    await ui.unmount()
+  })
+
+  test('a press whose write fails keeps the lead open', async ($, on) => {
+    const w = world(on, { leads: [lead('a-1', { company: 'Alpha' })] })
+    const toasts: string[] = []
+    on('ui.toast', (_, e) => {
+      toasts.push(e.text)
+      return { value: undefined }
+    })
+    await start($)
+    const ui = await $.ui.mount({ ...pane, surface: 'desktop' })
+    await ui.press({ key: 'open:a-1' })
+    w.failWrites('leads.json is locked')
+    await ui.press({ key: 'archive' })
+    expect(toasts).toHaveLength(1)
+    expect(await boardTab(ui)).toBeUndefined()
+    await ui.press({ key: 'pass' })
+    await ui.press({ key: 'reason:Too senior' })
+    expect(toasts).toHaveLength(2)
+    expect(await boardTab(ui)).toBeUndefined()
+    await ui.select({ key: 'snooze', value: '3' })
+    expect(toasts).toHaveLength(3)
+    expect(await boardTab(ui)).toBeUndefined()
   })
 
   test('every stage draws a tree with unique sibling keys and no empty text', async ($, on) => {

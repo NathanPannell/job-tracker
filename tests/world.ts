@@ -57,6 +57,8 @@ export type World = {
   spawns: { prompt: string; description?: string; subagentType?: string }[]
   /** Makes every later spawn refused with `reason`; undefined lets them start again. */
   refuseSpawns: (reason: string | undefined) => void
+  /** Makes every later jobs CLI write fail with `reason`; undefined lets them through again. */
+  failWrites: (reason: string | undefined) => void
   leads: () => Lead[]
   feedback: () => FeedbackFile['events']
 }
@@ -105,6 +107,7 @@ export function world(
   // raises the run's `turn.start` (with its prompt) and `turn.complete` under an id of its own.
   const spawns: { prompt: string; description?: string; subagentType?: string }[] = []
   let refusal: string | undefined
+  let writeFailure: string | undefined
   on('agent.spawn', (_, e) => {
     if (refusal !== undefined) return { deny: refusal }
     spawns.push({ prompt: e.prompt, description: e.description, subagentType: e.subagentType })
@@ -124,6 +127,9 @@ export function world(
     )
     const [id = '', second = ''] = args
     const file = leadsFile()
+    if (writeFailure !== undefined && command !== 'list') {
+      return { exitCode: 1, stdout: '', stderr: writeFailure }
+    }
     switch (command) {
       case 'move': {
         const reason = rest[rest.indexOf('--reason') + 1]
@@ -169,6 +175,9 @@ export function world(
     spawns,
     refuseSpawns: reason => {
       refusal = reason
+    },
+    failWrites: reason => {
+      writeFailure = reason
     },
     leads: () => leadsFile().leads,
     feedback: () => feedbackFile().events,
