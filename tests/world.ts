@@ -79,6 +79,7 @@ export function world(
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('command.register', (_, e) => ({ value: { command: e.name } }))
   on('tool.register', (_, e) => ({ value: { tool: `mcp__job-tracker__${e.name}` } }))
+  on('ui.log', () => ({ value: undefined }))
   on('fs.read', (_, e) => {
     const text = files.get(e.path.replace(/^[A-Za-z]:/, '').replace(/\\/g, '/'))
     return text === undefined ? { deny: `ENOENT ${e.path}` } : { value: text }

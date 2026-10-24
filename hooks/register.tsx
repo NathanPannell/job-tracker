@@ -2,7 +2,7 @@
 // new leads, and the tools the model uses to read and change the board. The skills under
 // skills/ do the work; this module draws it and records what the person does.
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface, PromptOrigin, Register } from 'claude-code'
+import type { EngineInterface, PromptOrigin, Register, RenderInput } from 'claude-code'
 
 import type { DraftRun, JobPackage, JobView, PackageTab, SentPrompt } from '../types/index.d.ts'
 import { act, dataDir, EMPTY_BOARD, jobs, loadPackage, openFile, PANE, refresh } from './lib/io.ts'
@@ -533,38 +533,94 @@ export const register: Register = on => {
     )
   })
 
+  // A drawing that fails (throws, overruns its budget, or returns a tree the surface refuses)
+  // shows why and a way back to the board, never a blank pane.
   on('ui.render', { component: 'Pane', requestId: 'jobs' }, async ($, e) => {
-    const el = $.ui.resolve(e)
-    const current = await read($, board)
-    const at = await read($, view)
-    const isReadOnly = e.surface === 'mobile'
-    const now = await $.clock.now()
-    const all = actions($)
-    const ctx: ViewContext = {
-      el,
-      surface: e.surface,
-      board: current,
-      now: current.loadedAt,
-      columns: e.props.bodyColumns,
-      busy: await read($, busy),
-      queued: (await read($, sent)).filter(one => isLive(one, now)).map(one => one.label),
-      act: isReadOnly ? undefined : all,
-      nav: {
-        open: all.open,
-        board: all.board,
-        proposals: all.proposals,
-        review: all.review,
-        tab: all.tab,
-        more: all.more,
-      },
+    try {
+      return await drawPane($, e)
+    } catch (error) {
+      return paneFailure($, e, describeError(error))
     }
-    if (at.kind === 'lead') return leadView(ctx, at.id, at.passing === true)
-    if (at.kind === 'package') return packageView(ctx, at.id, at.tab, await read($, pkg))
-    if (at.kind === 'proposals') return proposalsView(ctx)
-    return boardView(ctx, {
-      showClosed: await read($, showClosed),
-      stage: await read($, stage),
-      shown: await read($, shown),
-    })
+  }).catch(($, e, next) => {
+    const { kind, message } = next.error
+    return paneFailure($, e, `${kind}${message ? `: ${message}` : ''}`)
+  })
+}
+
+/** An error as one line and the head of its stack. */
+function describeError(error: unknown): string {
+  if (!(error instanceof Error)) return String(error)
+  const stack = (error.stack ?? '')
+    .split('\n')
+    .slice(1, 4)
+    .map(line => line.trim())
+  return [`${error.name}: ${error.message}`, ...stack].join('\n')
+}
+
+/** Failures already reported this load, so a pane that keeps failing says so once. */
+const reported = new Set<string>()
+
+/** What the pane shows when its drawing failed: the reason, and a button back to the board. */
+function paneFailure($: EngineInterface, e: RenderInput<'Pane'>, why: string) {
+  if (!reported.has(why)) {
+    reported.add(why)
+    $.ui.log(`job-tracker: the board could not draw: ${why}`)
+    $.ui.toast('job-tracker: the board could not draw; the pane says why.')
+  }
+  const { Box, Text, Button } = $.ui.resolve(e)
+  const [first = why, ...rest] = why.split('\n')
+  return (
+    <Box key="pane-failure" flexDirection="column" gap={1}>
+      <Text bold color="warning">{`The board could not draw: ${first}`}</Text>
+      {rest.length > 0 && <Text dimColor>{rest.join('\n')}</Text>}
+      {e.surface !== 'mobile' && (
+        <Button
+          key="pane-reset"
+          label="Back to the board"
+          onPress={() =>
+            void update($, view, () => ({ kind: 'board' }) as JobView)
+              .then(() => update($, stage, () => null))
+              .then(() => update($, shown, () => PAGE))
+              .then(() => refresh($))
+          }
+        />
+      )}
+    </Box>
+  )
+}
+
+/** The pane's drawing: the board, a lead, a package or the proposals, as `view` says. */
+async function drawPane($: EngineInterface, e: RenderInput<'Pane'>) {
+  const el = $.ui.resolve(e)
+  const current = await read($, board)
+  const at = await read($, view)
+  const isReadOnly = e.surface === 'mobile'
+  const now = await $.clock.now()
+  const all = actions($)
+  const ctx: ViewContext = {
+    el,
+    surface: e.surface,
+    board: current,
+    now: current.loadedAt,
+    columns: e.props.bodyColumns,
+    busy: await read($, busy),
+    queued: (await read($, sent)).filter(one => isLive(one, now)).map(one => one.label),
+    act: isReadOnly ? undefined : all,
+    nav: {
+      open: all.open,
+      board: all.board,
+      proposals: all.proposals,
+      review: all.review,
+      tab: all.tab,
+      more: all.more,
+    },
+  }
+  if (at.kind === 'lead') return leadView(ctx, at.id, at.passing === true)
+  if (at.kind === 'package') return packageView(ctx, at.id, at.tab, await read($, pkg))
+  if (at.kind === 'proposals') return proposalsView(ctx)
+  return boardView(ctx, {
+    showClosed: await read($, showClosed),
+    stage: await read($, stage),
+    shown: await read($, shown),
   })
 }

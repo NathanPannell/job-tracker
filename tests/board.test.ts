@@ -492,6 +492,66 @@ describe('kanban', () => {
     expect(prompts).toHaveLength(4)
   })
 
+  test('every stage draws a tree with unique sibling keys and no empty text', async ($, on) => {
+    world(on, {
+      leads: [
+        lead('a-1', { tagline: 'Billing APIs for clinics' }),
+        lead('b-2', { tagline: ' ' }),
+        lead('c-3', { column: 'drafting' }),
+        lead('d-4', { column: 'ready' }),
+        lead('e-5', { column: 'applied' }),
+        lead('f-6', { column: 'passed', passReason: 'Too senior' }),
+      ],
+    })
+    await start($)
+    const ui = await $.ui.mount({ ...pane, surface: 'desktop' })
+    type Node = { type: string; props?: { key?: string }; children?: (Node | string)[] }
+    const problems = (node: Node | string, at: string): string[] => {
+      if (typeof node === 'string') return []
+      const kids = node.children ?? []
+      const keys = kids.flatMap(kid => (typeof kid === 'string' ? [] : [kid.props?.key ?? '']))
+      const dupes = keys.filter((key, n) => key !== '' && keys.indexOf(key) !== n)
+      const empty =
+        node.type === 'Text' && kids.every(kid => typeof kid === 'string' && kid.trim() === '')
+      return [
+        ...dupes.map(key => `${at}: duplicate key ${key}`),
+        ...(empty ? [`${at}: empty Text`] : []),
+        ...kids.flatMap((kid, n) => problems(kid, `${at}/${n}`)),
+      ]
+    }
+    await ui.press({ key: 'closed' })
+    for (const column of ['new', 'drafting', 'ready', 'applied', 'passed']) {
+      await ui.press({ key: `tab:${column}` })
+      const root = (await ui.findAll({}))[0] as unknown as Node
+      expect(problems(root, column)).toEqual([])
+    }
+  })
+
+  test('a drawing that fails shows why and a way back, never a blank pane', async ($, on) => {
+    // A hand-edited lead whose highlights are not a list makes the lead view throw.
+    world(on, {
+      leads: [
+        lead('acme-api', { company: 'Acme' }),
+        lead('broken-api', { company: 'Broken', roleHighlights: 'x' as never }),
+      ],
+    })
+    const toasts: string[] = []
+    on('ui.toast', (_, e) => {
+      toasts.push(e.text)
+      return { value: undefined }
+    })
+    await start($)
+    const ui = await $.ui.mount({ ...pane, surface: 'desktop' })
+    await ui.press({ key: 'open:broken-api' })
+    expect(
+      await ui.find({ type: 'Text', text: /^The board could not draw: TypeError/ }),
+    ).toBeDefined()
+    expect(toasts).toEqual(['job-tracker: the board could not draw; the pane says why.'])
+    await ui.press({ key: 'pane-reset' })
+    expect(await ui.find({ key: 'card:acme-api' })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /could not draw/ })).toBeUndefined()
+  })
+
   test('mobile reads every stage but takes no action', async ($, on) => {
     world(on, { leads: [lead('acme-api'), lead('beta-api', { column: 'applied' })] })
     await start($)
