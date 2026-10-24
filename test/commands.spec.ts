@@ -124,7 +124,7 @@ test('archive and add move New leads posted over a week ago to Archived', () => 
   assert.deepEqual(commands.add(dir, [lead('Fresh')]).archived, ['again'])
 })
 
-test('move, pass, score, snooze, patch and mention write the lead and its feedback', () => {
+test('move, pass, score, patch and mention write the lead and its feedback', () => {
   const dir = fresh()
   commands.add(dir, [lead('Acme')])
   const id = 'acme-backend-developer'
@@ -133,16 +133,16 @@ test('move, pass, score, snooze, patch and mention write the lead and its feedba
   assert.throws(() => commands.move(dir, 'missing', 'new'), /No lead/)
   assert.equal(commands.score(dir, id, 'too-low')?.scoreCorrection, 'too-low')
   assert.throws(() => commands.score(dir, id, 'meh'), /too-high or too-low/)
-  assert.ok(commands.snooze(dir, id, 3)?.snoozedUntil)
   assert.equal(commands.patch(dir, id, { notes: 'call them' })?.notes, 'call them')
   assert.deepEqual(commands.mention(dir, [id]), { mentioned: [id] })
   assert.ok(readData(dir, 'leads').leads[0]?.mentionedAt)
   assert.equal(commands.move(dir, id, 'passed', { reason: 'Location' })?.passReason, 'Location')
   const kinds = readData(dir, 'feedback').events.map(event => event.kind)
-  assert.deepEqual(kinds, ['move', 'score-too-low', 'snooze', 'pass'])
+  assert.deepEqual(kinds, ['move', 'score-too-low', 'pass'])
   const event = commands.feedback(dir, { leadId: id, kind: 'outcome', reason: 'rejected' })
   assert.equal(event.source, 'greenhouse')
   assert.throws(() => commands.feedback(dir, { leadId: id, kind: 'nope' }), /Unknown feedback/)
+  assert.throws(() => commands.feedback(dir, { leadId: id, kind: 'snooze' }), /Unknown feedback/)
   assert.throws(() => commands.feedback(dir, { leadId: 'x', kind: 'pass' }), /No lead/)
 })
 

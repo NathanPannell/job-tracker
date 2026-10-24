@@ -31,7 +31,6 @@ import {
   missingSummaries,
   moveLead,
   patchLead,
-  snoozeLead,
 } from '../../hooks/lib/model.ts'
 import type {
   Actor,
@@ -58,7 +57,7 @@ export { init }
 
 const now = () => new Date().toISOString()
 
-/** Writes a move, pass, score or snooze result: the lead and its feedback event together. */
+/** Writes a move, pass or score result: the lead and its feedback event together. */
 function commit(data: Data, result: MoveResult, id: string): Change<Lead | undefined> {
   if (result.error) throw new Error(result.error)
   return {
@@ -188,11 +187,6 @@ export function score(dir: string, id: string, correction: string) {
   return transact(dir, data => commit(data, correctScore(data.leads, id, correction, now()), id))
 }
 
-export function snooze(dir: string, id: string, days: string | number) {
-  const until = new Date(Date.now() + Number(days) * 86_400_000).toISOString()
-  return transact(dir, data => commit(data, snoozeLead(data.leads, id, until, now()), id))
-}
-
 export function patch(dir: string, id: string, fields: LeadPatch, by = 'model') {
   return transact(dir, data =>
     commit(data, patchLead(data.leads, id, fields, now(), by as Actor), id),
@@ -257,7 +251,6 @@ const FEEDBACK_KINDS: readonly FeedbackKind[] = [
   'score-too-high',
   'score-too-low',
   'move',
-  'snooze',
   'outcome',
   'package-edit',
 ]

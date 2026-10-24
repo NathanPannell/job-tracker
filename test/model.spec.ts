@@ -28,7 +28,6 @@ import {
   parseStrict,
   missingSummaries,
   patchLead,
-  snoozeLead,
   CHROME_UNAVAILABLE,
   isChromeUnavailable,
   submitFollowUp,
@@ -139,17 +138,30 @@ test('neighbour walks the pipeline and brings closed cards back to New', () => {
   assert.equal(neighbour('passed', 1), undefined)
 })
 
-test('score corrections and snoozes are events', () => {
+test('score corrections are events', () => {
   const file = seeded()
   const id = file.leads[0]?.id as string
   const high = correctScore(file, id, 'too-high', AT)
   assert.equal(high.event?.kind, 'score-too-high')
   assert.equal(correctScore(file, id, 'too-low', AT).event?.kind, 'score-too-low')
   assert.ok(correctScore(file, 'x', 'too-low', AT).error)
-  const snoozed = snoozeLead(file, id, '2026-11-01T00:00:00.000Z', AT)
-  assert.equal(snoozed.event?.kind, 'snooze')
-  assert.ok(snoozeLead(file, 'x', AT, AT).error)
-  assert.equal(counts(snoozed.leads, NOW).newLeads, 0)
+})
+
+test('a lead saved while snoozing existed loses its snooze date, and every New lead counts', () => {
+  const file = seeded([{ fitScore: 70 }, { fitScore: 90 }])
+  const legacy: LeadsFile = {
+    ...file,
+    leads: file.leads.map((one, n) =>
+      n === 0 ? ({ ...one, snoozedUntil: '2027-01-01T00:00:00.000Z' } as Lead) : one,
+    ),
+  }
+  const migrated = migrateLeads(legacy, AT)
+  assert.notEqual(migrated, legacy)
+  assert.ok(migrated.leads.every(one => !('snoozedUntil' in one)))
+  assert.equal(migrated.leads[0]?.history.length, legacy.leads[0]?.history.length)
+  assert.equal(migrated.leads[1], legacy.leads[1])
+  assert.equal(migrateLeads(migrated, AT), migrated)
+  assert.equal(counts(legacy, NOW).newLeads, 2)
 })
 
 test('patchLead validates, moves and records the fields it changed', () => {
@@ -435,17 +447,11 @@ test('counts and the band line', () => {
   assert.equal(columnLeads(next, 'new', NOW)[0]?.id, a)
 })
 
-test('columnLeads sorts best first with snoozed last', () => {
+test('columnLeads sorts best first', () => {
   const file = seeded([{ fitScore: 70 }, { fitScore: 90 }, { fitScore: 95 }])
-  const snoozed = snoozeLead(
-    file,
-    file.leads[2]?.id as string,
-    '2027-01-01T00:00:00.000Z',
-    AT,
-  ).leads
   assert.deepEqual(
-    columnLeads(snoozed, 'new', NOW).map(lead => lead.fitScore),
-    [90, 70, 95],
+    columnLeads(file, 'new', NOW).map(lead => lead.fitScore),
+    [95, 90, 70],
   )
 })
 

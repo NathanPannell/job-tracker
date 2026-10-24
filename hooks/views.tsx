@@ -11,7 +11,6 @@ import {
   decayNote,
   defaultStage,
   effectiveScore,
-  isSnoozed,
   previousColumn,
   PASS_REASONS,
   PIPELINE,
@@ -38,7 +37,6 @@ export type Actions = {
   askPass: (lead: Lead) => void
   pass: (lead: Lead, reason: string) => void
   score: (lead: Lead, correction: 'too-high' | 'too-low') => void
-  snooze: (lead: Lead, days: number) => void
   draft: (lead: Lead) => void
   review: (lead: Lead, tab?: PackageTab) => void
   submit: (lead: Lead) => void
@@ -65,11 +63,6 @@ export type ViewContext = {
 export const PAGE = 10
 /** What the résumé pages may take of the pane tree's 100,000 characters (bin/lib/preview.ts). */
 const PREVIEW_BUDGET = 90_000
-const SNOOZE_OPTIONS = [
-  { value: '3', label: 'Snooze 3 days' },
-  { value: '7', label: 'Snooze a week' },
-  { value: '14', label: 'Snooze two weeks' },
-]
 
 const clip = (text: string, max: number) =>
   text.length > max ? `${text.slice(0, max - 1).trimEnd()}…` : text
@@ -161,10 +154,9 @@ const oneLiner = (lead: Lead) => (lead.tagline?.trim() || lead.fitReason || '').
 
 function card(ctx: ViewContext, lead: Lead): RenderElement {
   const { Box, Text, Button } = ctx.el
-  const snoozed = isSnoozed(lead, ctx.now)
-  const facts = [age(lead.foundAt, ctx.now), sourceLabel(lead.source), lead.location]
-    .concat(snoozed ? ['snoozed'] : [])
-    .filter(Boolean)
+  const facts = [age(lead.foundAt, ctx.now), sourceLabel(lead.source), lead.location].filter(
+    Boolean,
+  )
   return (
     <Box key={`card:${lead.id}`} flexDirection="column" borderStyle="round" paddingX={1}>
       <Box flexDirection="row" gap={1} alignItems="flex-start">
@@ -276,7 +268,6 @@ export function leadSummary(lead: Pick<Lead, 'companyBlurb' | 'roleHighlights'>)
 
 export function leadView(ctx: ViewContext, id: string, passing: boolean): RenderElement {
   const { Box, Text, Button, Link, Markdown } = ctx.el
-  const Select = 'Select' in ctx.el ? ctx.el.Select : undefined
   const lead = ctx.board.leads.find(one => one.id === id)
   if (!lead) {
     return (
@@ -383,14 +374,6 @@ export function leadView(ctx: ViewContext, id: string, passing: boolean): Render
               label="Score too low"
               onPress={() => act.score(lead, 'too-low')}
             />
-            {Select && (
-              <Select
-                key="snooze"
-                label="Snooze"
-                options={SNOOZE_OPTIONS}
-                onSelect={value => act.snooze(lead, Number(value))}
-              />
-            )}
           </Box>
         </Box>
       )}

@@ -45,7 +45,7 @@ The repo's `.gitignore` and the `check:personal-data` CI job keep it out of git.
 | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `leads.json`          | The board: one entry per posting, its column, score, reason and history                                                                                                                                                                                             |
 | `applications.json`   | One entry per package and its files                                                                                                                                                                                                                                 |
-| `feedback.json`       | Passes, score corrections, moves, snoozes and outcomes, for `learn`                                                                                                                                                                                                 |
+| `feedback.json`       | Passes, score corrections, moves and outcomes, for `learn`                                                                                                                                                                                                          |
 | `proposals.json`      | Weekly learning proposals and their status                                                                                                                                                                                                                          |
 | `packages/<lead-id>/` | `resume.tex`, `resume.pdf`, `cover-letter.md`, `answers.md`, `company-brief.md`, `warm-intro.md`, `posting.md`, `sources.md`, `preview/` (the pane's résumé pages) and `.draft/` (the draft as written, so `learn` can see your edits)                              |
 | `profile/`            | The career record copied from the Resume Revamp folder, plus `preferences.md`, `learnings.md`, `target-companies.md`, `ats-boards.json`, `OPEN-QUESTIONS.md` and `knowledge-base/application-answers.md` (your answers to application questions, saved by `submit`) |
@@ -66,7 +66,7 @@ The types of every file are in `types/index.d.ts`.
   Rejected — Offer: Accepted · Declined. Company decisions (Got interview, Got offer, Rejected,
   Ghosted, Accepted, Declined) move the card and record an outcome for the weekly review, never a
   pass; an archived or passed card offers "Back to <where it was>" to undo a mis-click. Click a card's name to open it: the same next steps, then
-  Pass… · Archive · Draft package, then feedback (Score too high / too low, Snooze).
+  Pass… · Archive · Draft package, then feedback (Score too high / too low).
 - **Scores age.** The badge shows the scout's fit score less points for the posting's age, so
   stale postings sink: 10 points a day, worked out by the hour (a day old is 10 off, two days
   20), at most 70 off. A New lead whose posting is over 7 days old, or whose aged score falls
@@ -79,7 +79,7 @@ days ago)` or `(score 46, below 50)`, and no feedback is recorded). A lead you m
   `list_leads` (its `score` field and `minScore`) and scout's add threshold use the aged score.
   Nothing runs on a timer; scores are worked out each time the board draws or refreshes, and
   New leads posted over a week ago or scoring below 50 as aged are archived when the board
-  refreshes and on every `jobs add` (or by hand with `jobs archive`); snoozed leads and leads
+  refreshes and on every `jobs add` (or by hand with `jobs archive`); leads
   moved back to New by hand are left alone. The curve is the `DECAY_*`, `ARCHIVE_AFTER_DAYS` and
   `ARCHIVE_BELOW_SCORE` constants in `hooks/lib/model.ts`.
 - **Draft package** moves the card to Drafting at once and builds the package in a background
