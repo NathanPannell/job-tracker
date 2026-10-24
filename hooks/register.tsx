@@ -564,8 +564,13 @@ const reported = new Set<string>()
 function paneFailure($: EngineInterface, e: RenderInput<'Pane'>, why: string) {
   if (!reported.has(why)) {
     reported.add(why)
-    $.ui.log(`job-tracker: the board could not draw: ${why}`)
-    $.ui.toast('job-tracker: the board could not draw; the pane says why.')
+    // Under `re-entry` a `.catch` handler's own `$` calls reject: the tree below still draws.
+    try {
+      $.ui.log(`job-tracker: the board could not draw: ${why}`)
+      $.ui.toast('job-tracker: the board could not draw; the pane says why.')
+    } catch {
+      // nothing more to report through
+    }
   }
   const { Box, Text, Button } = $.ui.resolve(e)
   const [first = why, ...rest] = why.split('\n')
