@@ -182,6 +182,8 @@ export function defaultStage(file: LeadsFile): Column {
 export const DECAY_POINTS_PER_DAY = 10
 /** A New lead whose posting is older than this is archived (`archiveStale`). */
 export const ARCHIVE_AFTER_DAYS = 7
+/** A New lead whose aged score falls below this is archived too (`archiveStale`). */
+export const ARCHIVE_BELOW_SCORE = 50
 /** The most age takes off: a week's worth, where a lead the person kept stops sinking. */
 export const DECAY_MAX_POINTS = DECAY_POINTS_PER_DAY * ARCHIVE_AFTER_DAYS
 /** Columns whose leads age: not applied yet, so a stale posting is less worth the time. */
@@ -211,22 +213,38 @@ export function scoreDecay(
 export const isStale = (lead: Pick<Lead, 'foundAt' | 'postedAt'>, now: number) =>
   now - postedTime(lead) > ARCHIVE_AFTER_DAYS * DAY_MS
 
+type Archivable = Pick<
+  Lead,
+  'column' | 'fitScore' | 'foundAt' | 'postedAt' | 'snoozedUntil' | 'history' | 'scoreCorrection'
+>
+
 /**
- * Whether `archiveStale` takes this lead: in New, past a week, not snoozed, and never moved
- * back into New by hand (a lead restored with "Back to New" stays restored).
+ * Why `archiveStale` takes a lead: its posting is past a week, or its aged score below 50,
+ * unless the person said the score is too low.
  */
-export const isArchivable = (
-  lead: Pick<Lead, 'column' | 'foundAt' | 'postedAt' | 'snoozedUntil' | 'history'>,
-  now: number,
-) =>
+function archiveReason(lead: Archivable, now: number): string | undefined {
+  if (isStale(lead, now)) return `posted over ${ARCHIVE_AFTER_DAYS} days ago`
+  if (lead.scoreCorrection !== 'too-low' && effectiveScore(lead, now) < ARCHIVE_BELOW_SCORE) {
+    return `score ${effectiveScore(lead, now)}, below ${ARCHIVE_BELOW_SCORE}`
+  }
+  return undefined
+}
+
+/**
+ * Whether `archiveStale` takes this lead: in New, past a week or scoring below 50 as aged, not
+ * snoozed, and never moved back into New by hand (a lead restored with "Back to New" stays
+ * restored).
+ */
+export const isArchivable = (lead: Archivable, now: number) =>
   lead.column === 'new' &&
-  isStale(lead, now) &&
+  archiveReason(lead, now) !== undefined &&
   !isSnoozed(lead, now) &&
   !lead.history.some(entry => entry.action === 'moved' && entry.to === 'new')
 
 /**
- * Archives New leads whose posting is over a week old. Only New: a lead the person is drafting
- * or moved on stays where they put it. No feedback event, since the person made no call.
+ * Archives New leads whose posting is over a week old or whose aged score fell below 50. Only
+ * New: a lead the person is drafting or moved on stays where they put it. No feedback event,
+ * since the person made no call.
  */
 export function archiveStale(
   file: LeadsFile,
@@ -249,7 +267,7 @@ export function archiveStale(
           action: 'moved',
           from: 'new' as const,
           to: 'archived' as const,
-          note: `posted over ${ARCHIVE_AFTER_DAYS} days ago`,
+          note: archiveReason(lead, now),
         },
       ],
     }

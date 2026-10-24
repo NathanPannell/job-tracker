@@ -105,7 +105,7 @@ export type AddSummary = {
   added: string[]
   updated: string[]
   dropped: string[]
-  /** New leads moved to Archived because their posting is over a week old. */
+  /** New leads moved to Archived: posted over a week ago, or scoring below 50 as aged. */
   archived: string[]
   /** Added leads scoring 90 or more once aged: the ones worth a push notification. */
   alerts: (Pick<Lead, 'id' | 'company' | 'role' | 'fitScore'> & { score: number })[]
@@ -156,7 +156,7 @@ export function add(dir: string, incoming: IncomingLead[], threshold: string | n
   })
 }
 
-/** Moves New leads whose posting is over a week old to Archived; prints their ids. */
+/** Moves New leads posted over a week ago or scoring below 50 to Archived; prints their ids. */
 export function archive(dir: string): { archived: string[] } {
   return transact(dir, data => {
     const { leads, archived } = archiveStale(data.leads, now())

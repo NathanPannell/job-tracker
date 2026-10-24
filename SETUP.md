@@ -69,17 +69,19 @@ The types of every file are in `types/index.d.ts`.
   Pass… · Archive · Draft package, then feedback (Score too high / too low, Snooze).
 - **Scores age.** The badge shows the scout's fit score less points for the posting's age, so
   stale postings sink: 10 points a day, worked out by the hour (a day old is 10 off, two days
-  20), at most 70 off. A New lead whose posting is over 7 days old moves to Archived on its own
-  (history says `tracker: moved → Archived (posted over 7 days ago)`, and no feedback is
-  recorded); Drafting and Ready leads stay where you put them. Age counts from the posting date when the source gives one (Greenhouse,
+  20), at most 70 off. A New lead whose posting is over 7 days old, or whose aged score falls
+  below 50, moves to Archived on its own (history says `tracker: moved → Archived (posted over 7
+days ago)` or `(score 46, below 50)`, and no feedback is recorded). A lead you marked "Score
+  too low" is not archived for its score; Drafting and Ready leads stay where you put them. Age counts from the posting date when the source gives one (Greenhouse,
   Lever and Ashby boards do), else from when scout found it. Only New, Drafting and Ready age; once applied, a lead keeps its fit score. Opening an aged lead shows both, e.g.
   `Fit 86 → 66, posted 2d ago`. The fit score in `leads.json` never changes with age: score
   corrections, feedback and the weekly `learn` review use it, while sorting, the nudge,
   `list_leads` (its `score` field and `minScore`) and scout's add threshold use the aged score.
   Nothing runs on a timer; scores are worked out each time the board draws or refreshes, and
-  stale leads are archived when the board refreshes and on every `jobs add` (or by hand with
-  `jobs archive`). The curve is the `DECAY_*` and `ARCHIVE_AFTER_DAYS` constants in
-  `hooks/lib/model.ts`.
+  New leads posted over a week ago or scoring below 50 as aged are archived when the board
+  refreshes and on every `jobs add` (or by hand with `jobs archive`); snoozed leads and leads
+  moved back to New by hand are left alone. The curve is the `DECAY_*`, `ARCHIVE_AFTER_DAYS` and
+  `ARCHIVE_BELOW_SCORE` constants in `hooks/lib/model.ts`.
 - **Draft package** moves the card to Drafting at once and builds the package in a background
   subagent, never in your conversation, so you keep triaging while it runs and several build side
   by side (each takes several minutes). A toast says when one starts and when it ends; the card
