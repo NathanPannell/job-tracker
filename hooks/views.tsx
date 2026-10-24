@@ -63,6 +63,8 @@ export type ViewContext = {
 
 /** Cards a stage shows at first, and how many more each "Show more" adds. */
 export const PAGE = 10
+/** What the résumé pages may take of the pane tree's 100,000 characters (bin/lib/preview.ts). */
+const PREVIEW_BUDGET = 90_000
 const SNOOZE_OPTIONS = [
   { value: '3', label: 'Snooze 3 days' },
   { value: '7', label: 'Snooze a week' },
@@ -484,21 +486,37 @@ function resumeBody(ctx: ViewContext, loaded: JobPackage): RenderElement {
       />
     </Box>
   )
+  // A pane's whole tree is capped at 100,000 characters, the SVG sources included: past it the
+  // surface draws nothing at all, so the view takes the pages that fit and leaves the rest to
+  // the PDF. A package drawn before the preview fitted (`jobs preview <id>` redraws it) may fit
+  // no part.
+  let room = PREVIEW_BUDGET
+  const pages: string[] = []
+  for (const source of loaded.svgs) {
+    if (source.length > room) break
+    room -= source.length
+    pages.push(source)
+  }
   // Every table names every element, so the surface, not the table, says whether Svg draws.
-  if (ctx.surface !== 'terminal' && 'Svg' in ctx.el && loaded.svgs.length > 0) {
+  if (ctx.surface !== 'terminal' && 'Svg' in ctx.el && pages.length > 0) {
     const { Svg } = ctx.el
     return (
       <Box flexDirection="column">
         {open}
         <Box key="pages" flexDirection="column" gap={0}>
-          {loaded.svgs.map((source, n) => (
+          {pages.map((source, n) => (
             <Svg
-              key={`strip:${n}`}
+              key={`page:${n}`}
               source={source}
-              alt={`Résumé, part ${n + 1} of ${loaded.svgs.length}`}
+              alt={`Résumé, page ${n + 1} of ${loaded.svgs.length}`}
             />
           ))}
         </Box>
+        {pages.length < loaded.svgs.length && (
+          <Text key="more-pages" dimColor>
+            The rest of the résumé is in the PDF.
+          </Text>
+        )}
       </Box>
     )
   }
@@ -506,9 +524,11 @@ function resumeBody(ctx: ViewContext, loaded: JobPackage): RenderElement {
     <Box flexDirection="column" gap={1}>
       {open}
       <Text dimColor>
-        {loaded.pdfPath
-          ? 'The résumé preview draws in the desktop app; Open PDF shows it here.'
-          : 'No résumé PDF in this package yet.'}
+        {!loaded.pdfPath
+          ? 'No résumé PDF in this package yet.'
+          : ctx.surface === 'terminal'
+            ? 'The résumé preview draws in the desktop app; Open PDF shows it here.'
+            : 'The résumé preview is too large to draw here; Open PDF shows it.'}
       </Text>
     </Box>
   )

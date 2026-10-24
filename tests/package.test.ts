@@ -81,6 +81,40 @@ describe('package viewer', () => {
     expect(await ui.findAll({ type: 'Svg' })).toHaveLength(2)
     expect(await ui.find({ key: 'submit' })).toBeUndefined()
   })
+
+  test('a preview past the pane tree bound draws the pages that fit, never a refused tree', async ($, on) => {
+    const page = (size: number) =>
+      `<svg xmlns="http://www.w3.org/2000/svg"><!--${'x'.repeat(size)}--></svg>`
+    world(on, seed, {
+      ...files,
+      [`${pkgDir}/preview/page-1-0.svg`]: page(50_000),
+      [`${pkgDir}/preview/page-1-1.svg`]: page(50_000),
+    })
+    await $.session.start({ cwd: '.', surface: 'desktop', isInteractive: true })
+    const ui = await $.ui.mount({ ...pane, surface: 'desktop' })
+    await ui.press({ key: 'open:acme-api' })
+    await ui.press({ key: 'review' })
+    expect(await ui.findAll({ type: 'Svg' })).toHaveLength(1)
+    expect(
+      await ui.find({ type: 'Text', text: /The rest of the résumé is in the PDF/ }),
+    ).toBeDefined()
+    const tree = JSON.stringify((await ui.findAll({}))[0])
+    expect(tree.length).toBeLessThan(100_000)
+  })
+
+  test('a preview no page of which fits says so and offers the PDF', async ($, on) => {
+    world(on, seed, {
+      ...files,
+      [`${pkgDir}/preview/page-1-0.svg`]: `<svg>${'x'.repeat(95_000)}</svg>`,
+    })
+    await $.session.start({ cwd: '.', surface: 'desktop', isInteractive: true })
+    const ui = await $.ui.mount({ ...pane, surface: 'desktop' })
+    await ui.press({ key: 'open:acme-api' })
+    await ui.press({ key: 'review' })
+    expect(await ui.find({ type: 'Svg' })).toBeUndefined()
+    expect(await ui.find({ key: 'open-pdf' })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /too large to draw here/ })).toBeDefined()
+  })
 })
 
 describe('tools', () => {
