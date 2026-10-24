@@ -209,9 +209,11 @@ async function claimRun($: EngineInterface, run: DraftRun): Promise<DraftRun | u
 
 /** What a press says when the lead already has a background run going. */
 const busyNote = (run: DraftRun) =>
-  run.kind === 'submit'
-    ? `The ${run.company} application is already being prefilled.`
-    : `The ${run.company} package is already being drafted.`
+  run.isHandedOn
+    ? `The ${run.company} application is prefilled; Claude asks about it in the conversation.`
+    : run.kind === 'submit'
+      ? `The ${run.company} application is already being prefilled.`
+      : `The ${run.company} package is already being drafted.`
 
 /**
  * Prefills an approved package's application in Chrome off the person's conversation: a
@@ -272,12 +274,28 @@ async function finishDraft($: EngineInterface, agentId: string, answer: string, 
   await refresh($)
   if (run.kind === 'submit') {
     const lead = (await read($, board)).leads.find(one => one.id === run.leadId)
-    if (reason === 'answer' && lead) {
-      await sendPrompt($, submitFollowUp(lead, answer), `Finishing the ${run.company} application`)
-    } else {
+    if (reason !== 'answer') {
       $.ui.toast(
         `The ${run.company} application prefill stopped (${reason}); Approve and submit starts it again.`,
       )
+    } else if (lead?.column !== 'ready') {
+      $.ui.toast(
+        `The ${run.company} application was prefilled, but its card left Ready to review meanwhile; nothing was sent.`,
+      )
+    } else {
+      // The lead stays claimed while the conversation asks and submits, so neither a second
+      // prefill nor a redraft (a new résumé under the uploaded one) starts meanwhile.
+      const at = await $.clock.now()
+      const handedOn: DraftRun = {
+        kind: 'submit',
+        leadId: run.leadId,
+        company: run.company,
+        task: `handed on: ${run.leadId}`,
+        at,
+        isHandedOn: true,
+      }
+      await update($, drafts, list => [...list, handedOn])
+      await sendPrompt($, submitFollowUp(lead, answer), `Finishing the ${run.company} application`)
     }
     return
   }

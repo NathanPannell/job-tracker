@@ -26,7 +26,7 @@ the person's conversation:
 - **In the background**, a subagent prefills the application (see "In the background" below). It
   asks nothing and never submits.
 - **In the conversation**, a prompt arrives with the subagent's report once it ends. Start at
-  step 4 with the form as the report and the tab leave it: check the tab is there and the fields
+  step 4 with the form as the report and the tab left it: check the tab is there and the fields
   are still filled, and redo steps 1–3 only for what is not. If the report starts with
   `CHROME UNAVAILABLE`, do every step here.
 
