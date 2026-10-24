@@ -149,4 +149,4 @@ claude plugin test .
 personal-data scan. `claude plugin test` mounts the pane and band on the terminal, desktop and
 mobile surfaces through the engine. The plugin API is `vendor/claude-code.d.ts`, from the engine
 version pinned in `.github/workflows/ci.yml`. Delivery: branch from `origin/staging`, PR to
-`staging`, green CI, squash-merge.
+`staging` with the local checks green, squash-merge. GitHub CI runs only for PRs and pushes to `main`.
