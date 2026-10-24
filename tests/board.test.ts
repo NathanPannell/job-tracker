@@ -470,6 +470,94 @@ describe('kanban', () => {
     expect(w.runs.filter(argv => argv[2] === 'archive')).toHaveLength(1)
   })
 
+  test('an application with no reply a month after submitting is marked ghosted when the board loads', async ($, on) => {
+    const toApplied = (at: string) => ({
+      at,
+      by: 'submit' as const,
+      action: 'moved',
+      from: 'ready' as const,
+      to: 'applied' as const,
+    })
+    const w = world(on, {
+      leads: [
+        lead('quiet-1', {
+          company: 'Quiet',
+          column: 'applied',
+          history: [toApplied('2026-09-19T12:00:00.000Z')],
+        }),
+        // Moved a month ago, but submitted (as `jobs submitted` recorded) a day short of one.
+        lead('recent-2', {
+          company: 'Recent',
+          column: 'applied',
+          history: [toApplied('2026-09-01T12:00:00.000Z')],
+        }),
+        lead('talking-3', {
+          company: 'Talking',
+          column: 'interviewing',
+          history: [toApplied('2026-08-01T12:00:00.000Z')],
+        }),
+        lead('heard-4', {
+          company: 'Heard',
+          column: 'applied',
+          history: [toApplied('2026-09-01T12:00:00.000Z')],
+        }),
+      ],
+      applications: [
+        {
+          leadId: 'recent-2',
+          dir: 'packages/recent-2',
+          createdAt: '2026-09-01T12:00:00.000Z',
+          updatedAt: '2026-09-21T12:00:00.000Z',
+          files: {},
+          status: 'submitted',
+          submittedAt: '2026-09-21T12:00:00.000Z',
+        },
+      ],
+    })
+    // A reply sync recorded without moving the card yet.
+    w.files.set(
+      `${DATA}/feedback.json`,
+      JSON.stringify({
+        version: 1,
+        events: [{ id: 'e1', at: '2026-09-10T12:00:00.000Z', leadId: 'heard-4', kind: 'outcome' }],
+      }),
+    )
+    const toasts: string[] = []
+    on('ui.toast', (_, e) => {
+      toasts.push(e.text)
+      return { value: undefined }
+    })
+    await start($)
+    expect(w.runs.filter(argv => argv[2] === 'archive')).toHaveLength(1)
+    expect(w.leads().map(one => [one.id, one.column])).toEqual([
+      ['quiet-1', 'archived'],
+      ['recent-2', 'applied'],
+      ['talking-3', 'interviewing'],
+      ['heard-4', 'applied'],
+    ])
+    expect(w.leads()[0]?.history.at(-1)?.by).toBe('tracker')
+    expect(w.feedback().at(-1)).toMatchObject({
+      leadId: 'quiet-1',
+      kind: 'outcome',
+      reason: 'rejection: no reply (ghosted)',
+      by: 'tracker',
+    })
+    expect(toasts).toEqual([
+      'Marked ghosted (no reply a month after applying): Quiet. Now in Archived; "Back to Applied" on the card undoes it.',
+    ])
+    const ui = await $.ui.mount({ ...pane, surface: 'desktop' })
+    await ui.press({ key: 'tab:applied' })
+    expect(await ui.find({ key: 'card:quiet-1' })).toBeUndefined()
+    expect(await ui.find({ key: 'card:recent-2' })).toBeDefined()
+    // Undone by hand, it stays in Applied through later refreshes.
+    await ui.press({ key: 'closed' })
+    await ui.press({ key: 'tab:archived' })
+    await ui.press({ key: 'restore:quiet-1' })
+    await ui.press({ key: 'refresh' })
+    expect(w.leads()[0]?.column).toBe('applied')
+    expect(toasts).toHaveLength(1)
+  })
+
   test('a board with nothing stale runs no archive', async ($, on) => {
     const w = world(on, { leads: [lead('fresh-1')] })
     await start($)

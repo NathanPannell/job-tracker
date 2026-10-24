@@ -82,7 +82,7 @@ test('archive and add move New leads posted over a week ago to Archived', () => 
     { ...lead('Kept', 99), postedAt: daysAgo(1) },
   ])
   commands.move(dir, 'kept-backend-developer', 'drafting')
-  assert.deepEqual(commands.archive(dir), { archived: [] })
+  assert.deepEqual(commands.archive(dir), { archived: [], ghosted: [] })
   // A week on, as the board would find it.
   transact(dir, data => ({
     write: {
@@ -93,7 +93,10 @@ test('archive and add move New leads posted over a week ago to Archived', () => 
     },
     result: null,
   }))
-  assert.deepEqual(commands.archive(dir), { archived: ['old-backend-developer'] })
+  assert.deepEqual(commands.archive(dir), {
+    archived: ['old-backend-developer'],
+    ghosted: [],
+  })
   const columns = readData(dir, 'leads').leads.map(one => [one.id, one.column])
   assert.deepEqual(columns, [
     ['old-backend-developer', 'archived'],
@@ -122,6 +125,55 @@ test('archive and add move New leads posted over a week ago to Archived', () => 
     result: null,
   }))
   assert.deepEqual(commands.add(dir, [lead('Fresh')]).archived, ['again'])
+})
+
+test('archive marks an application ghosted a month after submitting with no reply', () => {
+  const dir = fresh()
+  commands.add(dir, [lead('Quiet'), lead('Heard')])
+  for (const id of ['quiet-backend-developer', 'heard-backend-developer']) {
+    commands.move(dir, id, 'ready', { by: 'package' })
+    commands.submitted(dir, id)
+  }
+  commands.feedback(dir, {
+    leadId: 'heard-backend-developer',
+    kind: 'outcome',
+    reason: 'screen: recruiter wrote back',
+  })
+  assert.deepEqual(commands.archive(dir), { archived: [], ghosted: [] })
+  // Submitted 32 days ago, as the board would find it a month on. With no package registered,
+  // the move into Applied is the submission time.
+  const then = new Date(Date.now() - 32 * 86_400_000).toISOString()
+  transact(dir, data => ({
+    write: {
+      leads: {
+        ...data.leads,
+        leads: data.leads.leads.map(one => ({
+          ...one,
+          history: one.history.map(entry =>
+            entry.to === 'applied' ? { ...entry, at: then } : entry,
+          ),
+        })),
+      },
+    },
+    result: null,
+  }))
+  assert.deepEqual(commands.archive(dir), { archived: [], ghosted: ['quiet-backend-developer'] })
+  const quiet = readData(dir, 'leads').leads.find(one => one.id === 'quiet-backend-developer')
+  assert.equal(quiet?.column, 'archived')
+  assert.equal(quiet?.history.at(-1)?.by, 'tracker')
+  const outcome = readData(dir, 'feedback').events.at(-1)
+  assert.equal(outcome?.leadId, 'quiet-backend-developer')
+  assert.equal(outcome?.kind, 'outcome')
+  assert.equal(outcome?.reason, 'rejection: no reply (ghosted)')
+  assert.equal(outcome?.by, 'tracker')
+  // A reply that comes later still moves it on, and one put back in Applied stays there.
+  commands.move(dir, 'quiet-backend-developer', 'applied')
+  assert.deepEqual(commands.archive(dir), { archived: [], ghosted: [] })
+  commands.move(dir, 'quiet-backend-developer', 'interviewing', { by: 'sync' })
+  assert.equal(
+    readData(dir, 'leads').leads.find(one => one.id === 'quiet-backend-developer')?.column,
+    'interviewing',
+  )
 })
 
 test('move, pass, score, patch and mention write the lead and its feedback', () => {

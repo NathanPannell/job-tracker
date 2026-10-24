@@ -10,12 +10,14 @@ import {
   correctScore,
   emptyFeedback,
   eventId,
+  ghostSilent,
   markMentioned,
   moveLead,
   patchLead,
 } from '../hooks/lib/model.ts'
 import type {
   Application,
+  ApplicationsFile,
   Column,
   FeedbackFile,
   FeedbackKind,
@@ -145,9 +147,16 @@ export function world(
         put('leads.json', markMentioned(file, args, at))
         return { exitCode: 0, stdout: '{}', stderr: '' }
       case 'archive': {
-        const swept = archiveStale(file, at)
-        put('leads.json', swept.leads)
-        return { exitCode: 0, stdout: JSON.stringify({ archived: swept.archived }), stderr: '' }
+        const stale = archiveStale(file, at)
+        const applications: ApplicationsFile = JSON.parse(
+          files.get(`${DATA}/applications.json`) ?? '{}',
+        )
+        const silent = ghostSilent(stale.leads, applications, feedbackFile(), at)
+        put('leads.json', silent.leads)
+        put('feedback.json', silent.feedback)
+        const { archived } = stale
+        const { ghosted } = silent
+        return { exitCode: 0, stdout: JSON.stringify({ archived, ghosted }), stderr: '' }
       }
       case 'list':
         return { exitCode: 0, stdout: JSON.stringify(file.leads), stderr: '' }

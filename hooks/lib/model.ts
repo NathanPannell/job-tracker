@@ -4,6 +4,7 @@
 
 import type {
   Actor,
+  Application,
   ApplicationsFile,
   Column,
   FeedbackEvent,
@@ -75,6 +76,9 @@ export type StageAction =
   | { key: string; label: string; kind: 'outcome'; to: Column; reason: string; primary?: true }
   | { key: string; label: string; kind: 'pass' | 'draft' | 'review' | 'submit'; primary?: true }
 
+/** The outcome Ghosted records, by hand or when the board ghosts a lead (`ghostSilent`). */
+export const GHOSTED_REASON = 'rejection: no reply (ghosted)'
+
 const backTo = (to: Column): StageAction => ({
   key: `back-${to}`,
   label: `Back to ${COLUMN_TITLES[to]}`,
@@ -110,13 +114,7 @@ export const STAGE_ACTIONS: Record<Column, readonly StageAction[]> = {
       to: 'archived',
       reason: 'rejection: marked on the board',
     },
-    {
-      key: 'ghosted',
-      label: 'Ghosted',
-      kind: 'outcome',
-      to: 'archived',
-      reason: 'rejection: no reply (ghosted)',
-    },
+    { key: 'ghosted', label: 'Ghosted', kind: 'outcome', to: 'archived', reason: GHOSTED_REASON },
   ],
   interviewing: [
     {
@@ -270,6 +268,114 @@ export function archiveStale(
     }
   })
   return { leads: archived.length > 0 ? { ...file, leads } : file, archived }
+}
+
+/** An Applied lead with no reply this many calendar months after it was submitted is ghosted. */
+export const GHOST_AFTER_MONTHS = 1
+
+/** The history note on a lead the board ghosted; the sync skill looks for it. */
+export const GHOST_NOTE = `no reply ${GHOST_AFTER_MONTHS} month after applying (ghosted)`
+
+/** Columns a lead reaches only after the company replied, or after the person settled it. */
+const SETTLED: readonly string[] = ['interviewing', 'offer', 'passed', 'archived']
+
+/**
+ * When a lead was submitted: the time `jobs submitted` recorded on its application, else (for
+ * leads moved to Applied by hand or before that was recorded) its last move into Applied.
+ */
+export function appliedTime(
+  lead: Pick<Lead, 'history'>,
+  application?: Pick<Application, 'submittedAt'>,
+): number | undefined {
+  const submitted = Date.parse(application?.submittedAt ?? '')
+  if (!Number.isNaN(submitted)) return submitted
+  const moved = lead.history.findLast(entry => entry.action === 'moved' && entry.to === 'applied')
+  const at = Date.parse(moved?.at ?? '')
+  return Number.isNaN(at) ? undefined : at
+}
+
+/** `time` plus `months` calendar months (UTC), the day clamped to the month: Jan 31 → Feb 28. */
+export function addMonths(time: number, months: number): number {
+  const date = new Date(time)
+  const day = date.getUTCDate()
+  date.setUTCDate(1)
+  date.setUTCMonth(date.getUTCMonth() + months)
+  const last = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 0)).getUTCDate()
+  date.setUTCDate(Math.min(day, last))
+  return date.getTime()
+}
+
+/**
+ * Whether `ghostSilent` takes this lead: in Applied for `GHOST_AFTER_MONTHS` since it was
+ * submitted, with no reply recorded (no outcome event, never in Interviewing or Offer), and never
+ * put back in Applied by hand (a lead restored after Rejected or Ghosted stays restored).
+ * `events` is the feedback file's; without it only the lead's own history is checked.
+ */
+export function isGhostable(
+  lead: Pick<Lead, 'id' | 'column' | 'history'>,
+  application: Pick<Application, 'submittedAt'> | undefined,
+  now: number,
+  events: readonly Pick<FeedbackEvent, 'leadId' | 'kind'>[] = [],
+): boolean {
+  if (lead.column !== 'applied') return false
+  const since = appliedTime(lead, application)
+  if (since === undefined || now < addMonths(since, GHOST_AFTER_MONTHS)) return false
+  const moves = lead.history.filter(entry => entry.action === 'moved')
+  if (moves.some(entry => SETTLED.includes(entry.from ?? '') && entry.to === 'applied')) {
+    return false
+  }
+  if (moves.some(entry => entry.to === 'interviewing' || entry.to === 'offer')) return false
+  return !events.some(event => event.leadId === lead.id && event.kind === 'outcome')
+}
+
+/**
+ * Marks Applied leads ghosted once a month has passed since they were submitted with no reply:
+ * the card moves to Archived as the Ghosted button moves it, and the same outcome is recorded
+ * for the weekly review, with `by: 'tracker'` so it reads as the board's call, not a report.
+ * Only Applied: a lead with a reply, or in any other column, is never touched.
+ */
+export function ghostSilent(
+  file: LeadsFile,
+  applications: ApplicationsFile,
+  feedback: FeedbackFile,
+  at: string,
+): { leads: LeadsFile; feedback: FeedbackFile; ghosted: string[] } {
+  const now = Date.parse(at)
+  const ghosted: string[] = []
+  let events = feedback
+  const leads = file.leads.map(lead => {
+    const application = applications.applications.find(one => one.leadId === lead.id)
+    if (!isGhostable(lead, application, now, feedback.events)) return lead
+    ghosted.push(lead.id)
+    events = appendEvent(events, {
+      id: eventId(at, lead.id, 'outcome'),
+      at,
+      leadId: lead.id,
+      kind: 'outcome',
+      reason: GHOSTED_REASON,
+      by: 'tracker',
+      source: lead.source,
+      fitScore: lead.fitScore,
+    })
+    return {
+      ...lead,
+      column: 'archived' as const,
+      history: [
+        ...lead.history,
+        {
+          at,
+          by: 'tracker' as const,
+          action: 'moved',
+          from: 'applied' as const,
+          to: 'archived' as const,
+          note: GHOST_NOTE,
+        },
+      ],
+    }
+  })
+  return ghosted.length > 0
+    ? { leads: { ...file, leads }, feedback: events, ghosted }
+    : { leads: file, feedback, ghosted }
 }
 
 /** The score the board shows and ranks by: the fit score less what age takes off. */

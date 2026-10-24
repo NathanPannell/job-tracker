@@ -65,7 +65,7 @@ The types of every file are in `types/index.d.ts`.
   New — Ready: Review · Approve and submit — Applied: Got interview · Rejected · Ghosted — Interviewing: Got offer ·
   Rejected — Offer: Accepted · Declined. Company decisions (Got interview, Got offer, Rejected,
   Ghosted, Accepted, Declined) move the card and record an outcome for the weekly review, never a
-  pass; an archived or passed card offers "Back to <where it was>" to undo a mis-click. Click a card's name to open it: the same next steps, then
+  pass (an application silent for a month is marked Ghosted for you, see "Ghosting"); an archived or passed card offers "Back to <where it was>" to undo a mis-click. Click a card's name to open it: the same next steps, then
   Pass… · Archive · Draft package, then feedback (Score too high / too low).
 - **Scores age.** The badge shows the scout's fit score less points for the posting's age, so
   stale postings sink: 10 points a day, worked out by the hour (a day old is 10 off, two days
@@ -82,6 +82,19 @@ days ago)` or `(score 46, below 50)`, and no feedback is recorded). A lead you m
   refreshes and on every `jobs add` (or by hand with `jobs archive`); leads
   moved back to New by hand are left alone. The curve is the `DECAY_*`, `ARCHIVE_AFTER_DAYS` and
   `ARCHIVE_BELOW_SCORE` constants in `hooks/lib/model.ts`.
+- **Ghosting.** An application in Applied with no reply one calendar month after you submitted
+  it is marked Ghosted on its own, as if you had pressed Ghosted: the card moves to Archived
+  (history says `tracker: moved → Archived (no reply 1 month after applying (ghosted))`) and the
+  same outcome, `rejection: no reply (ghosted)`, is recorded for the weekly review, with
+  `by: "tracker"` so `learn` can tell it from one you marked. A toast names the leads it ghosted.
+  The month counts from the time `jobs submitted` recorded on the application, else from the
+  card's last move into Applied. Only Applied is swept: a lead with any recorded outcome (a reply
+  `sync` found, an interview), one that has been in Interviewing or Offer, and one you put back
+  in Applied by hand are left alone, as is every other column. A reply that comes later still
+  moves the card on: `sync` also reads leads the board ghosted, and "Back to Applied" on the
+  archived card undoes it. Like the stale-lead archive it runs when the board refreshes, on every
+  `jobs add` and on `jobs archive`, never on a timer. The threshold is `GHOST_AFTER_MONTHS` in
+  `hooks/lib/model.ts`.
 - **Draft package** moves the card to Drafting at once and builds the package in a background
   subagent, never in your conversation, so you keep triaging while it runs and several build side
   by side (each takes several minutes). A toast says when one starts and when it ends; the card

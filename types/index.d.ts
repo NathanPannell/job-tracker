@@ -4,7 +4,7 @@
 export type Column =
   'new' | 'drafting' | 'ready' | 'applied' | 'interviewing' | 'offer' | 'passed' | 'archived'
 
-/** Who changed a lead; `tracker` is the board itself, e.g. archiving a stale posting. */
+/** Who changed a lead; `tracker` is the board itself, e.g. archiving a stale posting or ghosting. */
 export type Actor = 'user' | 'scout' | 'package' | 'submit' | 'sync' | 'learn' | 'model' | 'tracker'
 
 export type HistoryEntry = {
@@ -108,6 +108,11 @@ export type FeedbackEvent = {
   reason?: string
   from?: Column
   to?: Column
+  /**
+   * Who recorded it when the person did not: `tracker` for an outcome the board recorded on its
+   * own (an application ghosted a month after it was submitted with no reply). Absent otherwise.
+   */
+  by?: Actor
   /** The lead's source and score when it happened, so learn can group by them. */
   source?: string
   fitScore?: number

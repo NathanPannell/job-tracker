@@ -9,6 +9,7 @@ import {
   emptyLeads,
   emptyProposals,
   isArchivable,
+  isGhostable,
   migrateLeads,
   parseOr,
 } from './model.ts'
@@ -49,8 +50,10 @@ async function readText($: EngineInterface, path: string): Promise<string | unde
 
 /**
  * Reads the data files into the board value the pane and band draw from. A New lead whose
- * posting has passed a week, or whose aged score fell below 50, is archived first (one `jobs
- * archive`, only when there is one), so the board never shows it; nothing runs on a timer.
+ * posting has passed a week, or whose aged score fell below 50, is archived first, and an Applied
+ * lead with no reply a month after it was submitted is marked ghosted (one `jobs archive`, only
+ * when there is one), so the board never shows them; a toast names the ghosted ones. Nothing runs
+ * on a timer.
  */
 export async function refresh($: EngineInterface, sweep = true): Promise<JobBoard> {
   const dir = await dataDir($)
@@ -82,14 +85,34 @@ export async function refresh($: EngineInterface, sweep = true): Promise<JobBoar
   if (!sweep) return next
   // Each archivable lead is tried once a session: a failed or empty archive is not respawned.
   const tried = await read($, swept)
-  const stale = next.leads
-    .filter(lead => isArchivable(lead, loadedAt) && !tried.includes(lead.id))
+  // The board does not read feedback.json, so a ghostable lead here may have a reply recorded
+  // there: `jobs archive` checks it and leaves such a lead alone.
+  const application = (id: string) => next.applications.find(one => one.leadId === id)
+  const due = next.leads
+    .filter(
+      lead =>
+        (isArchivable(lead, loadedAt) || isGhostable(lead, application(lead.id), loadedAt)) &&
+        !tried.includes(lead.id),
+    )
     .map(lead => lead.id)
-  if (stale.length === 0) return next
-  await update($, swept, ids => [...ids, ...stale])
+  if (due.length === 0) return next
+  await update($, swept, ids => [...ids, ...due])
   const result = await jobs($, ['archive'])
   if (!result.ok) $.ui.toast(`job-tracker: could not archive stale leads: ${result.error}`)
+  else ghostedToast($, next, result.value)
   return read($, board)
+}
+
+/** Tells the person which applications the board just marked ghosted, and how to undo it. */
+function ghostedToast($: EngineInterface, before: JobBoard, value: unknown) {
+  const ids = (value as { ghosted?: unknown } | null)?.ghosted
+  if (!Array.isArray(ids) || ids.length === 0) return
+  const names = ids.map(id => before.leads.find(lead => lead.id === id)?.company ?? String(id))
+  $.ui.toast(
+    `Marked ghosted (no reply a month after applying): ${names.join(', ')}. ` +
+      'Now in Archived; "Back to Applied" on the card undoes it.',
+    { timeoutMs: 15_000 },
+  )
 }
 
 export type RunResult = { ok: true; value: unknown } | { ok: false; error: string }

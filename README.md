@@ -5,6 +5,8 @@ skills find and score roles, draft application packages, and learn from feedback
 draws the kanban pane (`/jobs`), a band above the prompt, and gives the model tools to read
 and update leads. Lead scores age: a posting not yet applied to loses 10 points a day, and a
 New lead over a week old, or whose aged score falls below 50, is archived (see "Scores age" in SETUP.md).
+An application with no reply a month after it was submitted is marked ghosted on its own (see
+"Ghosting" in SETUP.md).
 
 This repository holds code only. Profiles, résumés, leads and packages live in a data
 folder outside it; CI fails if personal data is committed. [SETUP.md](SETUP.md) covers how
