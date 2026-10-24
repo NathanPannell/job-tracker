@@ -109,7 +109,7 @@ function ghostedToast($: EngineInterface, before: JobBoard, value: unknown) {
   if (!Array.isArray(ids) || ids.length === 0) return
   const names = ids.map(id => {
     const lead = before.leads.find(one => one.id === id)
-    return lead ? `${lead.company} (${lead.role})` : String(id)
+    return lead ? `${lead.company} — ${lead.role}` : String(id)
   })
   $.ui.toast(
     `Marked ghosted (no reply a month after applying): ${names.join(', ')}. ` +

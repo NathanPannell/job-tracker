@@ -543,7 +543,7 @@ describe('kanban', () => {
       by: 'tracker',
     })
     expect(toasts).toEqual([
-      'Marked ghosted (no reply a month after applying): Quiet (Backend Developer). Now in Archived; "Back to Applied" on the card undoes it.',
+      'Marked ghosted (no reply a month after applying): Quiet — Backend Developer. Now in Archived; "Back to Applied" on the card undoes it.',
     ])
     const ui = await $.ui.mount({ ...pane, surface: 'desktop' })
     await ui.press({ key: 'tab:applied' })
