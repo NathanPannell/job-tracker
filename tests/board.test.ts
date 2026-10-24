@@ -581,6 +581,29 @@ describe('kanban', () => {
     await ui.unmount()
   })
 
+  test('a press whose write fails keeps the lead open', async ($, on) => {
+    const w = world(on, { leads: [lead('a-1', { company: 'Alpha' })] })
+    const toasts: string[] = []
+    on('ui.toast', (_, e) => {
+      toasts.push(e.text)
+      return { value: undefined }
+    })
+    await start($)
+    const ui = await $.ui.mount({ ...pane, surface: 'desktop' })
+    await ui.press({ key: 'open:a-1' })
+    w.failWrites('leads.json is locked')
+    await ui.press({ key: 'archive' })
+    expect(toasts).toHaveLength(1)
+    expect(await boardTab(ui)).toBeUndefined()
+    await ui.press({ key: 'pass' })
+    await ui.press({ key: 'reason:Too senior' })
+    expect(toasts).toHaveLength(2)
+    expect(await boardTab(ui)).toBeUndefined()
+    await ui.select({ key: 'snooze', value: '3' })
+    expect(toasts).toHaveLength(3)
+    expect(await boardTab(ui)).toBeUndefined()
+  })
+
   test('every stage draws a tree with unique sibling keys and no empty text', async ($, on) => {
     world(on, {
       leads: [

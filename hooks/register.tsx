@@ -216,11 +216,16 @@ async function finishDraft($: EngineInterface, agentId: string, answer: string, 
 /**
  * After a press that settles a lead for now (drafted, passed, moved, an outcome recorded, sent
  * to submit), the pane goes back to the board on the stage tab the lead was in, so the next one
- * is a click away. A press on the board itself leaves it where it is.
+ * is a click away. It looks when the write is done, so a press on the board, or on a lead the
+ * person has since left for another, leaves the pane where it is.
  */
 async function leave($: EngineInterface, lead: Lead) {
-  if ((await read($, view)).kind === 'board') return
-  await update($, stage, () => lead.column)
+  const at = await read($, view)
+  if ((at.kind !== 'lead' && at.kind !== 'package') || at.id !== lead.id) return
+  if ((await read($, stage)) !== lead.column) {
+    await update($, stage, () => lead.column)
+    await update($, shown, () => PAGE)
+  }
   await show($, { kind: 'board' })
 }
 
