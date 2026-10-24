@@ -76,7 +76,7 @@ export type PackageFiles = {
   answers?: string
   brief?: string
   warmIntro?: string
-  /** The résumé PDF as SVG strips, top to bottom, for the pane. */
+  /** The résumé PDF as SVG pages, in order, for the pane. */
   preview?: string[]
 }
 

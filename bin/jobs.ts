@@ -31,6 +31,7 @@ const USAGE = `jobs <command> [args] [--data <dir>]
   feedback <json|@file>                  { leadId, kind, reason? }
   package <id> [--column ready] [--draft-id id] [--redraft]
                                          record packages/<id>/, render the résumé preview and diff
+  preview <id>                           render a package's résumé preview again
   diff <id>                              the tailored résumé against the master
   submitted <id>                         the person submitted it: move to Applied, follow up in 7 days
   propose <json|@file>                   add a learning proposal
@@ -112,6 +113,8 @@ async function main(argv: string[]): Promise<unknown> {
         draftId: values['draft-id'],
         redraft: values.redraft,
       })
+    case 'preview':
+      return commands.rerenderPreview(dir, need(args[0], 'id'))
     case 'diff':
       return commands.resumeDiff(dir, need(args[0], 'id'))
     case 'submitted':

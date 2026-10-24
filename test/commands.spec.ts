@@ -6,7 +6,7 @@ import { join } from 'node:path'
 import { after, test } from 'node:test'
 
 import * as commands from '../bin/lib/commands.ts'
-import { parsePdfInfo, renderPreview, strips, stripSvg, SVG_LIMIT } from '../bin/lib/preview.ts'
+import { PAGE_BUDGET, pageSvg, parsePdfInfo, renderPreview } from '../bin/lib/preview.ts'
 import type { Run } from '../bin/lib/preview.ts'
 import { dataDir, readData, transact, withLock, writeAtomic } from '../bin/lib/store.ts'
 
@@ -321,6 +321,25 @@ test('a package is registered with its diff, draft snapshot and files, then subm
   assert.throws(() => commands.submitted(dir, 'missing'), /No lead/)
   assert.equal(commands.resumeDiff(dir, 'missing'), '')
   assert.throws(() => commands.registerPackage(fresh(), 'x'), /No package folder/)
+
+  // An older package's preview is drawn again; nothing else about it changes.
+  writeFileSync(join(pkg, 'resume.pdf'), '%PDF-1.4')
+  const fake: Run = (file, args) => {
+    if (file === 'pdfinfo') return 'Pages: 1\n'
+    writeFileSync(`${args.at(-1) as string}.png`, Buffer.alloc(1_000))
+    return ''
+  }
+  const before = readData(dir, 'applications').applications[0]
+  const redrawn = commands.rerenderPreview(dir, id, fake)
+  assert.deepEqual(redrawn.files.preview, ['preview/page-1.svg'])
+  assert.deepEqual(readData(dir, 'applications').applications[0], {
+    ...before,
+    files: redrawn.files,
+  })
+  assert.equal(readData(dir, 'leads').leads[0]?.column, 'applied')
+  mkdirSync(join(dir, 'packages', 'other'), { recursive: true })
+  writeFileSync(join(dir, 'packages', 'other', 'resume.pdf'), '%PDF-1.4')
+  assert.throws(() => commands.rerenderPreview(dir, 'other', fake), /No package registered/)
 })
 
 /** A lead in Drafting with a package on disk, as the package skill leaves it before step 9. */
@@ -450,21 +469,16 @@ test('the lock serializes writers and a stale lock is cleared', () => {
   assert.throws(() => commands.readJsonArg(undefined), /Missing/)
 })
 
-test('the preview cuts each page into SVG strips under the Svg cap', () => {
+test('the preview is one 1-bit PNG per page, small enough for the pane to draw', () => {
   assert.deepEqual(parsePdfInfo('Pages:          2\nPage size:      612 x 792 pts (letter)\n'), {
     pages: 2,
     width: 612,
     height: 792,
   })
   assert.deepEqual(parsePdfInfo(''), { pages: 1, width: 612, height: 792 })
-  assert.deepEqual(strips(700, 320), [
-    [0, 320],
-    [320, 320],
-    [640, 60],
-  ])
   assert.match(
-    stripSvg('QUJD', 10, 5),
-    /^<svg[^>]+width="10" height="5".*data:image\/jpeg;base64,QUJD/,
+    pageSvg('QUJD', 10, 5),
+    /^<svg[^>]+width="10" height="5".*data:image\/png;base64,QUJD/,
   )
 
   const dir = join(root, 'preview')
@@ -472,26 +486,25 @@ test('the preview cuts each page into SVG strips under the Svg cap', () => {
   const pdf = join(dir, 'resume.pdf')
   writeFileSync(pdf, '%PDF-1.4')
   const calls: string[][] = []
-  let big = true
   const fake: Run = (file, args) => {
     calls.push([file, ...args])
-    if (file === 'pdfinfo') return 'Pages: 1\nPage size: 612 x 792 pts\n'
-    const prefix = args.at(-1) as string
-    // the first strip is too large at the first quality and fits at the next
-    writeFileSync(`${prefix}.jpg`, Buffer.alloc(big ? 100_000 : 1_000))
-    big = false
+    if (file === 'pdfinfo') return 'Pages: 2\nPage size: 612 x 792 pts\n'
+    // the first page is too large at the first resolution and fits at the next
+    const isFirstTry = calls.filter(call => call[0] === 'pdftocairo').length === 1
+    writeFileSync(`${args.at(-1) as string}.png`, Buffer.alloc(isFirstTry ? 80_000 : 30_000))
     return ''
   }
   const names = renderPreview(pdf, join(dir, 'out'), fake)
-  assert.equal(names.length, 5)
-  assert.equal(names[0], 'page-1-0.svg')
-  const first = readFileSync(join(dir, 'out', 'page-1-0.svg'), 'utf8')
-  assert.ok(first.length < SVG_LIMIT)
-  assert.ok(calls.some(call => call.includes('quality=60,optimize=y')))
+  assert.deepEqual(names, ['page-1.svg', 'page-2.svg'])
+  const first = readFileSync(join(dir, 'out', 'page-1.svg'), 'utf8')
+  assert.ok(first.length <= PAGE_BUDGET)
+  assert.match(first, /width="850" height="1100"/)
+  assert.ok(calls.every(call => call[0] !== 'pdftocairo' || call.includes('-mono')))
+  assert.ok(!existsSync(join(dir, 'out', 'page-1.png')))
   assert.throws(() => renderPreview(join(dir, 'missing.pdf'), join(dir, 'x'), fake), /No PDF/)
   const huge: Run = (file, args) => {
     if (file === 'pdfinfo') return 'Pages: 1\n'
-    writeFileSync(`${args.at(-1) as string}.jpg`, Buffer.alloc(200_000))
+    writeFileSync(`${args.at(-1) as string}.png`, Buffer.alloc(200_000))
     return ''
   }
   assert.throws(() => renderPreview(pdf, join(dir, 'y'), huge), /too large/)

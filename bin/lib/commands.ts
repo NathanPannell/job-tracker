@@ -50,6 +50,7 @@ import type {
 import { fetchBoards, isReachable } from './ats.ts'
 import type { Ats, Board, Fetch, Posting } from './ats.ts'
 import { renderPreview } from './preview.ts'
+import type { Run } from './preview.ts'
 import type { Change, Data } from './store.ts'
 import { init, readData, transact, withLock, writeAtomic } from './store.ts'
 
@@ -409,6 +410,33 @@ export function registerPackage(
             }
           : {}),
       },
+    }
+  })
+}
+
+/**
+ * Renders a registered package's résumé preview again and records its pages, changing nothing
+ * else: for packages drawn before the preview fitted the pane.
+ */
+export function rerenderPreview(dir: string, id: string, run?: Run): Application {
+  const pkg = join(dir, 'packages', id)
+  const preview = renderPreview(join(pkg, 'resume.pdf'), join(pkg, 'preview'), run).map(
+    name => `preview/${name}`,
+  )
+  return transact<Application>(dir, data => {
+    const existing = data.applications.applications.find(one => one.leadId === id)
+    if (!existing) throw new Error(`No package registered for ${id}`)
+    const application = { ...existing, files: { ...existing.files, preview } }
+    return {
+      write: {
+        applications: {
+          ...data.applications,
+          applications: data.applications.applications.map(one =>
+            one.leadId === id ? application : one,
+          ),
+        },
+      },
+      result: application,
     }
   })
 }
