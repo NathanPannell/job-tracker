@@ -14,6 +14,7 @@ import {
   previousColumn,
   PASS_REASONS,
   PIPELINE,
+  recentlyGhosted,
   scoreTone,
   sourceLabel,
   STAGE_ACTIONS,
@@ -224,6 +225,29 @@ function card(ctx: ViewContext, lead: Lead): RenderElement {
   )
 }
 
+/**
+ * The applications the board marked ghosted this week, each a button to its page, where "Back to
+ * Applied" undoes it: the toast is seen only by the session that ghosted them, often a scheduled
+ * run.
+ */
+function ghostedNotice(ctx: ViewContext, file: { version: 1; leads: Lead[] }) {
+  const { Box, Text, Button } = ctx.el
+  const ghosted = recentlyGhosted(file, ctx.now)
+  if (ghosted.length === 0) return null
+  return (
+    <Box key="ghosted" flexDirection="row" gap={1} flexWrap="wrap" alignItems="center">
+      <Text color="warning">Marked ghosted, no reply a month after applying:</Text>
+      {ghosted.slice(0, PAGE).map(lead => (
+        <Button
+          key={`ghost-notice:${lead.id}`}
+          label={`${clip(lead.company, 30)} · ${clip(lead.role, 40)}`}
+          onPress={() => ctx.nav.open(lead.id)}
+        />
+      ))}
+    </Box>
+  )
+}
+
 export function boardView(
   ctx: ViewContext,
   options: { showClosed: boolean; stage: Column | null; shown: number },
@@ -272,6 +296,7 @@ export function boardView(
         )}
       </Box>
       {ctx.board.error && <Text color="warning">{ctx.board.error}</Text>}
+      {ghostedNotice(ctx, file)}
       <Box key="tabs" flexDirection="row" gap={1} flexWrap="wrap">
         {tabs.map(column => (
           <Button

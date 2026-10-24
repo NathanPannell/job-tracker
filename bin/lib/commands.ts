@@ -23,6 +23,7 @@ import {
   counts,
   effectiveScore,
   eventId,
+  ghostSilent,
   hasBlurb,
   hasHighlights,
   hasTagline,
@@ -106,6 +107,8 @@ export type AddSummary = {
   dropped: string[]
   /** New leads moved to Archived: posted over a week ago, or scoring below 50 as aged. */
   archived: string[]
+  /** Applied leads marked ghosted: no reply a month after they were submitted. */
+  ghosted: string[]
   /** Added leads scoring 90 or more once aged: the ones worth a push notification. */
   alerts: (Pick<Lead, 'id' | 'company' | 'role' | 'fitScore'> & { score: number })[]
   /** Leads added without the tagline they came with, and why it was refused. */
@@ -129,7 +132,7 @@ export function add(dir: string, incoming: IncomingLead[], threshold: string | n
   const at = now()
   return transact<AddSummary>(dir, data => {
     const merged = addLeads(data.leads, checked, at, Number(threshold))
-    const swept = archiveStale(merged.leads, at)
+    const swept = sweep({ ...data, leads: merged.leads }, at)
     const result = { ...merged, leads: swept.leads }
     const alerts = result.leads.leads
       .filter(lead => result.added.includes(lead.id))
@@ -142,12 +145,16 @@ export function add(dir: string, incoming: IncomingLead[], threshold: string | n
       }))
       .filter(alert => alert.score >= 90)
     return {
-      write: { leads: result.leads },
+      write: {
+        leads: result.leads,
+        ...(swept.ghosted.length > 0 ? { feedback: swept.feedback } : {}),
+      },
       result: {
         added: result.added,
         updated: result.updated,
         dropped: result.dropped,
         archived: swept.archived,
+        ghosted: swept.ghosted,
         alerts,
         warnings,
       },
@@ -155,11 +162,31 @@ export function add(dir: string, incoming: IncomingLead[], threshold: string | n
   })
 }
 
-/** Moves New leads posted over a week ago or scoring below 50 to Archived; prints their ids. */
-export function archive(dir: string): { archived: string[] } {
+/**
+ * The board's own moves, time-based and run whenever the board or the CLI is used: stale New
+ * leads to Archived (`archiveStale`), and Applied leads with no reply a month on to Ghosted
+ * (`ghostSilent`).
+ */
+function sweep(data: Pick<Data, 'leads' | 'applications' | 'feedback'>, at: string) {
+  const stale = archiveStale(data.leads, at)
+  const silent = ghostSilent(stale.leads, data.applications, data.feedback, at)
+  return { ...silent, archived: stale.archived }
+}
+
+/**
+ * Moves New leads posted over a week ago or scoring below 50 to Archived, and marks Applied leads
+ * with no reply a month after submitting ghosted; prints their ids.
+ */
+export function archive(dir: string): { archived: string[]; ghosted: string[] } {
   return transact(dir, data => {
-    const { leads, archived } = archiveStale(data.leads, now())
-    return { write: archived.length > 0 ? { leads } : {}, result: { archived } }
+    const { leads, feedback, archived, ghosted } = sweep(data, now())
+    return {
+      write: {
+        ...(archived.length + ghosted.length > 0 ? { leads } : {}),
+        ...(ghosted.length > 0 ? { feedback } : {}),
+      },
+      result: { archived, ghosted },
+    }
   })
 }
 

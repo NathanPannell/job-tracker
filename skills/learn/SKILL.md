@@ -14,7 +14,12 @@ packages are written. You propose; the person approves in /jobs. Never edit the 
 
 - CLI: `node "$JOB_TRACKER_HOME/bin/jobs.ts" <command>`; data folder `$JOB_TRACKER_DATA`.
 - `feedback.json` (pass reasons, score-too-high / score-too-low, moves, outcomes; older events
-  may include `snooze`, from before snoozing was removed),
+  may include `snooze`, from before snoozing was removed). An outcome with `by: "tracker"` was
+  recorded by the board itself: an application ghosted a month after submitting with no reply.
+  Count it as ghosted, not as a rejection anyone reported, and keep it apart from Ghosted marked
+  by hand. A ghosting that was undone (the lead moved out of Archived after it, see its history)
+  or followed by a later outcome for the same lead (a late reply) is not a ghosting: count the
+  later outcome instead,
   `leads.json` (source, score, column, history), `applications.json`, `jobs edits` (diffs between
   each drafted package and the person's edited version), `scout/runs.md`, `scout/signals.md`
   (funding and hiring news the scout found, with or without a public job board),
