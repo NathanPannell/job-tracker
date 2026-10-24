@@ -18,6 +18,21 @@ chat, every time.
   not exist yet), then `packages/<id>/answers.md`, `cover-letter.md`, `posting.md`, and the
   identity and links in `profile/knowledge-base/profile.md`.
 
+## Where it runs
+
+"Approve and submit" on the job board does this in two parts, so the slow Chrome work never holds
+the person's conversation:
+
+- **In the background**, a subagent prefills the application (see "In the background" below). It
+  asks nothing and never submits.
+- **In the conversation**, a prompt arrives with the subagent's report once it ends. Start at
+  step 4 with the form as the report and the tab left it: check the tab is there and the fields
+  are still filled, and redo steps 1–3 only for what is not. If the report starts with
+  `CHROME UNAVAILABLE`, do every step here.
+
+Asked to submit in the conversation directly ("submit the application for <lead>"), do every
+step here.
+
 ## Steps
 
 1. Load the Claude in Chrome tools in one ToolSearch call (tabs_context_mcp, tabs_create_mcp,
@@ -53,6 +68,34 @@ chat, every time.
 8. If they say no or want changes: make the changes (saving any new answer as in step 5), show
    the checklist again, and ask again. If they stop, leave the tab as it is and change nothing on
    the board.
+
+## In the background
+
+When the prompt says you run in the background, nobody can answer you:
+
+- Do steps 1–3 only, then read the filled form back as in step 6. Never ask, never click the final
+  submit, send, apply or confirm, and leave the tab open on the filled form.
+- If step 2 stops you (sign-in, account, password, CAPTCHA, an agreement), stop there too and say
+  so in the report.
+- If the Claude in Chrome tools cannot be loaded or reach a browser, finish at once with a report
+  that starts with `CHROME UNAVAILABLE` and one line on why.
+- Write nothing under `profile/` and do not change the board: no answers were given yet.
+
+Finish with this report and nothing else; it is handed to the conversation word for word:
+
+```markdown
+Tab: <the tab's title> — <its URL>
+Stopped at: <filled, ready for review | sign-in | account | CAPTCHA | agreement | error: <why>>
+
+Filled:
+- <field>: <value entered> (one line each; the résumé file attached)
+
+Still needed:
+1. <question exactly as the form asks it> (required | optional)
+
+Left blank on purpose:
+- <field>: <why, e.g. optional self-identification>
+```
 
 ## Saved answers
 

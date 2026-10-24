@@ -178,6 +178,10 @@ export type SentPrompt = {
  * names the agent, at the latest when its run starts with `task`.
  */
 export type DraftRun = {
+  /** A package build (absent, from before prefills) or an application's background prefill. */
+  kind?: 'draft' | 'submit'
+  /** A prefill whose report went to the conversation, which is asking and submitting now. */
+  isHandedOn?: true
   agentId?: string
   leadId: string
   company: string
