@@ -527,6 +527,16 @@ describe('kanban', () => {
     }
   })
 
+  test('the first drawing of a load says it drew, where and how fast, once', async ($, on) => {
+    const w = world(on, { leads: [lead('acme-api')] })
+    await start($)
+    const ui = await $.ui.mount({ ...pane, surface: 'desktop' })
+    await ui.press({ key: 'tab:drafting' })
+    expect(w.logs.filter(line => /drew/.test(line))).toEqual([
+      expect.stringMatching(/^job-tracker: the board drew on desktop in \d+ ms$/),
+    ])
+  })
+
   test('a drawing that fails shows why and a way back, never a blank pane', async ($, on) => {
     // A hand-edited lead whose highlights are not a list makes the lead view throw.
     world(on, {
