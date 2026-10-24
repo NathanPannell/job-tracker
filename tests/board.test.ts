@@ -336,7 +336,7 @@ describe('kanban', () => {
     expect(await ui.find({ type: 'Text', text: /^Fit / })).toBeUndefined()
   })
 
-  test('a New lead posted over a week ago is archived when the board loads', async ($, on) => {
+  test('a New lead posted over a week ago or scoring below 50 is archived when the board loads', async ($, on) => {
     const w = world(on, {
       leads: [
         lead('stale-1', { company: 'Stale', postedAt: '2026-10-12T12:00:00.000Z' }),
@@ -346,6 +346,8 @@ describe('kanban', () => {
           postedAt: '2026-10-01T12:00:00.000Z',
         }),
         lead('fresh-3', { company: 'Fresh' }),
+        // Four days old at fit 80: 40 off, so 40 on the board.
+        lead('low-4', { company: 'Low', postedAt: '2026-10-16T12:00:00.000Z' }),
       ],
     })
     await start($)
@@ -354,7 +356,9 @@ describe('kanban', () => {
       ['stale-1', 'archived'],
       ['kept-2', 'drafting'],
       ['fresh-3', 'new'],
+      ['low-4', 'archived'],
     ])
+    expect(w.leads()[3]?.history.at(-1)?.note).toBe('score 40, below 50')
     expect(w.leads()[0]?.history.at(-1)?.by).toBe('tracker')
     const ui = await $.ui.mount({ ...pane, surface: 'desktop' })
     expect(await ui.find({ key: 'open:stale-1' })).toBeUndefined()

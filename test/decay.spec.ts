@@ -139,7 +139,7 @@ test('the nudge names the best leads by aged score, with that score', () => {
   assert.match(nudgeContext(named, NOW), /Stale — Backend Developer \(score 75\)/)
 })
 
-test('a New lead posted over a week ago is archived; kept, snoozed, restored and applied stay', () => {
+test('a New lead posted over a week ago or scoring below 50 is archived; kept, snoozed, restored and applied stay', () => {
   assert.equal(isStale(lead({ foundAt: daysAgo(7) }), NOW), false)
   assert.equal(isStale(lead({ foundAt: hoursAgo(7 * 24 + 1) }), NOW), true)
   assert.equal(isStale(lead({ postedAt: daysAgo(8), foundAt: AT }), NOW), true)
@@ -153,15 +153,36 @@ test('a New lead posted over a week ago is archived; kept, snoozed, restored and
       history: [{ at: AT, by: 'user', action: 'moved', from: 'archived', to: 'new' }],
     }),
     lead({ id: 'week', foundAt: daysAgo(7) }),
+    // Aged scores: 86 - 40 = 46 goes, 90 - 40 = 50 stays, as does a fresh 49 scout let in.
+    lead({ id: 'low', foundAt: daysAgo(4) }),
+    lead({ id: 'fifty', fitScore: 90, foundAt: daysAgo(4) }),
+    lead({ id: 'fresh-low', fitScore: 49, foundAt: hoursAgo(1) }),
     lead({ id: 'kept', column: 'drafting', foundAt: daysAgo(9) }),
+    lead({ id: 'kept-low', column: 'ready', foundAt: daysAgo(5) }),
     lead({ id: 'applied', column: 'applied', foundAt: daysAgo(30) }),
   )
   const { leads, archived } = archiveStale(file, AT)
-  assert.deepEqual(archived, ['stale', 'woke'])
+  assert.deepEqual(archived, ['stale', 'woke', 'week', 'low', 'fresh-low'])
   assert.deepEqual(
     leads.leads.map(one => one.column),
-    ['archived', 'new', 'archived', 'new', 'new', 'drafting', 'applied'],
+    [
+      'archived',
+      'new',
+      'archived',
+      'new',
+      'archived',
+      'archived',
+      'new',
+      'archived',
+      'drafting',
+      'ready',
+      'applied',
+    ],
   )
+  assert.equal(leads.leads[5]?.history.at(-1)?.note, 'score 46, below 50')
+  assert.equal(leads.leads[4]?.history.at(-1)?.note, 'score 16, below 50')
+  // Past a week, the age is the reason given, whatever the score.
+  assert.equal(leads.leads[0]?.history.at(-1)?.note, 'posted over 7 days ago')
   const moved = leads.leads[2] as Lead
   assert.equal(moved.snoozedUntil, undefined)
   assert.deepEqual(moved.history.at(-1), {
