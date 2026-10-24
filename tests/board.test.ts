@@ -203,6 +203,87 @@ describe('kanban', () => {
     })
   }
 
+  for (const surface of ACTING) {
+    test(`Pass on a board card asks for the reason on the card and records it there (${surface})`, async ($, on) => {
+      const leads = Array.from({ length: 12 }, (_, n) =>
+        lead(`l-${n}`, { company: `Co ${n}`, fitScore: 60 + n, tagline: 'x'.repeat(40) }),
+      )
+      const w = world(on, {
+        leads: [lead('acme-api', { company: 'Acme', fitScore: 88 }), ...leads],
+      })
+      await start($)
+      const ui = await $.ui.mount({ ...pane, surface })
+      await ui.press({ key: 'pass:acme-api' })
+      // Still the board: the reasons open on that card alone.
+      expect(await boardTab(ui)).toBe('tab:new')
+      expect(await ui.find({ key: 'reason:Too senior:acme-api' })).toBeDefined()
+      expect(await ui.find({ key: 'reason:Too senior:l-11' })).toBeUndefined()
+      expect(await ui.find({ text: /Why pass\?/ })).toBeDefined()
+      const root = (await ui.findAll({}))[0]
+      expect(JSON.stringify(root).length).toBeLessThan(100_000)
+      // Pass again closes them, as does Cancel.
+      await ui.press({ key: 'pass:acme-api' })
+      expect(await ui.find({ key: 'reason:Too senior:acme-api' })).toBeUndefined()
+      await ui.press({ key: 'pass:acme-api' })
+      await ui.press({ key: 'cancel-pass:acme-api' })
+      expect(await ui.find({ key: 'reason:Too senior:acme-api' })).toBeUndefined()
+
+      await ui.press({ key: 'pass:acme-api' })
+      await ui.press({ key: 'reason:Not interested:acme-api' })
+      expect(w.leads()[0]?.column).toBe('passed')
+      expect(w.leads()[0]?.passReason).toBe('Not interested')
+      expect(w.feedback()).toEqual([
+        expect.objectContaining({ kind: 'pass', reason: 'Not interested', leadId: 'acme-api' }),
+      ])
+      expect(await boardTab(ui)).toBe('tab:new')
+      expect(await ui.find({ key: 'card:acme-api' })).toBeUndefined()
+      expect(await ui.find({ text: /Why pass\?/ })).toBeUndefined()
+      await ui.unmount()
+    })
+  }
+
+  for (const surface of ACTING) {
+    test(`Pass in the lead view opens the reasons beneath it and records the pass (${surface})`, async ($, on) => {
+      const w = world(on, {
+        leads: [
+          lead('acme-api', { company: 'Acme', fitScore: 88 }),
+          lead('beta-api', { company: 'Beta', column: 'applied' }),
+        ],
+      })
+      await start($)
+      const ui = await $.ui.mount({ ...pane, surface })
+      // A picker left open on the card does not follow the person into the lead.
+      await ui.press({ key: 'pass:acme-api' })
+      await ui.press({ key: 'open:acme-api' })
+      expect(await ui.find({ key: 'reason:Too senior' })).toBeUndefined()
+      // Every press of Pass changes what is drawn: it opens the reasons, then closes them.
+      await ui.press({ key: 'pass' })
+      expect(await ui.find({ text: /Why pass\?/ })).toBeDefined()
+      expect(await ui.find({ key: 'reason:Too senior' })).toBeDefined()
+      await ui.press({ key: 'pass' })
+      expect(await ui.find({ key: 'reason:Too senior' })).toBeUndefined()
+      await ui.press({ key: 'pass' })
+      await ui.press({ key: 'reason:Wrong stack' })
+      expect(w.leads().find(one => one.id === 'acme-api')?.column).toBe('passed')
+      expect(await boardTab(ui)).toBe('tab:new')
+
+      // A lead past New passes from its own Pass button the same way.
+      await ui.press({ key: 'tab:applied' })
+      await ui.press({ key: 'open:beta-api' })
+      await ui.press({ key: 'pass-any' })
+      await ui.press({ key: 'cancel-pass' })
+      expect(await ui.find({ key: 'reason:Location' })).toBeUndefined()
+      await ui.press({ key: 'pass-any' })
+      await ui.press({ key: 'reason:Location' })
+      expect(w.leads().find(one => one.id === 'beta-api')?.column).toBe('passed')
+      expect(w.feedback().filter(event => event.kind === 'pass')).toEqual([
+        expect.objectContaining({ leadId: 'acme-api', reason: 'Wrong stack' }),
+        expect.objectContaining({ leadId: 'beta-api', reason: 'Location' }),
+      ])
+      await ui.unmount()
+    })
+  }
+
   test('a rejection is an outcome, not a pass, and can be undone in place', async ($, on) => {
     const w = world(on, { leads: [lead('acme-api', { company: 'Acme', column: 'applied' })] })
     await start($)
