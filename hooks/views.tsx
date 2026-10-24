@@ -7,6 +7,7 @@ import {
   age,
   COLUMN_TITLES,
   columnLeads,
+  columnTitle,
   decayNote,
   defaultStage,
   effectiveScore,
@@ -17,6 +18,7 @@ import {
   scoreTone,
   sourceLabel,
   STAGE_ACTIONS,
+  TAGLINE_CHARS,
 } from './lib/model.ts'
 import type { Column, Lead, StageAction } from './lib/model.ts'
 
@@ -68,7 +70,7 @@ const SNOOZE_OPTIONS = [
 ]
 
 const clip = (text: string, max: number) =>
-  text.length > max ? `${text.slice(0, max - 1)}…` : text
+  text.length > max ? `${text.slice(0, max - 1).trimEnd()}…` : text
 
 function header(ctx: ViewContext, title: string, back: boolean): RenderElement {
   const { Box, Text, Button } = ctx.el
@@ -152,6 +154,9 @@ function stageButtons(ctx: ViewContext, lead: Lead, suffix: string): RenderEleme
   ))
 }
 
+/** The card's third line: the tagline, or the fit reason until scout has written one. */
+const oneLiner = (lead: Lead) => (lead.tagline?.trim() || lead.fitReason || '').replace(/\s+/g, ' ')
+
 function card(ctx: ViewContext, lead: Lead): RenderElement {
   const { Box, Text, Button } = ctx.el
   const snoozed = isSnoozed(lead, ctx.now)
@@ -170,7 +175,9 @@ function card(ctx: ViewContext, lead: Lead): RenderElement {
       <Text dimColor wrap="truncate-end">
         {facts.join(' · ')}
       </Text>
-      <Text wrap="truncate-end">{lead.fitReason}</Text>
+      <Text key={`tagline:${lead.id}`} wrap="truncate-end">
+        {clip(oneLiner(lead), TAGLINE_CHARS)}
+      </Text>
       {lead.column === 'drafting' && <Text dimColor>Package being drafted…</Text>}
       {ctx.act && (
         <Box flexDirection="row" gap={1} flexWrap="wrap">
@@ -341,7 +348,7 @@ export function leadView(ctx: ViewContext, id: string, passing: boolean): Render
             {lead.column !== 'archived' && (
               <Button key="archive" label="Archive" onPress={() => act.move(lead, 'archived')} />
             )}
-            {lead.column !== 'shortlisted' && (lead.column !== 'ready' || app) && (
+            {lead.column !== 'new' && (lead.column !== 'ready' || app) && (
               <Button
                 key="redraft"
                 label={app ? 'Redraft package' : 'Draft package'}
@@ -394,7 +401,7 @@ export function leadView(ctx: ViewContext, id: string, passing: boolean): Render
         .reverse()
         .map((entry, n) => (
           <Text key={`h:${n}`} dimColor wrap="truncate-end">
-            {`${entry.at.slice(0, 16).replace('T', ' ')}  ${entry.by}: ${entry.action}${entry.to ? ` → ${COLUMN_TITLES[entry.to]}` : ''}${entry.note ? ` (${entry.note})` : ''}`}
+            {`${entry.at.slice(0, 16).replace('T', ' ')}  ${entry.by}: ${entry.action}${entry.to ? ` → ${columnTitle(entry.to)}` : ''}${entry.note ? ` (${entry.note})` : ''}`}
           </Text>
         ))}
     </Box>
@@ -451,7 +458,7 @@ export function packageView(
           />
         ))}
         {ctx.act && lead && lead.column === 'ready' && (
-          <Button key="submit" label="Approve & submit" onPress={() => ctx.act?.submit(lead)} />
+          <Button key="submit" label="Approve and submit" onPress={() => ctx.act?.submit(lead)} />
         )}
       </Box>
       {body}
