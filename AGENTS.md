@@ -7,5 +7,5 @@
   the data folder named by `JOB_TRACKER_DATA`. `npm run check:personal-data` must pass.
 - Data writes go through `bin/jobs.ts` (lock + atomic rename). The hooks module never writes
   data files directly.
-- Delivery follows `C:\repo\AGENTS.md`: branch from `origin/staging`, PR to `staging`, green CI.
+- Delivery follows `C:\repo\AGENTS.md`: branch from `origin/staging`, PR to `staging` gated by the local checks below (GitHub CI runs only for PRs and pushes to `main`).
 - Local gate: `npm run ci`, then `claude plugin validate .` and `claude plugin test .`.
