@@ -118,7 +118,12 @@ type Drafted =
  * conversation to start the subagent instead (`relay`); a tool call reports the refusal. A build
  * that does not start puts the card back where it was.
  */
-async function draftPackage($: EngineInterface, lead: Lead, relay: boolean): Promise<Drafted> {
+async function draftPackage(
+  $: EngineInterface,
+  lead: Lead,
+  relay: boolean,
+  onMoved?: () => Promise<void>,
+): Promise<Drafted> {
   const at = await $.clock.now()
   const redraft = (await read($, board)).applications.some(one => one.leadId === lead.id)
   const task = draftTask(lead, redraft)
@@ -132,6 +137,7 @@ async function draftPackage($: EngineInterface, lead: Lead, relay: boolean): Pro
   })
   if (!isClaimed) {
     $.ui.toast(`The ${lead.company} package is already being drafted.`)
+    await onMoved?.()
     return { ok: true, ran: 'already-drafting' }
   }
   const release = () => update($, drafts, list => list.filter(one => one.task !== task))
@@ -147,6 +153,8 @@ async function draftPackage($: EngineInterface, lead: Lead, relay: boolean): Pro
     await release()
     return { ok: false, error: moved.error }
   }
+  // Not after the spawn: a relayed prompt can wait minutes for the current reply to end.
+  await onMoved?.()
   const putBack = async () => {
     await release()
     if (lead.column === 'drafting') return
@@ -205,9 +213,22 @@ async function finishDraft($: EngineInterface, agentId: string, answer: string, 
   )
 }
 
+/**
+ * After a press that settles a lead for now (drafted, passed, moved, an outcome recorded, sent
+ * to submit), the pane goes back to the board on the stage tab the lead was in, so the next one
+ * is a click away. A press on the board itself leaves it where it is.
+ */
+async function leave($: EngineInterface, lead: Lead) {
+  if ((await read($, view)).kind === 'board') return
+  await update($, stage, () => lead.column)
+  await show($, { kind: 'board' })
+}
+
 function actions($: EngineInterface): Actions {
   const move = (lead: Lead, to: Column) =>
-    void act($, `Moving ${lead.company}`, ['move', lead.id, to])
+    void act($, `Moving ${lead.company}`, ['move', lead.id, to]).then(result =>
+      result.ok ? leave($, lead) : undefined,
+    )
   return {
     open: id => void show($, { kind: 'lead', id }),
     board: () => void show($, { kind: 'board' }),
@@ -235,6 +256,7 @@ function actions($: EngineInterface): Actions {
           reason,
         ])
         if (!moved.ok) return
+        await leave($, lead)
         await act($, 'Recording the outcome', [
           'feedback',
           JSON.stringify({ leadId: lead.id, kind: 'outcome', reason }),
@@ -242,25 +264,28 @@ function actions($: EngineInterface): Actions {
       })(),
     askPass: lead => void show($, { kind: 'lead', id: lead.id, passing: true }),
     pass: (lead, reason) =>
-      void act($, `Passing on ${lead.company}`, ['pass', lead.id, reason]).then(() =>
-        show($, { kind: 'lead', id: lead.id }),
+      void act($, `Passing on ${lead.company}`, ['pass', lead.id, reason]).then(result =>
+        result.ok ? leave($, lead) : show($, { kind: 'lead', id: lead.id }),
       ),
     score: (lead, correction) =>
       void act($, 'Recording the correction', ['score', lead.id, correction]).then(result => {
         if (result.ok) $.ui.toast(`Noted: ${lead.company} scored ${correction.replace('-', ' ')}`)
       }),
     snooze: (lead, days) =>
-      void act($, `Snoozing ${lead.company}`, ['snooze', lead.id, String(days)]).then(() =>
-        show($, { kind: 'board' }),
+      void act($, `Snoozing ${lead.company}`, ['snooze', lead.id, String(days)]).then(result =>
+        result.ok ? leave($, lead) : undefined,
       ),
-    draft: lead => void draftPackage($, lead, true),
+    draft: lead => void draftPackage($, lead, true, () => leave($, lead)),
     review: (lead, tab: PackageTab = 'resume') =>
       void show($, { kind: 'package', id: lead.id, tab }),
+    // Back to the board first: the prompt can wait for the current reply to end.
     submit: lead =>
-      void sendPrompt(
-        $,
-        `I approved the package for lead ${lead.id} (${lead.company} — ${lead.role}) on the job board. Use the job-tracker:submit skill: prefill the application, ask me in one message for anything it is missing, and stop before the final submit so I can confirm here.`,
-        `Prefilling the ${lead.company} application`,
+      void leave($, lead).then(() =>
+        sendPrompt(
+          $,
+          `I approved the package for lead ${lead.id} (${lead.company} — ${lead.role}) on the job board. Use the job-tracker:submit skill: prefill the application, ask me in one message for anything it is missing, and stop before the final submit so I can confirm here.`,
+          `Prefilling the ${lead.company} application`,
+        ),
       ),
     openPdf: path => void openFile($, path),
     decide: (id, decision) =>
