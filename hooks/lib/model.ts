@@ -1031,21 +1031,50 @@ function fencedReport(report: string): string {
     .concat(`\n\n${REPORT_OPEN}\n${clipped || '(no report)'}\n${REPORT_CLOSE}`)
 }
 
+/** Another application approved alongside: still prefilling, or prefilled and waiting on the person. */
+export type BatchLead = Named & { isPrefilled: boolean }
+
+/**
+ * Several approvals close together are one batch: each report names the others, and every reply
+ * asks for all of them, so the latest message is the whole set and one answer covers it.
+ */
+function batchNote(others: readonly BatchLead[]): string {
+  const listed = others.map(
+    one =>
+      `${one.company} — ${one.role} (lead ${one.id}, ${one.isPrefilled ? 'prefilled; its report came earlier in this conversation' : 'still being prefilled; its report comes later'})`,
+  )
+  return [
+    ...(listed.length > 0
+      ? [`I approved these with it, so they are one batch: ${listed.join('; ')}.`]
+      : []),
+    "Reply as the skill's step 4 says: one message with every application in the batch, and any",
+    'other I approved in this conversation that is not submitted yet, grouped by company and',
+    'numbered straight through, with all of their open questions, carrying forward whatever I',
+    'have not answered from earlier messages, so your latest message is always the complete set',
+    'and one reply of mine can answer all of it and say which to submit.',
+  ].join(' ')
+}
+
 /**
  * What the person's conversation is asked once the background prefill ended: carry on from the
- * report, asking the person what is missing and submitting only on their yes in chat.
+ * report, asking the person what is missing for the whole batch and submitting only on their yes
+ * in chat.
  */
-export function submitFollowUp(lead: Named, report: string): string {
+export function submitFollowUp(
+  lead: Named,
+  report: string,
+  others: readonly BatchLead[] = [],
+): string {
   if (isChromeUnavailable(report)) {
-    return `${submitRelay(lead)} A background agent could not drive Chrome, so do all of it here. ${fencedReport(report)}`
+    return `${submitRelay(lead)} A background agent could not drive Chrome, so do all of it here. ${batchNote(others)} ${fencedReport(report)}`
   }
   return [
     `The application for lead ${lead.id} (${lead.company} — ${lead.role}) was prefilled in Chrome`,
     'by a background agent, from the package I approved on the job board. Carry on with the',
     'job-tracker:submit skill from step 4, using its report below and the tab it names: do not',
-    'fill the form again. Ask me in one message for anything still missing, show the checklist,',
-    'and click the final submit only after my yes here. If it stopped at a sign-in, CAPTCHA or',
-    `agreement, hand that off to me as the skill says. ${fencedReport(report)}`,
+    `fill the form again. ${batchNote(others)} Show the checklist and click the final submit`,
+    'only after my yes here. If it stopped at a sign-in, CAPTCHA or agreement, hand that off to',
+    `me as the skill says. ${fencedReport(report)}`,
   ].join(' ')
 }
 
