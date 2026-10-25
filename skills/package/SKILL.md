@@ -77,7 +77,9 @@ below: nobody can answer you, so never stop to ask a question.
    entry wins. Reuse other recorded answers exactly where they apply (work authorization,
    sponsorship, travel commitments) and only within their stated limits. Where nothing on record
    answers it (salary expectation, start date, a disclosure), write `NEEDS ANSWER:` and the
-   question instead of guessing; submit asks the person and saves the answer.
+   question instead of guessing; submit asks the person and saves the answer. A free-text answer
+   you draft is 2–3 sentences, never several paragraphs, and brings up Claude Code or agentic
+   work only when the question is about AI, automation or tooling.
 7. Company brief (`company-brief.md`): what they build and for whom, stage and funding, team size,
    stack, recent news, why it fits, risks and red flags (reviews, runway), and three sharp questions
    to ask. Link every claim's source.

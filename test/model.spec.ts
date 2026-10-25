@@ -356,6 +356,29 @@ test('a prefill runs aside and never submits; its report goes to the conversatio
   assert.match(here, /do all of it here/)
 })
 
+test("every prefill report asks for the whole batch's open questions in one message", () => {
+  const lead = { id: 'acme-api', company: 'Acme', role: 'Backend Developer' }
+  const alone = submitFollowUp(lead, 'Tab: Acme')
+  assert.doesNotMatch(alone, /I approved these with it/)
+  assert.match(alone, /one message with every application in the batch/)
+  assert.match(alone, /carrying forward whatever I have not answered/)
+  assert.match(alone, /grouped by company and numbered straight through/)
+  const others = [
+    { id: 'beta-api', company: 'Beta', role: 'SRE', isPrefilled: true },
+    { id: 'gamma-ui', company: 'Gamma', role: 'Frontend', isPrefilled: false },
+  ]
+  const batch = submitFollowUp(lead, 'Tab: Acme', others)
+  assert.match(
+    batch,
+    /one batch: Beta — SRE \(lead beta-api, prefilled; its report is its own message in this conversation\); Gamma — Frontend \(lead gamma-ui, still being prefilled; its report comes later\)\./,
+  )
+  // The batch is named before the fenced report, which still closes the prompt.
+  assert.ok(batch.indexOf('one batch') < batch.indexOf('<<<PREFILL REPORT'))
+  assert.ok(batch.endsWith('<<<PREFILL REPORT\nTab: Acme\nPREFILL REPORT>>>'))
+  const here = submitFollowUp(lead, `${CHROME_UNAVAILABLE}: no browser`, others)
+  assert.match(here, /do all of it here\. I approved these with it/)
+})
+
 test('a move to the column a lead is already in records nothing', () => {
   const file = seeded()
   const same = moveLead(file, file.leads[0]?.id as string, 'new', AT, 'sync')

@@ -18,7 +18,7 @@ import {
   submitRelay,
   submitTask,
 } from './lib/model.ts'
-import type { Column, Lead } from './lib/model.ts'
+import type { BatchLead, Column, Lead } from './lib/model.ts'
 import { boardView, leadView, packageView, PAGE, proposalsView } from './views.tsx'
 import type { Actions, ViewContext } from './views.tsx'
 
@@ -269,42 +269,62 @@ async function startDraft($: EngineInterface, agentId: string, text: string) {
 }
 
 /**
+ * The other applications approved alongside a lead and not submitted yet: prefills still running
+ * and prefilled ones the conversation is asking about, whose cards are still in Ready to review.
+ */
+async function batchOf($: EngineInterface, leadId: string, at: number): Promise<BatchLead[]> {
+  const leads = (await read($, board)).leads
+  return (await read($, drafts)).flatMap(run => {
+    if (run.kind !== 'submit' || run.leadId === leadId || at - run.at >= DRAFT_FOR_MS) return []
+    const other = leads.find(one => one.id === run.leadId)
+    if (other?.column !== 'ready') return []
+    const { id, company, role } = other
+    return [{ id, company, role, isPrefilled: run.isHandedOn === true }]
+  })
+}
+
+/**
  * A background run's subagent ended. A package build: the board shows where its card went, a
  * toast says how. A prefill: its report goes to the conversation, which asks before submitting.
  */
 async function finishDraft($: EngineInterface, agentId: string, answer: string, reason: string) {
   const run = (await read($, drafts)).find(one => one.agentId === agentId)
   if (!run) return
-  await update($, drafts, list => list.filter(one => one.agentId !== agentId))
+  // A prefill's lead is handed on in the same write that ends its run, so it stays claimed
+  // throughout and a batch member ending meanwhile still finds it (`batchOf`).
+  const handedOn: DraftRun = {
+    kind: 'submit',
+    leadId: run.leadId,
+    company: run.company,
+    task: `handed on: ${run.leadId}`,
+    at: await $.clock.now(),
+    isHandedOn: true,
+  }
+  await update($, drafts, list => [
+    ...list.filter(one => one.agentId !== agentId),
+    ...(run.kind === 'submit' ? [handedOn] : []),
+  ])
   await refresh($)
   if (run.kind === 'submit') {
+    const release = () => update($, drafts, list => list.filter(one => one.task !== handedOn.task))
     const lead = (await read($, board)).leads.find(one => one.id === run.leadId)
     if (reason !== 'answer') {
+      await release()
       $.ui.toast(
         `The ${run.company} application prefill stopped (${reason}); Approve and submit starts it again.`,
       )
     } else if (lead?.column !== 'ready') {
+      await release()
       $.ui.toast(
         `The ${run.company} application was prefilled, but its card left Ready to review meanwhile; nothing was sent.`,
       )
     } else {
       // The lead stays claimed while the conversation asks and submits, so neither a second
       // prefill nor a redraft (a new résumé under the uploaded one) starts meanwhile.
-      const at = await $.clock.now()
-      const handedOn: DraftRun = {
-        kind: 'submit',
-        leadId: run.leadId,
-        company: run.company,
-        task: `handed on: ${run.leadId}`,
-        at,
-        isHandedOn: true,
-      }
-      await update($, drafts, list => [...list, handedOn])
+      const others = await batchOf($, run.leadId, await $.clock.now())
       const label = `Finishing the ${run.company} application`
-      if (!(await sendPrompt($, submitFollowUp(lead, answer), label))) {
-        // It never reached the conversation, so nothing is asking: the lead is free again.
-        await update($, drafts, list => list.filter(one => one.task !== handedOn.task))
-      }
+      // It never reached the conversation, so nothing is asking: the lead is free again.
+      if (!(await sendPrompt($, submitFollowUp(lead, answer, others), label))) await release()
     }
     return
   }

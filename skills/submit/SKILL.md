@@ -30,6 +30,12 @@ the person's conversation:
   are still filled, and redo steps 1–3 only for what is not. If the report starts with
   `CHROME UNAVAILABLE`, do every step here.
 
+Several presses close together are **one batch**. Each lead gets its own subagent at once, side
+by side; none waits for another or for the conversation. Their reports arrive as separate
+prompts, in the order the prefills end, and each names the batch's other leads: still being
+prefilled, or prefilled with its report earlier in the conversation. Every reply to a report asks
+for the whole batch (step 4), never only the lead whose report just came.
+
 Asked to submit in the conversation directly ("submit the application for <lead>"), do every
 step here.
 
@@ -48,23 +54,50 @@ step here.
    question matches and whose scope covers this application (the latest entry wins). Upload
    `packages/<id>/resume.pdf` with file_upload. Leave optional demographic or self-identification
    questions unanswered (or "prefer not to say") unless the person has said otherwise.
-4. Ask once for everything still missing: every `NEEDS ANSWER:` in `answers.md` and every form
-   field the record does not answer, in **one message**, as a numbered list with each question
-   exactly as the form asks it (and whether it is required). Then stop and wait. Skip this step
-   when nothing is missing. Never ask a question `application-answers.md` already answers for
-   this application.
+4. Ask for everything still missing across the batch, in **one message**. The batch is every
+   application approved in this conversation and not submitted yet: this one, the leads the
+   prompt names, and any earlier one still waiting on the person. Each time you ask (on every
+   prefill report, and again after an answer that leaves something open), the message is the
+   complete set, so the person can answer all of it in one reply:
+   - Grouped by company, one heading per lead (`<Company> — <Role>`), with the questions numbered
+     straight through the message (1, 2, 3… across companies), so a reply can answer by number.
+   - Under each lead: every `NEEDS ANSWER:` in `answers.md` and every form field the record does
+     not answer, each exactly as the form asks it and whether it is required.
+   - Under each prefilled lead, also its compact checklist: each filled field and its value (the
+     report's "Filled" list as the tab now shows it) and the file attached, so the person sees
+     what they would approve before they say "submit".
+   - Carry forward every question from earlier messages that is still unanswered; drop the ones
+     answered since, the leads already submitted, and any lead the person told you to stop or
+     skip.
+   - A lead with nothing missing: say it is filled in and ready to submit. A lead still being
+     prefilled: say so in one line; its questions and checklist come with its report.
+   - Where you offer a draft answer, follow "Drafted answers" below. A draft goes into the form
+     only when the person accepts it in so many words ("3: use the draft"); a question they skip
+     is still unanswered, even after "submit all".
+   - End with one line asking the person to answer and to say which to submit. "Submit all"
+     covers only the leads whose checklist this message showed and whose required answers the
+     reply then completes, never a lead still being prefilled.
+
+   Then stop and wait. With one lead and nothing missing, go to step 6. Never ask a question
+   `application-answers.md` already answers for this application.
 5. When the person answers, save each answer before using it (see "Saved answers") and fill the
-   fields. Leave `packages/<id>/answers.md` as it was drafted: the learn skill reads changes to
-   it as the person's own edits, and the next build reads the saved answers anyway. If an answer
-   is still missing, ask again for only that one.
+   fields of every lead it is for. Leave `packages/<id>/answers.md` as it was drafted: the learn
+   skill reads changes to it as the person's own edits, and the next build reads the saved
+   answers anyway. If anything is still missing, ask again as in step 4: the whole batch's open
+   questions in one message.
 6. Read the filled form back (read_page or get_page_text) and post a short checklist in chat:
-   each field and the value entered, the file attached, and anything left blank. Then ask exactly:
-   **"Everything is filled in for <Company> — <Role>. Submit it now?"** and stop. Do not click
-   submit, send, apply or confirm before the person answers.
-7. Only after the person replies yes or "submit" in this conversation: click the final submit,
-   wait for the confirmation page, save its text and the time to `packages/<id>/submission.md`,
-   and run `jobs submitted <id>` (moves the card to Applied and sets a follow-up a week out).
-   Reply with the confirmation in one line.
+   each field and the value entered, the file attached, and anything left blank. If the person's
+   reply already said to submit this lead (by name, or "submit all"), came after a message that
+   showed this lead's checklist, and every required field is now filled from their own answers
+   with nothing changed or new on the form since that checklist, that is their yes: go to step 7.
+   Otherwise ask exactly: **"Everything is filled in for <Company> — <Role>. Submit it now?"**
+   (for several leads, one message with one checklist each, asking which to submit) and stop. Do
+   not click submit, send, apply or confirm before the person answers.
+7. Only after the person replies yes, "submit" or "submit all" in this conversation, covering this
+   lead: click the final submit, wait for the confirmation page, save its text and the time to
+   `packages/<id>/submission.md`, and run `jobs submitted <id>` (moves the card to Applied and
+   sets a follow-up a week out). Reply with the confirmation in one line per lead, then list
+   anything the batch still needs as in step 4.
 8. If they say no or want changes: make the changes (saving any new answer as in step 5), show
    the checklist again, and ask again. If they stop, leave the tab as it is and change nothing on
    the board.
@@ -96,6 +129,13 @@ Still needed:
 Left blank on purpose:
 - <field>: <why, e.g. optional self-identification>
 ```
+
+## Drafted answers
+
+A free-text answer you draft for a form, or suggest to the person, is 2–3 sentences in their
+voice, from the record only, never several paragraphs. Bring up Claude Code or agentic work only
+when the question is about AI, automation or tooling; otherwise answer from the rest of the
+record.
 
 ## Saved answers
 
@@ -133,7 +173,8 @@ earlier entry: a changed answer is a new entry with a later date.
 
 ## Rules
 
-- Never click the final submit without the person's yes in this chat for this application.
+- Never click the final submit without the person's yes in this chat covering this application
+  (by name, or "submit all" for the batch).
 - Never create accounts, enter passwords or sign in for the person; never solve a CAPTCHA or
   accept terms or agreements for them. On a sign-in or account page, stop and hand off with
   everything ready.
