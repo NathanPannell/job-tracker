@@ -810,9 +810,53 @@ describe('kanban', () => {
     expect(prompts).toHaveLength(2)
     expect(prompts[1]).toContain('lead acme-api (acme — Backend Developer) was prefilled')
     expect(prompts[1]).toContain(
-      'one batch: beta — Backend Developer (lead beta-api, prefilled; its report came earlier in this conversation).',
+      'one batch: beta — Backend Developer (lead beta-api, prefilled; its report is its own message in this conversation).',
     )
     expect(prompts[1]).not.toContain('gamma-api')
+  })
+
+  test('two prefills ending at once each name the other in their batch', async ($, on) => {
+    const ids = ['acme-api', 'beta-api']
+    const w = world(on, {
+      leads: ids.map(id => lead(id, { column: 'ready' })),
+      applications: ids.map(leadId => ({
+        leadId,
+        dir: `packages/${leadId}`,
+        createdAt: '',
+        updatedAt: '',
+        files: {},
+        status: 'ready' as const,
+      })),
+    })
+    const prompts: string[] = []
+    on('prompt.submit', (_, e) => {
+      prompts.push(e.text)
+      return { text: e.text }
+    })
+    on('turn.start', (_, e) => ({ turnId: e.turnId }))
+    on('turn.complete', (_, e) => ({ text: e.answer }))
+    await start($)
+    const ui = await $.ui.mount({ ...pane, surface: 'desktop' })
+    for (const id of ids) await ui.press({ key: `submit:${id}` })
+    for (const [n, spawn] of w.spawns.entries()) {
+      await $.turn.start({ text: spawn.prompt, turnId: `p-${n}`, agentId: `agent-${n}` })
+    }
+    await Promise.all(
+      ids.map((id, n) =>
+        $.turn.complete({
+          answer: `Tab: ${id}`,
+          durationMs: 1,
+          isAborted: false,
+          turnId: `p-${n}`,
+          agentId: `agent-${n}`,
+          reason: 'answer',
+        }),
+      ),
+    )
+    expect(prompts).toHaveLength(2)
+    const about = (id: string) => prompts.find(one => one.includes(`lead ${id} (`)) ?? ''
+    expect(about('acme-api')).toContain('one batch: beta — Backend Developer (lead beta-api')
+    expect(about('beta-api')).toContain('one batch: acme — Backend Developer (lead acme-api')
   })
 
   test('a handed-on prefill holds the lead from draft_package, and a dropped hand-off frees it', async ($, on) => {

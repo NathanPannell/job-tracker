@@ -63,13 +63,20 @@ step here.
      straight through the message (1, 2, 3… across companies), so a reply can answer by number.
    - Under each lead: every `NEEDS ANSWER:` in `answers.md` and every form field the record does
      not answer, each exactly as the form asks it and whether it is required.
+   - Under each prefilled lead, also its compact checklist: each filled field and its value (the
+     report's "Filled" list as the tab now shows it) and the file attached, so the person sees
+     what they would approve before they say "submit".
    - Carry forward every question from earlier messages that is still unanswered; drop the ones
-     answered since and the leads already submitted.
+     answered since, the leads already submitted, and any lead the person told you to stop or
+     skip.
    - A lead with nothing missing: say it is filled in and ready to submit. A lead still being
-     prefilled: say so in one line; its questions come with its report.
-   - Where you offer a draft answer, follow "Drafted answers" below.
-   - End with one line asking the person to answer and to say which to submit ("submit all"
-     covers every lead whose required answers are then complete).
+     prefilled: say so in one line; its questions and checklist come with its report.
+   - Where you offer a draft answer, follow "Drafted answers" below. A draft goes into the form
+     only when the person accepts it in so many words ("3: use the draft"); a question they skip
+     is still unanswered, even after "submit all".
+   - End with one line asking the person to answer and to say which to submit. "Submit all"
+     covers only the leads whose checklist this message showed and whose required answers the
+     reply then completes, never a lead still being prefilled.
 
    Then stop and wait. With one lead and nothing missing, go to step 6. Never ask a question
    `application-answers.md` already answers for this application.
@@ -80,8 +87,9 @@ step here.
    questions in one message.
 6. Read the filled form back (read_page or get_page_text) and post a short checklist in chat:
    each field and the value entered, the file attached, and anything left blank. If the person's
-   reply already said to submit this lead (by name, or "submit all") and every required field is
-   now filled from their answers with nothing new on the form, that is their yes: go to step 7.
+   reply already said to submit this lead (by name, or "submit all"), came after a message that
+   showed this lead's checklist, and every required field is now filled from their own answers
+   with nothing changed or new on the form since that checklist, that is their yes: go to step 7.
    Otherwise ask exactly: **"Everything is filled in for <Company> — <Role>. Submit it now?"**
    (for several leads, one message with one checklist each, asking which to submit) and stop. Do
    not click submit, send, apply or confirm before the person answers.

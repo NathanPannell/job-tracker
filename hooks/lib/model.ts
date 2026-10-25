@@ -1041,7 +1041,7 @@ export type BatchLead = Named & { isPrefilled: boolean }
 function batchNote(others: readonly BatchLead[]): string {
   const listed = others.map(
     one =>
-      `${one.company} — ${one.role} (lead ${one.id}, ${one.isPrefilled ? 'prefilled; its report came earlier in this conversation' : 'still being prefilled; its report comes later'})`,
+      `${one.company} — ${one.role} (lead ${one.id}, ${one.isPrefilled ? 'prefilled; its report is its own message in this conversation' : 'still being prefilled; its report comes later'})`,
   )
   return [
     ...(listed.length > 0

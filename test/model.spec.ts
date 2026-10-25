@@ -370,7 +370,7 @@ test("every prefill report asks for the whole batch's open questions in one mess
   const batch = submitFollowUp(lead, 'Tab: Acme', others)
   assert.match(
     batch,
-    /one batch: Beta — SRE \(lead beta-api, prefilled; its report came earlier in this conversation\); Gamma — Frontend \(lead gamma-ui, still being prefilled; its report comes later\)\./,
+    /one batch: Beta — SRE \(lead beta-api, prefilled; its report is its own message in this conversation\); Gamma — Frontend \(lead gamma-ui, still being prefilled; its report comes later\)\./,
   )
   // The batch is named before the fenced report, which still closes the prompt.
   assert.ok(batch.indexOf('one batch') < batch.indexOf('<<<PREFILL REPORT'))
