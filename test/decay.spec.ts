@@ -120,6 +120,10 @@ test('a lead shows how long since it was added and, when known, since it was pos
   assert.deepEqual(leadAges(lead({ postedAt: 'last Tuesday', foundAt: hoursAgo(5) }), NOW), {
     added: '5h',
   })
+  // A posting date in the future is a source's mistake: not shown.
+  assert.deepEqual(leadAges(lead({ postedAt: daysAgo(-2), foundAt: hoursAgo(5) }), NOW), {
+    added: '5h',
+  })
   assert.equal(ago('3d'), '3d ago')
   assert.equal(ago('now'), 'just now')
 })

@@ -422,7 +422,7 @@ export function effectiveScore(
 
 /**
  * How old a lead is, as `age` words: since it was added, and since the posting went up when
- * its date parses.
+ * its date parses and is not in the future.
  */
 export function leadAges(
   lead: Pick<Lead, 'foundAt' | 'postedAt'>,
@@ -431,7 +431,9 @@ export function leadAges(
   const posted = postedTime(lead)
   return {
     added: age(lead.foundAt, now),
-    ...(posted === undefined ? {} : { posted: age(new Date(posted).toISOString(), now) }),
+    ...(posted === undefined || posted > now
+      ? {}
+      : { posted: age(new Date(posted).toISOString(), now) }),
   }
 }
 

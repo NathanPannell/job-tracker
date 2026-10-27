@@ -109,7 +109,7 @@ export type AddSummary = {
   archived: string[]
   /** Applied leads marked ghosted: no reply a month after they were submitted. */
   ghosted: string[]
-  /** Added leads scoring 90 or more once aged: the ones worth a push notification. */
+  /** Added leads scoring 90 or more (not aged yet, so their fit score): worth a push notification. */
   alerts: (Pick<Lead, 'id' | 'company' | 'role' | 'fitScore'> & { score: number })[]
   /** Leads added without the tagline they came with, and why it was refused. */
   warnings: string[]

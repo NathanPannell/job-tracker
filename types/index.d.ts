@@ -4,7 +4,7 @@
 export type Column =
   'new' | 'drafting' | 'ready' | 'applied' | 'interviewing' | 'offer' | 'passed' | 'archived'
 
-/** Who changed a lead; `tracker` is the board itself, e.g. archiving a stale posting or ghosting. */
+/** Who changed a lead; `tracker` is the board itself, e.g. archiving a lead left too long in New, or ghosting. */
 export type Actor = 'user' | 'scout' | 'package' | 'submit' | 'sync' | 'learn' | 'model' | 'tracker'
 
 export type HistoryEntry = {

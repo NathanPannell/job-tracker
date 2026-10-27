@@ -199,7 +199,7 @@ function card(ctx: ViewContext, lead: Lead): RenderElement {
   const { Box, Text, Button } = ctx.el
   const { added, posted } = leadAges(lead, ctx.now)
   const facts = [
-    `added ${added}`,
+    `added ${added === 'now' ? 'just now' : added}`,
     posted && `posted ${posted}`,
     sourceLabel(lead.source),
     lead.location,
