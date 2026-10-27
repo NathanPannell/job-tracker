@@ -27,7 +27,7 @@ packages are written. You propose; the person approves in /jobs. Never edit the 
   (do not re-propose what was rejected unless new evidence is strong).
 
 Scores: `fitScore` in `leads.json` and `feedback.json` is the scout's fit judgement. The board
-shows it aged (points off for the posting's age until applied), but age is applied by the board,
+shows it aged (points off for how long the lead has been on the board until applied), but age is applied by the board,
 not by scoring, so reason about `fitScore` only: a score correction means the fit was misjudged.
 Never propose rules that score old postings down; that would count age twice.
 
