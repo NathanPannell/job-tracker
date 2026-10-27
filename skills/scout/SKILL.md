@@ -83,7 +83,8 @@ You never apply, email anyone, create accounts, or log into job sites.
    US-only remote or relocation is a dealbreaker (under 40). Write `fitReason` as one line naming
    the two or three biggest factors, e.g. `Backend APIs + applied AI, hybrid in their city; asks 3+ yrs`.
    Keep `comp` as posted ("" if none) and `location` as posted. Score the fit only, not the
-   posting's age: the board ages scores itself from `postedAt`.
+   posting's age: the board ages scores itself from when a lead is added, and shows `postedAt`
+   beside it.
    For each posting you keep (60+), also write what the person sees on the card and when they
    open it (`fitReason` shows there as "Why this score"):
    - `companyBlurb`: one sentence that says concretely what the company makes: the product
@@ -118,12 +119,13 @@ You never apply, email anyone, create accounts, or log into job sites.
 5. Write the scored list to `$JOB_TRACKER_DATA/scout/candidates-<YYYYMMDD-HHMM>.json` as a JSON array of
    `{ company, role, url, source, location, comp, fitScore, fitReason, companyBlurb?, tagline?, roleHighlights?, postedAt?, closesAt? }`
    (`postedAt` as the source gave it, ISO; omit it when unknown) and run
-   `jobs add @<that file> --threshold 60`. It dedupes again, drops a new lead whose score, aged by
-   `postedAt`, is under 60 (10 points off a day, so an older posting must fit better to get on)
-   or whose posting is over 7 days old, archives New leads past 7 days or scoring below 50 as aged,
+   `jobs add @<that file> --threshold 60`. It dedupes again, drops a new lead whose fit score is
+   under 60 (a lead starts ageing only once it is added, so an older posting is judged on its fit
+   like any other) or whose `postedAt` is over 30 days old (likely filled), archives New leads
+   added over 7 days ago or scoring below 50 as aged,
    marks Applied leads with no reply a month after submitting ghosted, and prints `added`,
    `updated`, `dropped`, `archived`, `ghosted` (ids of those applications), `alerts` (added leads
-   whose aged `score` is 90+) and
+   whose `score` is 90+) and
    `warnings` (leads added without a tagline that was over 60 characters or not one line; the
    backfill below writes it again).
    Then backfill: `jobs summaries` lists open leads still missing a `companyBlurb`, `tagline` or

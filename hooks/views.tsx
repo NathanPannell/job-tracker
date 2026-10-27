@@ -4,13 +4,14 @@ import type { Elements, RenderElement, RenderSurface } from 'claude-code'
 
 import type { JobBoard, JobPackage, PackageTab } from '../types/index.d.ts'
 import {
-  age,
+  ago,
   COLUMN_TITLES,
   columnLeads,
   columnTitle,
   decayNote,
   defaultStage,
   effectiveScore,
+  leadAges,
   previousColumn,
   PASS_REASONS,
   PIPELINE,
@@ -196,9 +197,13 @@ const oneLiner = (lead: Lead) => (lead.tagline?.trim() || lead.fitReason || '').
 
 function card(ctx: ViewContext, lead: Lead): RenderElement {
   const { Box, Text, Button } = ctx.el
-  const facts = [age(lead.foundAt, ctx.now), sourceLabel(lead.source), lead.location].filter(
-    Boolean,
-  )
+  const { added, posted } = leadAges(lead, ctx.now)
+  const facts = [
+    `added ${added === 'now' ? 'just now' : added}`,
+    posted && `posted ${posted}`,
+    sourceLabel(lead.source),
+    lead.location,
+  ].filter(Boolean)
   return (
     <Box key={`card:${lead.id}`} flexDirection="column" borderStyle="round" paddingX={1}>
       <Box flexDirection="row" gap={1} alignItems="flex-start">
@@ -345,10 +350,12 @@ export function leadView(ctx: ViewContext, id: string): RenderElement {
   }
   const app = ctx.board.applications.find(one => one.leadId === id)
   const aged = decayNote(lead, ctx.now)
+  const ages = leadAges(lead, ctx.now)
   const facts = [
     COLUMN_TITLES[lead.column],
     sourceLabel(lead.source),
-    `found ${age(lead.foundAt, ctx.now)} ago`,
+    `added ${ago(ages.added)}`,
+    ages.posted && `posted ${ago(ages.posted)}`,
     lead.location,
     lead.comp,
   ].filter(Boolean)

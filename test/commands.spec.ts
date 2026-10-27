@@ -53,19 +53,35 @@ test('init creates the files, add merges and alerts on 90+', () => {
 test('list and alerts go by the aged score; the fit score stays as scored', () => {
   const dir = fresh()
   const daysAgo = (days: number) => new Date(Date.now() - days * 86_400_000).toISOString()
+  // A posting's own date does not age it: both are new to the board, so both alert.
   const added = commands.add(dir, [
-    { ...lead('Stale', 95), postedAt: daysAgo(2) },
+    { ...lead('Stale', 95), postedAt: daysAgo(9) },
     { ...lead('Fresh', 90), postedAt: daysAgo(0) },
   ])
   assert.deepEqual(
     added.alerts.map(alert => [alert.company, alert.fitScore, alert.score]),
-    [['Fresh', 90, 90]],
+    [
+      ['Stale', 95, 95],
+      ['Fresh', 90, 90],
+    ],
   )
+  // Two days on the board is 18 off.
+  transact(dir, data => ({
+    write: {
+      leads: {
+        ...data.leads,
+        leads: data.leads.leads.map(one =>
+          one.company === 'Stale' ? { ...one, foundAt: daysAgo(2) } : one,
+        ),
+      },
+    },
+    result: null,
+  }))
   assert.deepEqual(
     commands.list(dir).map(one => [one.company, one.fitScore, one.score]),
     [
       ['Fresh', 90, 90],
-      ['Stale', 95, 75],
+      ['Stale', 95, 77],
     ],
   )
   assert.deepEqual(
@@ -74,12 +90,12 @@ test('list and alerts go by the aged score; the fit score stays as scored', () =
   )
 })
 
-test('archive and add move New leads posted over a week ago to Archived', () => {
+test('archive and add move New leads added over a week ago to Archived', () => {
   const dir = fresh()
   const daysAgo = (days: number) => new Date(Date.now() - days * 86_400_000).toISOString()
   commands.add(dir, [
-    { ...lead('Old', 99), postedAt: daysAgo(1) },
-    { ...lead('Kept', 99), postedAt: daysAgo(1) },
+    { ...lead('Old', 99), postedAt: daysAgo(20) },
+    { ...lead('Kept', 99), postedAt: daysAgo(20) },
   ])
   commands.move(dir, 'kept-backend-developer', 'drafting')
   assert.deepEqual(commands.archive(dir), { archived: [], ghosted: [] })
@@ -88,7 +104,7 @@ test('archive and add move New leads posted over a week ago to Archived', () => 
     write: {
       leads: {
         ...data.leads,
-        leads: data.leads.leads.map(one => ({ ...one, postedAt: daysAgo(8) })),
+        leads: data.leads.leads.map(one => ({ ...one, foundAt: daysAgo(8) })),
       },
     },
     result: null,

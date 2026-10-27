@@ -15,10 +15,11 @@ const USAGE = `jobs <command> [args] [--data <dir>]
                                          leads by aged score, best first
   summary                                counts for the band
   seen                                   ids, companies, roles and URLs already on the board
-  add <json|@file> [--threshold 60]      merge scouted leads (array), threshold on the aged score;
+  add <json|@file> [--threshold 60]      merge scouted leads (array), threshold on the fit score;
+                                         skips postings dated over 30 days ago;
                                          archives stale New leads, ghosts silent Applied ones;
                                          prints added/updated/dropped/archived/ghosted/alerts
-  archive                                move New leads posted over 7 days ago or scoring below 50
+  archive                                move New leads added over 7 days ago or scoring below 50
                                          to Archived, and mark Applied leads with no reply a
                                          month after submitting ghosted (to Archived)
   move <id> <column> [--reason r] [--by actor] [--note n]

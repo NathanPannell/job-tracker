@@ -105,11 +105,11 @@ export type AddSummary = {
   added: string[]
   updated: string[]
   dropped: string[]
-  /** New leads moved to Archived: posted over a week ago, or scoring below 50 as aged. */
+  /** New leads moved to Archived: added over a week ago, or scoring below 50 as aged. */
   archived: string[]
   /** Applied leads marked ghosted: no reply a month after they were submitted. */
   ghosted: string[]
-  /** Added leads scoring 90 or more once aged: the ones worth a push notification. */
+  /** Added leads scoring 90 or more (not aged yet, so their fit score): worth a push notification. */
   alerts: (Pick<Lead, 'id' | 'company' | 'role' | 'fitScore'> & { score: number })[]
   /** Leads added without the tagline they came with, and why it was refused. */
   warnings: string[]
@@ -174,7 +174,7 @@ function sweep(data: Pick<Data, 'leads' | 'applications' | 'feedback'>, at: stri
 }
 
 /**
- * Moves New leads posted over a week ago or scoring below 50 to Archived, and marks Applied leads
+ * Moves New leads added over a week ago or scoring below 50 to Archived, and marks Applied leads
  * with no reply a month after submitting ghosted; prints their ids.
  */
 export function archive(dir: string): { archived: string[]; ghosted: string[] } {

@@ -4,7 +4,7 @@
 export type Column =
   'new' | 'drafting' | 'ready' | 'applied' | 'interviewing' | 'offer' | 'passed' | 'archived'
 
-/** Who changed a lead; `tracker` is the board itself, e.g. archiving a stale posting or ghosting. */
+/** Who changed a lead; `tracker` is the board itself, e.g. archiving a lead left too long in New, or ghosting. */
 export type Actor = 'user' | 'scout' | 'package' | 'submit' | 'sync' | 'learn' | 'model' | 'tracker'
 
 export type HistoryEntry = {
@@ -32,7 +32,8 @@ export type Lead = {
   comp: string
   /**
    * 0-100 against preferences.md and learnings.md: the scout's fit judgement, which never ages.
-   * The board ranks and shows it aged by the posting's age (`effectiveScore` in hooks/lib/model.ts).
+   * The board ranks and shows it aged by how long ago the lead was added, `foundAt`
+   * (`effectiveScore` in hooks/lib/model.ts).
    */
   fitScore: number
   /** One line: why this score. */
@@ -52,7 +53,10 @@ export type Lead = {
   column: Column
   passReason?: string
   foundAt: string
-  /** When the posting went up, when its source says (ATS boards do); the score ages from it. */
+  /**
+   * When the posting went up, when its source says (ATS boards do). Shown beside the lead's age;
+   * it does not age the score, and scout skips a posting dated over 30 days ago.
+   */
   postedAt?: string
   /** When the nudge named this lead in a conversation. */
   mentionedAt?: string
