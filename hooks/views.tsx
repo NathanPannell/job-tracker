@@ -2,7 +2,13 @@
 // with the surface's own element table; desktop and terminal act, mobile only reads.
 import type { Elements, RenderElement, RenderSurface } from 'claude-code'
 
-import type { JobBoard, JobPackage, PackageTab } from '../types/index.d.ts'
+import type {
+  JobBoard,
+  JobPackage,
+  PackageTab,
+  Proposal,
+  ProposalChange,
+} from '../types/index.d.ts'
 import {
   ago,
   COLUMN_TITLES,
@@ -42,7 +48,8 @@ export type Actions = {
   review: (lead: Lead, tab?: PackageTab) => void
   submit: (lead: Lead) => void
   openPdf: (path: string) => void
-  decide: (proposalId: string, decision: 'approve' | 'reject') => void
+  /** Decides one change of a proposal, or `all` its pending ones. */
+  decide: (proposalId: string, changeId: string, decision: 'approve' | 'reject') => void
 }
 
 export type ViewContext = {
@@ -265,7 +272,10 @@ export function boardView(
     )
   }
   const file = { version: 1 as const, leads: ctx.board.leads }
-  const pendingProposals = ctx.board.proposals.filter(one => one.status === 'pending').length
+  // Each learning is approved or rejected on its own, so the count is the learnings left.
+  const pendingChanges = ctx.board.proposals
+    .flatMap(one => one.changes)
+    .filter(one => one.status === 'pending').length
   const closed: Column[] = ['passed', 'archived']
   const closedCount = ctx.board.leads.filter(lead => closed.includes(lead.column)).length
   const tabs = options.showClosed ? [...PIPELINE, ...closed] : PIPELINE
@@ -280,11 +290,11 @@ export function boardView(
         {ctx.busy && <Text dimColor>{ctx.busy}…</Text>}
         {queuedNotes(ctx)}
         {ctx.act && <Button key="refresh" label="Refresh" onPress={() => ctx.act?.refresh()} />}
-        {pendingProposals > 0 && (
+        {pendingChanges > 0 && (
           <Button
             key="proposals"
             variant="primary"
-            label={`Learning proposals (${pendingProposals})`}
+            label={`Learning proposals (${pendingChanges})`}
             onPress={() => ctx.nav.proposals()}
           />
         )}
@@ -579,49 +589,121 @@ function resumeBody(ctx: ViewContext, loaded: JobPackage): RenderElement {
   )
 }
 
+/** Pending proposals drawn in full, newest first; decided ones as one line per change. */
+const FULL_PROPOSALS = 2
+const DECIDED_PROPOSALS = 4
+
 export function proposalsView(ctx: ViewContext): RenderElement {
   const { Box, Text, Button, Markdown } = ctx.el
-  const proposals = [...ctx.board.proposals].sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+  const newest = [...ctx.board.proposals].sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+  const pending = newest.filter(one => one.status === 'pending')
+  const decided = newest.filter(one => one.status !== 'pending')
+  const hidden = Math.max(0, pending.length - FULL_PROPOSALS)
+  // A decided change is one line: its outcome and title. Only pending ones carry their text.
+  const outcome = (proposal: Proposal, change: ProposalChange) => (
+    <Text
+      key={`outcome:${proposal.id}:${change.id}`}
+      color={change.status === 'approved' ? 'success' : 'subtle'}
+    >
+      {`${change.status === 'approved' ? '✓ Approved' : '✗ Rejected'}${
+        change.decidedAt ? ` ${change.decidedAt.slice(0, 10)}` : ''
+      } · ${change.title}${change.status === 'approved' ? ` → ${change.file}` : ''}`}
+    </Text>
+  )
+  const counted = (proposal: Proposal) => {
+    const open = proposal.changes.filter(one => one.status === 'pending').length
+    const approved = proposal.changes.filter(one => one.status === 'approved').length
+    return `${proposal.createdAt.slice(0, 10)} · ${
+      open > 0
+        ? `${open} of ${proposal.changes.length} to review`
+        : `${approved} of ${proposal.changes.length} approved`
+    }`
+  }
   return (
     <Box flexDirection="column" gap={1}>
       {header(ctx, 'Learning proposals', true)}
-      {proposals.length === 0 && (
+      {newest.length === 0 && (
         <Text dimColor>No proposals yet. The learn skill writes one each week.</Text>
       )}
-      {proposals.slice(0, 6).map(proposal => (
-        <Box
-          key={`p:${proposal.id}`}
-          flexDirection="column"
-          borderStyle="round"
-          paddingX={1}
-          gap={1}
-        >
-          <Text bold>{`${proposal.createdAt.slice(0, 10)} · ${proposal.status}`}</Text>
-          <Markdown
-            key={`summary:${proposal.id}`}
-            text={`${proposal.summary}\n\n${proposal.funnel}`}
-          />
-          {proposal.changes.map((change, n) => (
+      {pending.slice(0, FULL_PROPOSALS).map(proposal => {
+        const open = proposal.changes.filter(one => one.status === 'pending').length
+        return (
+          <Box
+            key={`p:${proposal.id}`}
+            flexDirection="column"
+            borderStyle="round"
+            paddingX={1}
+            gap={1}
+          >
+            <Text key={`head:${proposal.id}`} bold>
+              {counted(proposal)}
+            </Text>
             <Markdown
-              key={`change:${proposal.id}:${n}`}
-              text={`**${change.title}** → \`${change.file}\`\n\n_${change.rationale}_\n\n${change.text}`}
+              key={`summary:${proposal.id}`}
+              text={`${proposal.summary}\n\n${proposal.funnel}`}
             />
-          ))}
-          {ctx.act && proposal.status === 'pending' && (
-            <Box flexDirection="row" gap={1}>
-              <Button
-                key={`approve:${proposal.id}`}
-                variant="primary"
-                label="Approve"
-                onPress={() => ctx.act?.decide(proposal.id, 'approve')}
-              />
-              <Button
-                key={`reject:${proposal.id}`}
-                label="Reject"
-                onPress={() => ctx.act?.decide(proposal.id, 'reject')}
-              />
-            </Box>
-          )}
+            {proposal.fewerReason && (
+              <Text key={`fewer:${proposal.id}`} dimColor>
+                {`Fewer than three changes: ${proposal.fewerReason}`}
+              </Text>
+            )}
+            {proposal.changes.map(change =>
+              change.status !== 'pending' ? (
+                outcome(proposal, change)
+              ) : (
+                <Box key={`change:${proposal.id}:${change.id}`} flexDirection="column">
+                  <Markdown
+                    key={`text:${proposal.id}:${change.id}`}
+                    text={`**${change.title}** → \`${change.file}\`\n\n_${change.rationale}_\n\n${change.text}`}
+                  />
+                  {ctx.act && (
+                    <Box flexDirection="row" gap={1}>
+                      <Button
+                        key={`approve:${proposal.id}:${change.id}`}
+                        variant="primary"
+                        label="Approve"
+                        onPress={() => ctx.act?.decide(proposal.id, change.id, 'approve')}
+                      />
+                      <Button
+                        key={`reject:${proposal.id}:${change.id}`}
+                        label="Reject"
+                        onPress={() => ctx.act?.decide(proposal.id, change.id, 'reject')}
+                      />
+                    </Box>
+                  )}
+                </Box>
+              ),
+            )}
+            {ctx.act && open > 1 && (
+              <Box flexDirection="row" gap={1}>
+                <Button
+                  key={`approve:${proposal.id}:all`}
+                  label="Approve all remaining"
+                  onPress={() => ctx.act?.decide(proposal.id, 'all', 'approve')}
+                />
+                <Button
+                  key={`reject:${proposal.id}:all`}
+                  label="Reject all remaining"
+                  onPress={() => ctx.act?.decide(proposal.id, 'all', 'reject')}
+                />
+              </Box>
+            )}
+          </Box>
+        )
+      })}
+      {hidden > 0 && (
+        <Text key="hidden" dimColor>
+          {hidden === 1
+            ? '1 older proposal waits: it shows once one above is decided.'
+            : `${hidden} older proposals wait: they show once one above is decided.`}
+        </Text>
+      )}
+      {decided.slice(0, DECIDED_PROPOSALS).map(proposal => (
+        <Box key={`p:${proposal.id}`} flexDirection="column" paddingX={1}>
+          <Text key={`head:${proposal.id}`} bold dimColor>
+            {counted(proposal)}
+          </Text>
+          {proposal.changes.map(change => outcome(proposal, change))}
         </Box>
       ))}
     </Box>

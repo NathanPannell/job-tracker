@@ -410,12 +410,24 @@ function actions($: EngineInterface): Actions {
     // Back to the board first: a relayed prompt can wait for the current reply to end.
     submit: lead => void leave($, lead).then(() => submitApplication($, lead)),
     openPdf: path => void openFile($, path),
-    decide: (id, decision) =>
-      void act($, decision === 'approve' ? 'Applying the proposal' : 'Rejecting the proposal', [
-        'decide',
-        id,
-        decision,
-      ]),
+    decide: (id, changeId, decision) =>
+      void (async () => {
+        // A press on a change the board shows decided sends nothing. A second press while the
+        // first is still writing reaches the CLI, which takes a repeated decision as done, so a
+        // change's text is appended once.
+        const proposal = (await read($, board)).proposals.find(one => one.id === id)
+        const open = proposal?.changes.filter(
+          one => one.status === 'pending' && (changeId === 'all' || one.id === changeId),
+        )
+        if (!open?.length) return
+        const what = changeId === 'all' ? `${open.length} learnings` : `"${open[0]?.title}"`
+        await act($, `${decision === 'approve' ? 'Approving' : 'Rejecting'} ${what}`, [
+          'decide',
+          id,
+          changeId,
+          decision,
+        ])
+      })(),
   }
 }
 

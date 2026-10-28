@@ -7,7 +7,9 @@ import type { On } from 'claude-code'
 import {
   appendEvent,
   archiveStale,
+  approvedText,
   correctScore,
+  decideChanges,
   emptyFeedback,
   eventId,
   ghostSilent,
@@ -25,6 +27,8 @@ import type {
   LeadsFile,
   MoveResult,
   Proposal,
+  ProposalsFile,
+  StoredProposal,
 } from '../hooks/lib/model.ts'
 
 export const DATA = '/data'
@@ -62,12 +66,19 @@ export type World = {
   failWrites: (reason: string | undefined) => void
   leads: () => Lead[]
   feedback: () => FeedbackFile['events']
+  proposals: () => Proposal[]
+  /** A profile file as approvals left it; empty when nothing was appended. */
+  profile: (file: 'learnings.md' | 'preferences.md') => string
 }
 
 /** Installs the in-memory data folder, environment, clock and session beneath the mod. */
 export function world(
   on: On,
-  seed: { leads?: Lead[]; applications?: Application[]; proposals?: Proposal[] } = {},
+  seed: {
+    leads?: Lead[]
+    applications?: Application[]
+    proposals?: (Proposal | StoredProposal)[]
+  } = {},
   extraFiles: Record<string, string> = {},
 ): World {
   const files = new Map<string, string>()
@@ -166,6 +177,21 @@ export function world(
         put('feedback.json', appendEvent(feedbackFile(), event))
         return { exitCode: 0, stdout: JSON.stringify(event), stderr: '' }
       }
+      case 'decide': {
+        const proposals: ProposalsFile = JSON.parse(files.get(`${DATA}/proposals.json`) ?? '{}')
+        const [target, decision] = args.length > 2 ? [second, args[2]] : ['all', second]
+        try {
+          const decided = decideChanges(proposals, id, target ?? '', decision as 'approve', at)
+          for (const change of decided.decided.filter(one => one.status === 'approved')) {
+            const path = `${DATA}/profile/${change.file}`
+            files.set(path, (files.get(path) ?? '') + approvedText(change, at))
+          }
+          put('proposals.json', decided.file)
+          return { exitCode: 0, stdout: JSON.stringify({ id }), stderr: '' }
+        } catch (error) {
+          return { exitCode: 1, stdout: '', stderr: (error as Error).message }
+        }
+      }
       default:
         return { exitCode: 1, stdout: '', stderr: `unknown command ${command}` }
     }
@@ -185,6 +211,8 @@ export function world(
     },
     leads: () => leadsFile().leads,
     feedback: () => feedbackFile().events,
+    proposals: () => JSON.parse(files.get(`${DATA}/proposals.json`) ?? '{}').proposals,
+    profile: file => files.get(`${DATA}/profile/${file}`) ?? '',
   }
 }
 

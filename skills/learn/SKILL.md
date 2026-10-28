@@ -23,8 +23,12 @@ packages are written. You propose; the person approves in /jobs. Never edit the 
   `leads.json` (source, score, column, history), `applications.json`, `jobs edits` (diffs between
   each drafted package and the person's edited version), `scout/runs.md`, `scout/signals.md`
   (funding and hiring news the scout found, with or without a public job board),
-  `profile/preferences.md`, `profile/learnings.md`, and earlier proposals in `proposals.json`
-  (do not re-propose what was rejected unless new evidence is strong).
+  `profile/preferences.md`, `profile/learnings.md`, and earlier proposals in `proposals.json`.
+  The person decides each change on its own, so one proposal can hold approved, rejected and
+  still-pending changes: each change has its own `status` (`pending`, `approved`, `rejected`).
+  A proposal saved before per-change decisions has a single `status` that applies to all of
+  its changes. Do not re-propose a change that was rejected unless new evidence is strong, and
+  do not re-propose one that is approved (it is already in the profile file) or still pending.
 
 Scores: `fitScore` in `leads.json` and `feedback.json` is the scout's fit judgement, and the
 board shows it as is: scores never age. A score correction means the fit was misjudged. Never
@@ -45,16 +49,22 @@ board archives a New lead once its posting is that old).
    example several "Too senior" on leads scored 80+), score corrections by kind and source, leads
    the person moved forward that were scored low, and edits to packages (what the person cut,
    added or reworded in résumés and cover letters).
-3. Write at most five changes. Each: the target file (`learnings.md` for scoring and writing
-   adjustments, `preferences.md` only for a stated preference change), a title, a one-line
-   rationale with the evidence counts, and the exact Markdown to append (short, imperative,
-   testable: "Score roles asking 4+ years at most 65 unless the posting welcomes new grads").
-   With too little evidence, propose no change and say why.
+3. Write 3 to 10 changes. The person approves or rejects each change on its own, so each one
+   is a single small learning that stands alone: it makes sense and does what it says whether
+   any other change is approved or rejected, never refers to another change, and never merges
+   two rules into one (two rules are two changes). Each: the target file (`learnings.md` for
+   scoring and writing adjustments, `preferences.md` only for a stated preference change), a
+   title, a one-line rationale with the evidence counts, and the exact Markdown to append
+   (short, imperative, testable: "Score roles asking 4+ years at most 65 unless the posting
+   welcomes new grads"). Never pad with weak changes to reach three: with evidence for fewer,
+   propose fewer (none is fine) and give the reason in `fewerReason` and in the summary.
+   `jobs propose` refuses more than 10 changes, and fewer than 3 without a `fewerReason`.
 4. Save the proposal as JSON
-   `{ "summary": "<2-3 sentences>", "funnel": "<Markdown table>", "changes": [ { "file", "title", "rationale", "text" } ] }`
+   `{ "summary": "<2-3 sentences>", "funnel": "<Markdown table>", "fewerReason": "<only with fewer than 3 changes>", "changes": [ { "file", "title", "rationale", "text" } ] }`
    to `$JOB_TRACKER_DATA/scout/proposal-<YYYY-MM-DD>.json` and run
    `jobs propose @<that file>`. It appears in /jobs under "Learning proposals" with Approve and
-   Reject; approving appends the changes to the profile files.
+   Reject on every change (and Approve all remaining / Reject all remaining); approving a change
+   appends only its text to its profile file.
 5. Reply with the summary and the number of proposed changes.
 
 ## Rules

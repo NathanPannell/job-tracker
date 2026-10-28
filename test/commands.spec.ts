@@ -465,41 +465,6 @@ for (const [column, options] of [
   })
 }
 
-test('proposals are approved into the profile files or rejected', () => {
-  const dir = fresh()
-  const proposal = commands.propose(dir, {
-    summary: 'Week one',
-    funnel: '3 found, 1 applied',
-    changes: [
-      {
-        file: 'learnings.md',
-        title: 'Senior roles',
-        rationale: 'Passed 3',
-        text: 'Score senior roles lower.',
-      },
-      {
-        file: 'preferences.md',
-        title: 'Remote',
-        rationale: 'Kept 2',
-        text: 'Remote Canada is fine.',
-      },
-    ],
-  })
-  assert.equal(proposal.status, 'pending')
-  assert.throws(() => commands.propose(dir, { summary: '', funnel: '' } as never), /changes/)
-  assert.throws(() => commands.decide(dir, proposal.id, 'maybe'), /approve or reject/)
-  assert.throws(() => commands.decide(dir, 'nope', 'approve'), /No proposal/)
-  assert.equal(commands.decide(dir, proposal.id, 'approve').status, 'approved')
-  assert.match(
-    readFileSync(join(dir, 'profile', 'learnings.md'), 'utf8'),
-    /Score senior roles lower/,
-  )
-  assert.match(readFileSync(join(dir, 'profile', 'preferences.md'), 'utf8'), /Remote Canada/)
-  assert.throws(() => commands.decide(dir, proposal.id, 'reject'), /already approved/)
-  const second = commands.propose(dir, { id: 'p2', summary: 's', funnel: 'f', changes: [] })
-  assert.equal(commands.decide(dir, second.id, 'reject').status, 'rejected')
-})
-
 test('a broken data file stops every write instead of replacing the board', () => {
   const dir = fresh()
   commands.add(dir, [lead('Acme')])
