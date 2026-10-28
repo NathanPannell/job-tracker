@@ -70,7 +70,10 @@ test('responses normalize to one posting shape', () => {
   // When it was first posted, not last edited; the edit time only when that is all there is.
   assert.equal(gh?.postedAt, '2026-09-02T00:00:00Z')
   const [edited, undated] = parseBoard(board('greenhouse'), {
-    jobs: [{ title: 'Edited only', updated_at: '2026-10-18T00:00:00Z' }, { title: 'Undated' }],
+    jobs: [
+      { title: 'Edited only', first_published: '', updated_at: '2026-10-18T00:00:00Z' },
+      { title: 'Undated' },
+    ],
   })
   assert.equal(edited?.postedAt, '2026-10-18T00:00:00Z')
   assert.equal(undated?.postedAt, undefined)

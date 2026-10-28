@@ -173,85 +173,49 @@ export function defaultStage(file: LeadsFile): Column {
   return PIPELINE.find(has) ?? 'new'
 }
 
-// How a score ages. `fitScore` is the scout's fit judgement and is never changed by age; the
-// board ranks and shows `effectiveScore`, which takes points off leads the person has not
-// applied to yet as they sit on the board. Age counts from when the lead was added (`foundAt`),
-// not from the posting's own date. Nothing polls: it is worked out whenever the board draws.
+// A lead's score is the scout's fit judgement and never ages. What ages is the posting: one up for
+// over two weeks is likely filled, so scout does not add it, and a New lead is archived once its
+// posting passes that age. Nothing polls: it is worked out whenever the board draws or the CLI runs.
 
-/**
- * Points a lead loses on each day since it was added, worked out by the hour within the day:
- * 10 on the first, 8 on the second and so on, then none. Totals 10, 18, 24, 28, 30.
- */
-export const DECAY_POINTS_BY_DAY: readonly number[] = [10, 8, 6, 4, 2]
-/** A New lead added longer ago than this is archived (`archiveStale`). */
-export const ARCHIVE_AFTER_DAYS = 7
-/** A New lead whose aged score falls below this is archived too (`archiveStale`). */
-export const ARCHIVE_BELOW_SCORE = 50
-/** The most age takes off: the whole curve, after which a lead the person kept stops sinking. */
-export const DECAY_MAX_POINTS = DECAY_POINTS_BY_DAY.reduce((sum, points) => sum + points, 0)
-/** Scout does not add a posting whose own date is older than this (two weeks): it is likely filled. */
-export const ADD_MAX_POSTED_DAYS = 14
-/** Columns whose leads age: not applied yet, so a lead left waiting is less worth the time. */
-export const DECAYING_COLUMNS: readonly Column[] = ['new', 'drafting', 'ready']
+/** A posting older than this many days is likely filled: not added, and archived from New. */
+export const POSTING_MAX_DAYS = 14
+/** Scout adds a new lead only when its fit score is at least this. */
+export const ADD_MIN_SCORE = 70
 
 const DAY_MS = 86_400_000
-const HOUR_MS = 3_600_000
 
-/** When the posting went up, if the source gave a date that parses. It does not age the score. */
+/** When the posting went up, if the source gave a date that parses. */
 export function postedTime(lead: Pick<Lead, 'postedAt'>): number | undefined {
   const posted = lead.postedAt === undefined ? Number.NaN : Date.parse(lead.postedAt)
   return Number.isNaN(posted) ? undefined : posted
 }
 
-/** Points age takes off a lead's score at `now`, from when it was added: none once applied. */
-export function scoreDecay(lead: Pick<Lead, 'column' | 'foundAt'>, now: number): number {
-  if (!DECAYING_COLUMNS.includes(lead.column)) return 0
-  const hours = Math.floor((now - Date.parse(lead.foundAt)) / HOUR_MS)
-  if (!(hours > 0)) return 0
-  const days = Math.floor(hours / 24)
-  if (days >= DECAY_POINTS_BY_DAY.length) return DECAY_MAX_POINTS
-  const before = DECAY_POINTS_BY_DAY.slice(0, days).reduce((sum, points) => sum + points, 0)
-  const today = DECAY_POINTS_BY_DAY[days] ?? 0
-  return before + Math.floor(((hours % 24) * today) / 24)
-}
-
-/** Whether a lead was added more than `ARCHIVE_AFTER_DAYS` before `now`. */
-export const isStale = (lead: Pick<Lead, 'foundAt'>, now: number) =>
-  now - Date.parse(lead.foundAt) > ARCHIVE_AFTER_DAYS * DAY_MS
-
-/** Whether a posting's own date is too old for scout to add it (`ADD_MAX_POSTED_DAYS`). */
-export const isLongPosted = (lead: Pick<Lead, 'postedAt'>, now: number) => {
-  const posted = postedTime(lead)
-  return posted !== undefined && now - posted > ADD_MAX_POSTED_DAYS * DAY_MS
-}
-
-type Archivable = Pick<Lead, 'column' | 'fitScore' | 'foundAt' | 'history' | 'scoreCorrection'>
-
 /**
- * Why `archiveStale` takes a lead: it was added over a week ago, or its aged score is below 50,
- * unless the person said the score is too low.
+ * Whether a lead's posting went up more than `POSTING_MAX_DAYS` before `now`, counted from when
+ * the lead was added when the posting has no date that parses.
  */
-function archiveReason(lead: Archivable, now: number): string | undefined {
-  if (isStale(lead, now)) return `added over ${ARCHIVE_AFTER_DAYS} days ago`
-  if (lead.scoreCorrection !== 'too-low' && effectiveScore(lead, now) < ARCHIVE_BELOW_SCORE) {
-    return `score ${effectiveScore(lead, now)}, below ${ARCHIVE_BELOW_SCORE}`
-  }
-  return undefined
-}
+export const isStale = (lead: Pick<Lead, 'foundAt' | 'postedAt'>, now: number) =>
+  now - (postedTime(lead) ?? Date.parse(lead.foundAt)) > POSTING_MAX_DAYS * DAY_MS
+
+type Archivable = Pick<Lead, 'column' | 'foundAt' | 'postedAt' | 'history'>
+
+/** Why `archiveStale` takes a lead: how old its posting is, or how long ago it was added. */
+const archiveReason = (lead: Archivable) =>
+  `${postedTime(lead) === undefined ? 'added' : 'posted'} over ${POSTING_MAX_DAYS} days ago`
 
 /**
- * Whether `archiveStale` takes this lead: in New, past a week or scoring below 50 as aged, and
- * never moved back into New by hand (a lead restored with "Back to New" stays restored).
+ * Whether `archiveStale` takes this lead: in New, its posting stale (`isStale`), and never moved
+ * back into New by hand (a lead restored with "Back to New" stays restored).
  */
 export const isArchivable = (lead: Archivable, now: number) =>
   lead.column === 'new' &&
-  archiveReason(lead, now) !== undefined &&
+  isStale(lead, now) &&
   !lead.history.some(entry => entry.action === 'moved' && entry.to === 'new')
 
 /**
- * Archives New leads added over a week ago or whose aged score fell below 50. Only
- * New: a lead the person is drafting or moved on stays where they put it. No feedback event,
- * since the person made no call.
+ * Archives New leads whose posting went up over `POSTING_MAX_DAYS` ago. Only New: a lead the
+ * person is drafting or moved on stays where they put it. No feedback event, since the person
+ * made no call.
  */
 export function archiveStale(
   file: LeadsFile,
@@ -273,7 +237,7 @@ export function archiveStale(
           action: 'moved',
           from: 'new' as const,
           to: 'archived' as const,
-          note: archiveReason(lead, now),
+          note: archiveReason(lead),
         },
       ],
     }
@@ -412,14 +376,6 @@ export function ghostSilent(
     : { leads: file, feedback, ghosted }
 }
 
-/** The score the board shows and ranks by: the fit score less what age takes off. */
-export function effectiveScore(
-  lead: Pick<Lead, 'column' | 'fitScore' | 'foundAt'>,
-  now: number,
-): number {
-  return Math.max(0, lead.fitScore - scoreDecay(lead, now))
-}
-
 /**
  * How old a lead is, as `age` words: since it was added, and since the posting went up when
  * its date parses and is not in the future.
@@ -435,20 +391,6 @@ export function leadAges(
       ? {}
       : { posted: age(new Date(posted).toISOString(), now) }),
   }
-}
-
-/**
- * The line that shows age's effect beside the badge, e.g.
- * `Fit 86 → 62, added 3d ago · posted 9d ago` (the posting's age only when it is known).
- */
-export function decayNote(
-  lead: Pick<Lead, 'column' | 'fitScore' | 'foundAt' | 'postedAt'>,
-  now: number,
-): string | undefined {
-  if (scoreDecay(lead, now) === 0) return undefined
-  const { added, posted } = leadAges(lead, now)
-  const since = posted === undefined ? '' : ` · posted ${ago(posted)}`
-  return `Fit ${lead.fitScore} → ${effectiveScore(lead, now)}, added ${ago(added)}${since}`
 }
 
 /** The theme colour of a fit score's badge: strong, worth a look, or weak. */
@@ -764,8 +706,8 @@ export type AddResult = { leads: LeadsFile; added: string[]; updated: string[]; 
 
 /**
  * Merges scouted leads: dedupes by id, then by posting URL; keeps the board's column and
- * history for a lead already there; drops a new lead under `threshold` (a new lead has not aged
- * yet, so this is its fit score) and one whose posting went up over `ADD_MAX_POSTED_DAYS` ago.
+ * history for a lead already there; drops a new lead whose fit score is under `threshold` and
+ * one whose posting went up over `POSTING_MAX_DAYS` ago.
  */
 export function addLeads(
   file: LeadsFile,
@@ -804,9 +746,8 @@ export function addLeads(
       updated.push(existing.id)
       continue
     }
-    // Only a new lead must clear the threshold, scored as the board will show it today.
-    const score = effectiveScore({ ...one, column: 'new', foundAt: at }, Date.parse(at))
-    if (!(score >= threshold) || isLongPosted(one, Date.parse(at))) {
+    // Only a new lead must clear the threshold, and one the board would archive at once is not added.
+    if (!(one.fitScore >= threshold) || isStale({ ...one, foundAt: at }, Date.parse(at))) {
       dropped.push(id)
       continue
     }
@@ -929,16 +870,14 @@ export function bandText(c: Counts): string | undefined {
   ].join(' · ')
 }
 
-/** Best first by aged score; of two equal aged scores, the better fit leads. */
-export const byScore = (now: number) => (a: Lead, b: Lead) =>
-  effectiveScore(b, now) - effectiveScore(a, now) || b.fitScore - a.fitScore
+/** Best first by fit score. */
+export const byScore = (a: Lead, b: Lead) => b.fitScore - a.fitScore
 
 /** Leads in a column, best first. */
-export function columnLeads(file: LeadsFile, column: Column, now: number): Lead[] {
-  const best = byScore(now)
+export function columnLeads(file: LeadsFile, column: Column): Lead[] {
   return file.leads
     .filter(lead => lead.column === column)
-    .sort((a, b) => best(a, b) || a.company.localeCompare(b.company))
+    .sort((a, b) => byScore(a, b) || a.company.localeCompare(b.company))
 }
 
 export const NUDGE_QUIET_MS = 3 * 60 * 60 * 1000
@@ -956,13 +895,13 @@ export function leadsToMention(file: LeadsFile, now: number): Lead[] {
   if (now - lastMention < NUDGE_QUIET_MS) return []
   return file.leads
     .filter(lead => lead.column === 'new' && !lead.mentionedAt)
-    .sort(byScore(now))
+    .sort(byScore)
     .slice(0, NUDGE_TOP)
 }
 
-export function nudgeContext(leads: readonly Lead[], now: number): string {
+export function nudgeContext(leads: readonly Lead[]): string {
   const named = leads
-    .map(lead => `${lead.company} — ${lead.role} (score ${effectiveScore(lead, now)})`)
+    .map(lead => `${lead.company} — ${lead.role} (score ${lead.fitScore})`)
     .join('; ')
   return [
     'Note from the job-tracker plugin, not from the user:',

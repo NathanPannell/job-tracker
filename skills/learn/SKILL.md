@@ -26,11 +26,11 @@ packages are written. You propose; the person approves in /jobs. Never edit the 
   `profile/preferences.md`, `profile/learnings.md`, and earlier proposals in `proposals.json`
   (do not re-propose what was rejected unless new evidence is strong).
 
-Scores: `fitScore` in `leads.json` and `feedback.json` is the scout's fit judgement. The board
-shows it aged (points off for how long the lead has been on the board until applied), but age is applied by the board,
-not by scoring, so reason about `fitScore` only: a score correction means the fit was misjudged.
-Never propose rules that score a lead down for its age or its posting's age: the board ages
-scores itself, and `fitScore` is about fit only.
+Scores: `fitScore` in `leads.json` and `feedback.json` is the scout's fit judgement, and the
+board shows it as is: scores never age. A score correction means the fit was misjudged. Never
+propose rules that score a lead down for its age or its posting's age: `fitScore` is about fit
+only, and posting age is handled apart from it (scout skips postings over 14 days old, and the
+board archives a New lead once its posting is that old).
 
 ## Steps
 

@@ -403,63 +403,46 @@ describe('kanban', () => {
     await ui.unmount()
   })
 
-  test('scores age from when a lead was added, until applied: the badge and order use the aged score, the lead says why', async ($, on) => {
+  test('scores never age: the badge and order use the fit score, the card shows both ages', async ($, on) => {
     world(on, {
       leads: [
-        // Added three days ago (24 off) for a posting nine days old.
+        // Added three days ago for a posting nine days old: still its fit score.
         lead('old-1', {
           company: 'Old',
           fitScore: 86,
           foundAt: '2026-10-17T12:00:00.000Z',
           postedAt: '2026-10-11T12:00:00.000Z',
         }),
-        // An old posting added an hour ago has not aged.
-        lead('fresh-2', { company: 'Fresh', fitScore: 80, postedAt: '2026-09-29T12:00:00.000Z' }),
-        lead('sent-3', {
-          company: 'Sent',
-          fitScore: 86,
-          column: 'applied',
-          foundAt: '2026-09-01T12:00:00.000Z',
-        }),
+        lead('fresh-2', { company: 'Fresh', fitScore: 80, postedAt: '2026-10-07T12:00:00.000Z' }),
       ],
     })
     await start($)
     const ui = await $.ui.mount({ ...pane, surface: 'desktop' })
-    const chip = async (score: number) =>
-      ui.find({ type: 'Text', text: new RegExp(`^ ${score} $`) })
-    expect(await chip(80)).toBeDefined()
-    expect(await chip(62)).toBeDefined()
-    expect(await chip(86)).toBeUndefined()
     const order = (await ui.findAll({ type: 'Text', text: /^ \d+ $/ })).map(one => one.text)
-    expect(order).toEqual([' 80 ', ' 62 '])
+    expect(order).toEqual([' 86 ', ' 80 '])
     // The card shows both ages, short.
     expect(await ui.find({ type: 'Text', text: /^added 3d · posted 9d · / })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /^added 1h · posted 3w · / })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^added 1h · posted 13d · / })).toBeDefined()
     await ui.press({ key: 'open:old-1' })
-    expect(
-      await ui.find({ type: 'Text', text: 'Fit 86 → 62, added 3d ago · posted 9d ago' }),
-    ).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /added 3d ago · posted 9d ago · / })).toBeDefined()
-    await ui.press({ key: 'back' })
-    await ui.press({ key: 'tab:applied' })
-    expect(await chip(86)).toBeDefined()
-    await ui.press({ key: 'open:sent-3' })
     expect(await ui.find({ type: 'Text', text: /^Fit / })).toBeUndefined()
   })
 
-  test('a New lead added over a week ago or scoring below 50 is archived when the board loads', async ($, on) => {
+  test('a New lead whose posting is over 14 days old is archived when the board loads', async ($, on) => {
     const w = world(on, {
       leads: [
-        lead('stale-1', { company: 'Stale', foundAt: '2026-10-12T12:00:00.000Z' }),
+        lead('stale-1', { company: 'Stale', postedAt: '2026-10-05T12:00:00.000Z' }),
         lead('kept-2', {
           company: 'Kept',
           column: 'drafting',
-          foundAt: '2026-10-01T12:00:00.000Z',
+          postedAt: '2026-09-01T12:00:00.000Z',
         }),
-        // A posting nineteen days old, added an hour ago, stays.
-        lead('fresh-3', { company: 'Fresh', postedAt: '2026-10-01T12:00:00.000Z' }),
-        // Four days on the board at fit 77: 28 off, so 49 on the board.
-        lead('low-4', { company: 'Low', fitScore: 77, foundAt: '2026-10-16T12:00:00.000Z' }),
+        // A posting thirteen days old stays.
+        lead('fresh-3', { company: 'Fresh', postedAt: '2026-10-07T12:00:00.000Z' }),
+        // No posting date: counted from when it was added.
+        lead('undated-4', { company: 'Undated', foundAt: '2026-10-05T12:00:00.000Z' }),
+        // A low score is no reason to archive.
+        lead('low-5', { company: 'Low', fitScore: 40 }),
       ],
     })
     await start($)
@@ -468,11 +451,12 @@ describe('kanban', () => {
       ['stale-1', 'archived'],
       ['kept-2', 'drafting'],
       ['fresh-3', 'new'],
-      ['low-4', 'archived'],
+      ['undated-4', 'archived'],
+      ['low-5', 'new'],
     ])
-    expect(w.leads()[3]?.history.at(-1)?.note).toBe('score 49, below 50')
     expect(w.leads()[0]?.history.at(-1)?.by).toBe('tracker')
-    expect(w.leads()[0]?.history.at(-1)?.note).toBe('added over 7 days ago')
+    expect(w.leads()[0]?.history.at(-1)?.note).toBe('posted over 14 days ago')
+    expect(w.leads()[3]?.history.at(-1)?.note).toBe('added over 14 days ago')
     const ui = await $.ui.mount({ ...pane, surface: 'desktop' })
     expect(await ui.find({ key: 'open:stale-1' })).toBeUndefined()
     expect(await ui.find({ key: 'open:fresh-3' })).toBeDefined()

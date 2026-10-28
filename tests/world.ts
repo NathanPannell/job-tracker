@@ -42,7 +42,7 @@ export function lead(id: string, fields: Partial<Lead> = {}): Lead {
     fitScore: 80,
     fitReason: 'Backend APIs in Victoria',
     column: 'new',
-    // An hour before NOW: too fresh to have aged, so badges show the fit score.
+    // An hour before NOW.
     foundAt: '2026-10-20T11:00:00.000Z',
     history: [],
     ...fields,

@@ -440,12 +440,12 @@ export const register: Register = on => {
     await $.tool.register({
       name: 'list_leads',
       description:
-        "Lists job leads on the person's job board (job-tracker), best first. Each lead has fitScore (the scout's fit) and score (fitScore less points for how long ago the lead was added, until applied, as the board shows it). Filter by column (new, drafting, ready, applied, interviewing, offer, passed, archived) and minimum score.",
+        "Lists job leads on the person's job board (job-tracker), best first. Each lead has fitScore, the scout's fit score the board shows. Filter by column (new, drafting, ready, applied, interviewing, offer, passed, archived) and minimum fit score.",
       inputSchema: {
         type: 'object',
         properties: {
           column: { type: 'string', description: 'Only leads in this column' },
-          minScore: { type: 'number', description: 'Only leads whose score is at least this' },
+          minScore: { type: 'number', description: 'Only leads whose fit score is at least this' },
           limit: { type: 'number', description: 'At most this many (default 20)' },
         },
       },
@@ -453,7 +453,7 @@ export const register: Register = on => {
     await $.tool.register({
       name: 'update_lead',
       description:
-        "Changes one lead on the person's job board: move it to a column, rescore it, add notes, set a follow-up date, or write its company blurb, tagline and role highlights. Moving to passed needs passReason. fitScore is the fit before ageing (the board takes points off for age itself), so never set it from the aged score list_leads shows.",
+        "Changes one lead on the person's job board: move it to a column, rescore it, add notes, set a follow-up date, or write its company blurb, tagline and role highlights. Moving to passed needs passReason.",
       inputSchema: {
         type: 'object',
         required: ['id'],
@@ -619,7 +619,7 @@ export const register: Register = on => {
     if (named.length === 0) return next(e)
     await update($, pending, () => named.map(lead => lead.id))
     await update($, pendingTurn, () => e.turnId ?? null)
-    return next({ ...e, context: [...(e.context ?? []), nudgeContext(named, now)] })
+    return next({ ...e, context: [...(e.context ?? []), nudgeContext(named)] })
   })
 
   // A sent prompt stops showing as queued once its own turn starts.

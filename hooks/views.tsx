@@ -8,9 +8,7 @@ import {
   COLUMN_TITLES,
   columnLeads,
   columnTitle,
-  decayNote,
   defaultStage,
-  effectiveScore,
   leadAges,
   previousColumn,
   PASS_REASONS,
@@ -93,12 +91,12 @@ function queuedNotes(ctx: ViewContext): RenderElement[] {
 }
 
 /**
- * The score, aged, as a coloured chip: green for strong, amber for worth a look, grey for weak.
+ * The fit score as a coloured chip: green for strong, amber for worth a look, grey for weak.
  * `↓`/`↑` marks the person's own correction of it.
  */
 function badge(ctx: ViewContext, lead: Lead, key: string): RenderElement {
   const { Text } = ctx.el
-  const score = effectiveScore(lead, ctx.now)
+  const score = lead.fitScore
   const mark =
     lead.scoreCorrection === 'too-high' ? '↓' : lead.scoreCorrection === 'too-low' ? '↑' : ''
   return (
@@ -272,7 +270,7 @@ export function boardView(
   const closedCount = ctx.board.leads.filter(lead => closed.includes(lead.column)).length
   const tabs = options.showClosed ? [...PIPELINE, ...closed] : PIPELINE
   const stage = options.stage && tabs.includes(options.stage) ? options.stage : defaultStage(file)
-  const leads = columnLeads(file, stage, ctx.now)
+  const leads = columnLeads(file, stage)
   const visible = leads.slice(0, Math.max(options.shown, PAGE))
   return (
     <Box flexDirection="column" gap={1}>
@@ -306,7 +304,7 @@ export function boardView(
         {tabs.map(column => (
           <Button
             key={`tab:${column}`}
-            label={`${COLUMN_TITLES[column]} ${columnLeads(file, column, ctx.now).length}`}
+            label={`${COLUMN_TITLES[column]} ${columnLeads(file, column).length}`}
             variant={column === stage ? 'primary' : undefined}
             onPress={() => ctx.nav.tab(column)}
           />
@@ -349,7 +347,6 @@ export function leadView(ctx: ViewContext, id: string): RenderElement {
     )
   }
   const app = ctx.board.applications.find(one => one.leadId === id)
-  const aged = decayNote(lead, ctx.now)
   const ages = leadAges(lead, ctx.now)
   const facts = [
     COLUMN_TITLES[lead.column],
@@ -374,11 +371,6 @@ export function leadView(ctx: ViewContext, id: string): RenderElement {
           {facts.join(' · ')}
         </Text>
       </Box>
-      {aged && (
-        <Text key="aged" dimColor>
-          {aged}
-        </Text>
-      )}
       {lead.url.startsWith('https:') ? (
         <Link href={lead.url} label="Open posting ↗" />
       ) : (

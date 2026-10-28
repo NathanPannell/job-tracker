@@ -13,6 +13,7 @@ import {
 import { join } from 'node:path'
 
 import {
+  ADD_MIN_SCORE,
   addLeads,
   appendEvent,
   archiveStale,
@@ -21,7 +22,6 @@ import {
   COLUMN_TITLES,
   correctScore,
   counts,
-  effectiveScore,
   eventId,
   ghostSilent,
   hasBlurb,
@@ -72,17 +72,12 @@ function commit(data: Data, result: MoveResult, id: string): Change<Lead | undef
 
 export type ListOptions = { column?: string; min?: string | number; limit?: string | number }
 
-/** A lead as listed: `score` is what the board shows, `fitScore` less what age takes off. */
-export type ListedLead = Lead & { score: number }
-
-export function list(dir: string, { column, min, limit }: ListOptions = {}): ListedLead[] {
+export function list(dir: string, { column, min, limit }: ListOptions = {}): Lead[] {
   const { leads } = readData(dir, 'leads')
-  const at = Date.now()
   return leads
     .filter(lead => (column ? lead.column === column : true))
-    .map(lead => ({ ...lead, score: effectiveScore(lead, at) }))
-    .filter(lead => (min !== undefined ? lead.score >= Number(min) : true))
-    .sort(byScore(at))
+    .filter(lead => (min !== undefined ? lead.fitScore >= Number(min) : true))
+    .sort(byScore)
     .slice(0, limit !== undefined ? Number(limit) : undefined)
 }
 
@@ -105,17 +100,21 @@ export type AddSummary = {
   added: string[]
   updated: string[]
   dropped: string[]
-  /** New leads moved to Archived: added over a week ago, or scoring below 50 as aged. */
+  /** New leads moved to Archived: their posting went up over two weeks ago. */
   archived: string[]
   /** Applied leads marked ghosted: no reply a month after they were submitted. */
   ghosted: string[]
-  /** Added leads scoring 90 or more (not aged yet, so their fit score): worth a push notification. */
-  alerts: (Pick<Lead, 'id' | 'company' | 'role' | 'fitScore'> & { score: number })[]
+  /** Added leads with a fit score of 90 or more: worth a push notification. */
+  alerts: Pick<Lead, 'id' | 'company' | 'role' | 'fitScore'>[]
   /** Leads added without the tagline they came with, and why it was refused. */
   warnings: string[]
 }
 
-export function add(dir: string, incoming: IncomingLead[], threshold: string | number = 60) {
+export function add(
+  dir: string,
+  incoming: IncomingLead[],
+  threshold: string | number = ADD_MIN_SCORE,
+) {
   if (!Array.isArray(incoming)) throw new Error('add takes a JSON array of leads')
   const warnings: string[] = []
   const checked = incoming.map(one => {
@@ -136,14 +135,8 @@ export function add(dir: string, incoming: IncomingLead[], threshold: string | n
     const result = { ...merged, leads: swept.leads }
     const alerts = result.leads.leads
       .filter(lead => result.added.includes(lead.id))
-      .map(({ id, company, role, fitScore, ...rest }) => ({
-        id,
-        company,
-        role,
-        fitScore,
-        score: effectiveScore({ fitScore, ...rest }, Date.parse(at)),
-      }))
-      .filter(alert => alert.score >= 90)
+      .filter(lead => lead.fitScore >= 90)
+      .map(({ id, company, role, fitScore }) => ({ id, company, role, fitScore }))
     return {
       write: {
         leads: result.leads,
@@ -174,7 +167,7 @@ function sweep(data: Pick<Data, 'leads' | 'applications' | 'feedback'>, at: stri
 }
 
 /**
- * Moves New leads added over a week ago or scoring below 50 to Archived, and marks Applied leads
+ * Moves New leads whose posting went up over two weeks ago to Archived, and marks Applied leads
  * with no reply a month after submitting ghosted; prints their ids.
  */
 export function archive(dir: string): { archived: string[]; ghosted: string[] } {

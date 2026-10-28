@@ -50,47 +50,47 @@ test('init creates the files, add merges and alerts on 90+', () => {
   assert.equal(commands.summary(dir).newLeads, 2)
 })
 
-test('list and alerts go by the aged score; the fit score stays as scored', () => {
+test('add drops new leads under 70 by default; list and alerts go by the fit score', () => {
   const dir = fresh()
   const daysAgo = (days: number) => new Date(Date.now() - days * 86_400_000).toISOString()
-  // A posting's own date does not age it: both are new to the board, so both alert.
   const added = commands.add(dir, [
-    { ...lead('Stale', 95), postedAt: daysAgo(9) },
-    { ...lead('Fresh', 90), postedAt: daysAgo(0) },
+    { ...lead('Strong', 95), postedAt: daysAgo(9) },
+    { ...lead('Good', 85), postedAt: daysAgo(0) },
+    lead('Edge', 70),
+    lead('Weak', 69),
   ])
+  assert.deepEqual(added.dropped, ['weak-backend-developer'])
   assert.deepEqual(
-    added.alerts.map(alert => [alert.company, alert.fitScore, alert.score]),
-    [
-      ['Stale', 95, 95],
-      ['Fresh', 90, 90],
-    ],
+    added.alerts.map(alert => [alert.company, alert.fitScore]),
+    [['Strong', 95]],
   )
-  // Two days on the board is 18 off.
+  // Days on the board take nothing off.
   transact(dir, data => ({
     write: {
       leads: {
         ...data.leads,
         leads: data.leads.leads.map(one =>
-          one.company === 'Stale' ? { ...one, foundAt: daysAgo(2) } : one,
+          one.company === 'Strong' ? { ...one, foundAt: daysAgo(5) } : one,
         ),
       },
     },
     result: null,
   }))
   assert.deepEqual(
-    commands.list(dir).map(one => [one.company, one.fitScore, one.score]),
+    commands.list(dir).map(one => [one.company, one.fitScore]),
     [
-      ['Fresh', 90, 90],
-      ['Stale', 95, 77],
+      ['Strong', 95],
+      ['Good', 85],
+      ['Edge', 70],
     ],
   )
   assert.deepEqual(
     commands.list(dir, { min: 85 }).map(one => one.company),
-    ['Fresh'],
+    ['Strong', 'Good'],
   )
 })
 
-test('archive and add move New leads added over a week ago to Archived', () => {
+test('archive and add move New leads whose posting is over 14 days old to Archived', () => {
   const dir = fresh()
   const daysAgo = (days: number) => new Date(Date.now() - days * 86_400_000).toISOString()
   commands.add(dir, [
@@ -99,12 +99,12 @@ test('archive and add move New leads added over a week ago to Archived', () => {
   ])
   commands.move(dir, 'kept-backend-developer', 'drafting')
   assert.deepEqual(commands.archive(dir), { archived: [], ghosted: [] })
-  // A week on, as the board would find it.
+  // Five days on, as the board would find it: both postings are 15 days old.
   transact(dir, data => ({
     write: {
       leads: {
         ...data.leads,
-        leads: data.leads.leads.map(one => ({ ...one, foundAt: daysAgo(8) })),
+        leads: data.leads.leads.map(one => ({ ...one, postedAt: daysAgo(15) })),
       },
     },
     result: null,
