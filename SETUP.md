@@ -67,27 +67,18 @@ The types of every file are in `types/index.d.ts`.
   Ghosted, Accepted, Declined) move the card and record an outcome for the weekly review, never a
   pass (an application silent for a month is marked Ghosted for you, see "Ghosting"); an archived or passed card offers "Back to <where it was>" to undo a mis-click. Click a card's name to open it: the same next steps, then
   Pass… · Archive · Draft package, then feedback (Score too high / too low).
-- **Scores age.** The badge shows the scout's fit score less points for how long the lead has
-  been on the board, so leads left waiting sink, gently: 10 points off on the first day, then 8,
-  6, 4 and 2, worked out by the hour, so a lead added 1, 2, 3, 4 and 5 days ago is 10, 18, 24, 28
-  and 30 off, and never more than 30 (a fit-75 lead added 3 days ago shows 51). Age counts from
-  when the lead was added (`foundAt`), not from the posting date; when the source gives a posting
-  date (Greenhouse, Lever and Ashby boards do) the card and the lead show it too, e.g.
-  `added 3d · posted 9d`. A New lead added over 7 days ago, or whose aged score falls below 50,
-  moves to Archived on its own (history says `tracker: moved → Archived (added over 7 days ago)`
-  or `(score 46, below 50)`, and no feedback is recorded). A lead you marked "Score too low" is
-  not archived for its score; Drafting and Ready leads stay where you put them. Only New, Drafting
-  and Ready age; once applied, a lead keeps its fit score. Opening an aged lead shows both, e.g.
-  `Fit 86 → 62, added 3d ago · posted 9d ago`. Scout judges a new posting on its fit score (it has
-  not aged yet) and skips one whose posting date is over 30 days old. The fit score in
-  `leads.json` never changes with age: score corrections, feedback, the weekly `learn` review and
-  scout's add threshold use it, while sorting, the nudge,
-  and `list_leads` (its `score` field and `minScore`) use the aged score.
-  Nothing runs on a timer; scores are worked out each time the board draws or refreshes, and
-  New leads added over a week ago or scoring below 50 as aged are archived when the board
-  refreshes and on every `jobs add` (or by hand with `jobs archive`); leads
-  moved back to New by hand are left alone. The curve is the `DECAY_*`, `ARCHIVE_AFTER_DAYS`,
-  `ARCHIVE_BELOW_SCORE` and `ADD_MAX_POSTED_DAYS` constants in `hooks/lib/model.ts`.
+- **Posting age.** The badge shows the scout's fit score, which never changes with age. A card
+  shows how long ago the lead was added and, when the source gives a posting date (Greenhouse,
+  Lever and Ashby boards do), how long ago the posting went up, e.g. `added 3d · posted 9d`.
+  Scout adds a new posting only when its fit score is 70 or more and it went up in the last 14
+  days; older postings are often already filled. A New lead whose posting is over 14 days old
+  (counted from when it was added when there is no posting date) moves to Archived on its own.
+  Its history says `tracker: moved → Archived (posted over 14 days ago)`, or
+  `(added over 14 days ago)` when undated, and no feedback is recorded. Only New leads, which you
+  have not worked on yet, are archived: Drafting, Ready, Applied and later stay where you put
+  them, and a lead moved back to New by hand is left alone. Nothing runs on a timer; stale New leads are archived when the board
+  refreshes and on every `jobs add` (or by hand with `jobs archive`). The limits are the
+  `POSTING_MAX_DAYS` and `ADD_MIN_SCORE` constants in `hooks/lib/model.ts`.
 - **Ghosting.** An application in Applied with no reply one calendar month after you submitted
   it is marked Ghosted on its own, as if you had pressed Ghosted: the card moves to Archived
   (history says `tracker: moved → Archived (no reply 1 month after applying (ghosted))`) and the

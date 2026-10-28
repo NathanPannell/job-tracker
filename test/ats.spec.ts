@@ -19,6 +19,7 @@ const GREENHOUSE = {
       location: { name: 'Remote (Canada)' },
       content:
         '&lt;p&gt;Build APIs &amp;amp; services&lt;/p&gt;&lt;ul&gt;&lt;li&gt;Python&lt;/li&gt;&lt;/ul&gt;',
+      first_published: '2026-09-02T00:00:00Z',
       updated_at: '2026-10-18T00:00:00Z',
     },
   ],
@@ -66,6 +67,16 @@ test('each ATS has its public endpoint', () => {
 
 test('responses normalize to one posting shape', () => {
   const [gh] = parseBoard(board('greenhouse'), GREENHOUSE)
+  // When it was first posted, not last edited; the edit time only when that is all there is.
+  assert.equal(gh?.postedAt, '2026-09-02T00:00:00Z')
+  const [edited, undated] = parseBoard(board('greenhouse'), {
+    jobs: [
+      { title: 'Edited only', first_published: '', updated_at: '2026-10-18T00:00:00Z' },
+      { title: 'Undated' },
+    ],
+  })
+  assert.equal(edited?.postedAt, '2026-10-18T00:00:00Z')
+  assert.equal(undated?.postedAt, undefined)
   assert.equal(gh?.role, 'Backend Engineer')
   assert.equal(gh?.location, 'Remote (Canada)')
   assert.match(gh?.description ?? '', /Build APIs & services/)

@@ -300,9 +300,9 @@ test('leads in the removed Shortlisted column move to New and stay out of the st
     note: 'shortlisted was removed from the board',
   })
   assert.equal(migrated.leads[1], legacy.leads[1])
-  const weekOn = Date.parse(AT) + 9 * 86_400_000
-  assert.equal(isArchivable(migrated.leads[0] as Lead, weekOn), false)
-  assert.equal(isArchivable(migrated.leads[1] as Lead, weekOn), true)
+  const fortnightOn = Date.parse(AT) + 15 * 86_400_000
+  assert.equal(isArchivable(migrated.leads[0] as Lead, fortnightOn), false)
+  assert.equal(isArchivable(migrated.leads[1] as Lead, fortnightOn), true)
 })
 
 test('a draft runs as a background subagent; the conversation only relays it', () => {
@@ -467,13 +467,13 @@ test('counts and the band line', () => {
     '2 new leads · 0 ready to review · 2 follow-ups due',
   )
   assert.equal(bandText({ newLeads: 0, readyToReview: 0, followUpsDue: 0 }), undefined)
-  assert.equal(columnLeads(next, 'new', NOW)[0]?.id, a)
+  assert.equal(columnLeads(next, 'new')[0]?.id, a)
 })
 
 test('columnLeads sorts best first', () => {
   const file = seeded([{ fitScore: 70 }, { fitScore: 90 }, { fitScore: 95 }])
   assert.deepEqual(
-    columnLeads(file, 'new', NOW).map(lead => lead.fitScore),
+    columnLeads(file, 'new').map(lead => lead.fitScore),
     [95, 90, 70],
   )
 })
@@ -502,7 +502,7 @@ test('leadsToMention picks the top three unmentioned new leads, quiet for three 
     '2027-01-01T00:00:00.000Z',
   )
   assert.equal(twice.leads[0]?.mentionedAt, AT)
-  const note = nudgeContext(picked, NOW)
+  const note = nudgeContext(picked)
   assert.match(note, /Answer the user's actual request first/)
   assert.match(note, /\/jobs/)
   assert.match(note, /Co2/)

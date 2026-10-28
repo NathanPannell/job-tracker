@@ -4,6 +4,7 @@ import { parseArgs } from 'node:util'
 
 import * as commands from './lib/commands.ts'
 import type { FeedbackInput, ProposalInput, SummaryInput } from './lib/commands.ts'
+import { ADD_MIN_SCORE } from '../hooks/lib/model.ts'
 import type { IncomingLead, LeadPatch } from '../hooks/lib/model.ts'
 import { gmailQuery, markGmailRead } from './lib/gmail.ts'
 import { dataDir } from './lib/store.ts'
@@ -12,16 +13,16 @@ const USAGE = `jobs <command> [args] [--data <dir>]
 
   init                                   create the data files that are missing
   list [--column c] [--min n] [--limit n]
-                                         leads by aged score, best first
+                                         leads by fit score, best first
   summary                                counts for the band
   seen                                   ids, companies, roles and URLs already on the board
-  add <json|@file> [--threshold 60]      merge scouted leads (array), threshold on the fit score;
-                                         skips postings dated over 30 days ago;
+  add <json|@file> [--threshold 70]      merge scouted leads (array), threshold on the fit score;
+                                         skips postings dated over 14 days ago;
                                          archives stale New leads, ghosts silent Applied ones;
                                          prints added/updated/dropped/archived/ghosted/alerts
-  archive                                move New leads added over 7 days ago or scoring below 50
-                                         to Archived, and mark Applied leads with no reply a
-                                         month after submitting ghosted (to Archived)
+  archive                                move New leads whose posting went up over 14 days ago
+                                         (or, undated, added then) to Archived, and mark Applied
+                                         leads with no reply a month after submitting ghosted
   move <id> <column> [--reason r] [--by actor] [--note n]
   pass <id> <reason>
   score <id> too-high|too-low
@@ -81,7 +82,7 @@ async function main(argv: string[]): Promise<unknown> {
       return commands.add(
         dir,
         commands.readJsonArg<IncomingLead[]>(args[0]),
-        values.threshold ?? 60,
+        values.threshold ?? ADD_MIN_SCORE,
       )
     case 'archive':
       return commands.archive(dir)

@@ -49,8 +49,8 @@ async function readText($: EngineInterface, path: string): Promise<string | unde
 }
 
 /**
- * Reads the data files into the board value the pane and band draw from. A New lead added over
- * a week ago, or whose aged score fell below 50, is archived first, and an Applied
+ * Reads the data files into the board value the pane and band draw from. A New lead whose
+ * posting went up over two weeks ago is archived first, and an Applied
  * lead with no reply a month after it was submitted is marked ghosted (one `jobs archive`, only
  * when there is one), so the board never shows them; a toast names the ghosted ones. Nothing runs
  * on a timer.

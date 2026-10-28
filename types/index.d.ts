@@ -32,8 +32,7 @@ export type Lead = {
   comp: string
   /**
    * 0-100 against preferences.md and learnings.md: the scout's fit judgement, which never ages.
-   * The board ranks and shows it aged by how long ago the lead was added, `foundAt`
-   * (`effectiveScore` in hooks/lib/model.ts).
+   * The board ranks and shows it as is.
    */
   fitScore: number
   /** One line: why this score. */
@@ -55,7 +54,8 @@ export type Lead = {
   foundAt: string
   /**
    * When the posting went up, when its source says (ATS boards do). Shown beside the lead's age;
-   * it does not age the score, and scout skips a posting dated over 30 days ago.
+   * it does not change the score. Scout skips a posting dated over 14 days ago, and a New lead
+   * is archived once its posting is that old (`POSTING_MAX_DAYS` in hooks/lib/model.ts).
    */
   postedAt?: string
   /** When the nudge named this lead in a conversation. */
