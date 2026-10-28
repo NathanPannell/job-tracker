@@ -199,6 +199,38 @@ describe('learning proposals', () => {
     expect(await ui.find({ key: 'approve:p:all' })).toBeUndefined()
   })
 
+  test('a week with no changes shows its summary and reason', async ($, on) => {
+    const w = world(on, {
+      proposals: [
+        {
+          ...proposal('quiet', 0),
+          status: 'decided',
+          summary: 'A quiet week.',
+          fewerReason: 'Only one pass reason repeated.',
+        },
+      ],
+    })
+    on('ui.open', () => ({ value: { isPlaced: true } }))
+    on('ui.panes', () => ({
+      value: [{ id: 'jobs', title: 'Jobs', isShown: true, isFocused: false, isPlaced: true }],
+    }))
+    await start($)
+    const board = await $.ui.mount({ ...pane, surface: 'desktop' })
+    // Nothing to decide: no button on the board.
+    expect(await board.find({ key: 'proposals' })).toBeUndefined()
+    await board.unmount()
+    const ran = $.tool.call({ tool: 'mcp__job-tracker__open_board', view: 'proposals' })
+    await w.clock.advance(2000)
+    await ran
+    const ui = await $.ui.mount({ ...pane, surface: 'desktop' })
+    expect(
+      await ui.find({ type: 'Text', text: /^2026-10-27 · no changes proposed$/ }),
+    ).toBeDefined()
+    expect(
+      await ui.find({ key: 'summary:quiet', text: /A quiet week\.[\s\S]*Only one pass reason/ }),
+    ).toBeDefined()
+  })
+
   test('one proposal of ten long changes is a small tree', async ($, on) => {
     world(on, { proposals: [proposal('p', 10)] })
     await start($)

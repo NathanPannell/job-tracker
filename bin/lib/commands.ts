@@ -27,6 +27,7 @@ import {
   decideChanges,
   eventId,
   ghostSilent,
+  hasApproved,
   hasBlurb,
   hasHighlights,
   hasTagline,
@@ -530,8 +531,14 @@ export function decide(dir: string, id: string, first: string, second?: string) 
     const approved = decided.decided.filter(one => one.status === 'approved')
     if (approved.length > 0) mkdirSync(join(dir, 'profile'), { recursive: true })
     for (const change of approved) {
-      const file = change.file === 'preferences.md' ? 'preferences.md' : 'learnings.md'
-      appendFileSync(join(dir, 'profile', file), approvedText(change, at))
+      const file = join(
+        dir,
+        'profile',
+        change.file === 'preferences.md' ? 'preferences.md' : 'learnings.md',
+      )
+      // An earlier try that appended but failed to save left it there: never append it twice.
+      if (existsSync(file) && hasApproved(readFileSync(file, 'utf8'), change)) continue
+      appendFileSync(file, approvedText(change, at))
     }
     return {
       write: { proposals: decided.file },

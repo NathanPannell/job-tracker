@@ -459,6 +459,8 @@ export const emptyProposals = (): ProposalsFile => ({ version: 1, proposals: [] 
 /** A weekly review proposes 3 to 10 changes; fewer only with a reason, never more. */
 export const MIN_CHANGES = 3
 export const MAX_CHANGES = 10
+/** Each change is short: these bounds keep a page of proposals well under the pane's cap. */
+export const CHANGE_LIMITS = { title: 120, rationale: 300, text: 1200 } as const
 
 /** A proposal as `proposals.json` may hold it: changes saved before per-change decisions. */
 export type StoredProposal = Omit<Proposal, 'changes'> & {
@@ -472,17 +474,21 @@ export const proposalStatus = (changes: readonly Pick<ProposalChange, 'status'>[
 
 /**
  * A proposal with an id and a status on every change. A change saved before per-change
- * decisions takes its proposal's status (and decision time), and its place for an id.
+ * decisions takes its proposal's status (and decision time). Ids go by place (c1, c2, ...)
+ * whenever one is missing or repeated, so no two changes ever share one.
  */
 export function normalizeProposal(proposal: StoredProposal): Proposal {
   const legacy: ChangeStatus =
     proposal.status === 'approved' || proposal.status === 'rejected' ? proposal.status : 'pending'
-  const changes = (proposal.changes ?? []).map((change, n): ProposalChange => {
+  const stored = proposal.changes ?? []
+  const ids = stored.map(one => one.id)
+  const byPlace = ids.some((id, n) => !id || ids.indexOf(id) !== n)
+  const changes = stored.map((change, n): ProposalChange => {
     const status = change.status ?? legacy
     const decidedAt = change.decidedAt ?? (status === 'pending' ? undefined : proposal.decidedAt)
     return {
       ...change,
-      id: change.id || `c${n + 1}`,
+      id: byPlace ? `c${n + 1}` : (change.id ?? `c${n + 1}`),
       status,
       ...(decidedAt ? { decidedAt } : {}),
     }
@@ -515,6 +521,12 @@ export function checkProposal(input: ProposalInput): string | null {
     if (typeof change.text !== 'string' || !change.text.trim()) {
       return `Change ${n + 1} needs the text to append`
     }
+    for (const field of ['title', 'rationale', 'text'] as const) {
+      const length = (change[field] ?? '').length
+      if (length > CHANGE_LIMITS[field]) {
+        return `Change ${n + 1}'s ${field} is ${length} characters; keep it under ${CHANGE_LIMITS[field]}`
+      }
+    }
   }
   return null
 }
@@ -527,7 +539,10 @@ export function newProposal(input: ProposalInput, id: string, at: string): Propo
     status: input.changes.length > 0 ? 'pending' : 'decided',
     summary: input.summary,
     funnel: input.funnel,
-    ...(input.fewerReason?.trim() ? { fewerReason: input.fewerReason.trim() } : {}),
+    // The reason is for a short week only.
+    ...(input.fewerReason?.trim() && input.changes.length < MIN_CHANGES
+      ? { fewerReason: input.fewerReason.trim() }
+      : {}),
     changes: input.changes.map((change, n) => ({
       id: `c${n + 1}`,
       file: change.file,
@@ -586,6 +601,20 @@ export function decideChanges(
     proposal: next,
     decided: changes.filter(one => ids.includes(one.id)),
   }
+}
+
+/**
+ * Whether a profile file already holds an approved change's text under its heading, from any
+ * day: a decision whose append landed but whose save did not is not appended again.
+ */
+export function hasApproved(content: string, change: Pick<ProposalChange, 'title' | 'text'>) {
+  const head = `## ${change.title} (approved `
+  const body = `)\n\n${change.text.trim()}\n`
+  // The heading's date is ten characters: YYYY-MM-DD.
+  for (let at = content.indexOf(head); at !== -1; at = content.indexOf(head, at + 1)) {
+    if (content.startsWith(body, at + head.length + 10)) return true
+  }
+  return false
 }
 
 /** The Markdown an approved change appends to its profile file. */

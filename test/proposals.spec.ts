@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { after, test } from 'node:test'
@@ -10,6 +10,7 @@ import { readData } from '../bin/lib/store.ts'
 import {
   checkProposal,
   decideChanges,
+  hasApproved,
   MAX_CHANGES,
   newProposal,
   normalizeProposal,
@@ -71,7 +72,10 @@ test('propose takes 3 to 10 changes, fewer only with a reason, each pending with
   assert.equal(two.fewerReason, 'Only two patterns')
   const none = commands.propose(dir, input(0, { id: 'none', fewerReason: 'A quiet week' }))
   assert.equal(none.status, 'decided')
-  assert.equal(readData(dir, 'proposals').proposals.length, 3)
+  // A reason is for a short week only.
+  const full = commands.propose(dir, input(3, { id: 'full', fewerReason: 'not needed' }))
+  assert.equal(full.fewerReason, undefined)
+  assert.equal(readData(dir, 'proposals').proposals.length, 4)
 })
 
 test('checkProposal names the change that is malformed', () => {
@@ -81,6 +85,9 @@ test('checkProposal names the change that is malformed', () => {
   assert.match(checkProposal(bad({ title: ' ' })) ?? '', /Change 3 needs a title/)
   assert.match(checkProposal(bad({ text: '' })) ?? '', /Change 3 needs the text/)
   assert.equal(checkProposal(input(3)), null)
+  assert.match(checkProposal(bad({ text: 'x'.repeat(1201) })) ?? '', /text is 1201 characters/)
+  assert.match(checkProposal(bad({ title: 'x'.repeat(121) })) ?? '', /title is 121/)
+  assert.match(checkProposal(bad({ rationale: 'x'.repeat(301) })) ?? '', /rationale is 301/)
   const made = newProposal(
     {
       ...input(3),
@@ -225,4 +232,48 @@ test('the CLI decides one change of a legacy proposals.json and keeps the rest r
   const [old, decided] = readData(dir, 'proposals').proposals
   assert.equal(old?.status, 'approved')
   assert.equal(decided?.status, 'decided')
+})
+
+test('ids go by place when a hand-edited file has one missing or repeated', () => {
+  const ids = (changes: object[]) =>
+    normalizeProposal({ ...legacy('pending'), changes } as never).changes.map(one => one.id)
+  assert.deepEqual(
+    ids([
+      { ...change('a'), id: '' },
+      { ...change('b'), id: 'c1' },
+    ]),
+    ['c1', 'c2'],
+  )
+  assert.deepEqual(ids([{ ...change('a'), id: 'c2' }, change('b')]), ['c1', 'c2'])
+  assert.deepEqual(
+    ids([
+      { ...change('a'), id: 'x' },
+      { ...change('b'), id: 'x' },
+    ]),
+    ['c1', 'c2'],
+  )
+  assert.deepEqual(
+    ids([
+      { ...change('a'), id: 'b7' },
+      { ...change('b'), id: 'c1' },
+    ]),
+    ['b7', 'c1'],
+  )
+})
+
+test('an approval whose append landed but whose save failed is not appended again', () => {
+  const dir = fresh()
+  commands.propose(dir, input(3, { id: 'retry' }))
+  // As if an earlier try appended c1 on another day, then failed to save proposals.json.
+  mkdirSync(join(dir, 'profile'), { recursive: true })
+  writeFileSync(
+    join(dir, 'profile', 'learnings.md'),
+    '# Learnings\n\n## Learning 1 (approved 2026-10-01)\n\nRule: Learning 1.\n',
+  )
+  commands.decide(dir, 'retry', 'all', 'approve')
+  const learnings = profile(dir, 'learnings.md')
+  assert.equal(learnings.match(/Rule: Learning 1\./g)?.length, 1)
+  assert.match(learnings, /Rule: Learning 2\./)
+  const other = '## Learning 1 (approved 2026-10-01)\n\nOther.\n'
+  assert.equal(hasApproved(other, change('Learning 1')), false)
 })

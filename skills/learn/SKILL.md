@@ -58,11 +58,14 @@ board archives a New lead once its posting is that old).
    (short, imperative, testable: "Score roles asking 4+ years at most 65 unless the posting
    welcomes new grads"). Never pad with weak changes to reach three: with evidence for fewer,
    propose fewer (none is fine) and give the reason in `fewerReason` and in the summary.
-   `jobs propose` refuses more than 10 changes, and fewer than 3 without a `fewerReason`.
+   `jobs propose` refuses more than 10 changes, fewer than 3 without a `fewerReason`, and a
+   title over 120 characters, rationale over 300 or text over 1,200.
 4. Save the proposal as JSON
    `{ "summary": "<2-3 sentences>", "funnel": "<Markdown table>", "fewerReason": "<only with fewer than 3 changes>", "changes": [ { "file", "title", "rationale", "text" } ] }`
    to `$JOB_TRACKER_DATA/scout/proposal-<YYYY-MM-DD>.json` and run
-   `jobs propose @<that file>`. It appears in /jobs under "Learning proposals" with Approve and
+   `jobs propose @<that file>`. Leave `fewerReason` out with 3 or more changes. Saving again
+   the same day replaces that day's proposal while none of its changes is decided; once one
+   is, `propose` refuses: add `"id": "proposal-<YYYY-MM-DD>-2"` to the JSON. It appears in /jobs under "Learning proposals" with Approve and
    Reject on every change (and Approve all remaining / Reject all remaining); approving a change
    appends only its text to its profile file.
 5. Reply with the summary and the number of proposed changes.

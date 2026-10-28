@@ -701,8 +701,17 @@ export function proposalsView(ctx: ViewContext): RenderElement {
       {decided.slice(0, DECIDED_PROPOSALS).map(proposal => (
         <Box key={`p:${proposal.id}`} flexDirection="column" paddingX={1}>
           <Text key={`head:${proposal.id}`} bold dimColor>
-            {counted(proposal)}
+            {proposal.changes.length > 0
+              ? counted(proposal)
+              : `${proposal.createdAt.slice(0, 10)} · no changes proposed`}
           </Text>
+          {/* A week with nothing to decide still says what the review found, and why. */}
+          {proposal.changes.length === 0 && (
+            <Markdown
+              key={`summary:${proposal.id}`}
+              text={`${proposal.summary}${proposal.fewerReason ? `\n\n_${proposal.fewerReason}_` : ''}`}
+            />
+          )}
           {proposal.changes.map(change => outcome(proposal, change))}
         </Box>
       ))}
