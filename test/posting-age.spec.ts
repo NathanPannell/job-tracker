@@ -17,6 +17,7 @@ import {
   patchLead,
   POSTING_MAX_DAYS,
   postedTime,
+  postingTime,
 } from '../hooks/lib/model.ts'
 import type { IncomingLead, Lead, LeadsFile } from '../hooks/lib/model.ts'
 
@@ -98,9 +99,13 @@ test('a New lead is archived once its posting is over 14 days old; worked-on and
   // Without a posting date that parses, it counts from when the lead was added.
   assert.equal(isStale(lead({ foundAt: daysAgo(14) }), NOW), false)
   assert.equal(isStale(lead({ postedAt: 'last Tuesday', foundAt: daysAgo(15) }), NOW), true)
+  // A posting dated after it was found counts from when it was found.
+  assert.equal(postingTime(lead({ postedAt: daysAgo(-2), foundAt: daysAgo(3) })), NOW - 3 * DAY)
+  assert.equal(isStale(lead({ postedAt: daysAgo(-2), foundAt: daysAgo(15) }), NOW), true)
   const file = board(
     lead({ id: 'posted', postedAt: daysAgo(15), foundAt: daysAgo(2) }),
     lead({ id: 'undated', foundAt: daysAgo(15) }),
+    lead({ id: 'future', postedAt: daysAgo(-30), foundAt: daysAgo(15) }),
     lead({ id: 'fortnight', postedAt: daysAgo(14), foundAt: daysAgo(14) }),
     // A low score is no reason to archive: scores do not age.
     lead({ id: 'low', fitScore: 40, postedAt: daysAgo(3), foundAt: daysAgo(3) }),
@@ -114,10 +119,10 @@ test('a New lead is archived once its posting is over 14 days old; worked-on and
     lead({ id: 'applied', column: 'applied', postedAt: daysAgo(60), foundAt: daysAgo(60) }),
   )
   const { leads, archived } = archiveStale(file, AT)
-  assert.deepEqual(archived, ['posted', 'undated'])
+  assert.deepEqual(archived, ['posted', 'undated', 'future'])
   assert.deepEqual(
     leads.leads.map(one => one.column),
-    ['archived', 'archived', 'new', 'new', 'new', 'drafting', 'ready', 'applied'],
+    ['archived', 'archived', 'archived', 'new', 'new', 'new', 'drafting', 'ready', 'applied'],
   )
   assert.deepEqual(leads.leads[0]?.history.at(-1), {
     at: AT,
@@ -128,6 +133,7 @@ test('a New lead is archived once its posting is over 14 days old; worked-on and
     note: 'posted over 14 days ago',
   })
   assert.equal(leads.leads[1]?.history.at(-1)?.note, 'added over 14 days ago')
+  assert.equal(leads.leads[2]?.history.at(-1)?.note, 'added over 14 days ago')
   // Nothing stale: the same file back, so callers can skip the write.
   const clean = board(lead({ postedAt: daysAgo(3) }))
   assert.equal(archiveStale(clean, AT).leads, clean)

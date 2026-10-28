@@ -150,7 +150,7 @@ You never apply, email anyone, create accounts, or log into job sites.
    to `$JOB_TRACKER_DATA/scout/signals.md`: `<date> · <company> · <event> · <board or "no public board"> · <url>`.
    Never edit `target-companies.md`; the weekly learn review proposes additions from `signals.md`.
 8. If `alerts` is not empty, send one PushNotification naming them, e.g.
-   `2 strong job leads: <Company> — <Role> (<score>), ... Open /jobs.` If `ghosted` is not
+   `2 strong job leads: <Company> — <Role> (<fitScore>), ... Open /jobs.` If `ghosted` is not
    empty, send one more naming them (`jobs list --column archived` has their company and role),
    e.g. `Marked ghosted, no reply a month after applying: <Company> — <Role>. Back to Applied on
    the card undoes it.` Send none otherwise.

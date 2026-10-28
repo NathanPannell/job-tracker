@@ -191,17 +191,24 @@ export function postedTime(lead: Pick<Lead, 'postedAt'>): number | undefined {
 }
 
 /**
- * Whether a lead's posting went up more than `POSTING_MAX_DAYS` before `now`, counted from when
- * the lead was added when the posting has no date that parses.
+ * When a posting went up: its own date, or when the lead was added if that is earlier or the date
+ * does not parse (a posting dated after it was found is a source's mistake).
  */
+export function postingTime(lead: Pick<Lead, 'foundAt' | 'postedAt'>): number {
+  const added = Date.parse(lead.foundAt)
+  const posted = postedTime(lead)
+  return posted !== undefined && posted < added ? posted : added
+}
+
+/** Whether a lead's posting went up more than `POSTING_MAX_DAYS` before `now` (`postingTime`). */
 export const isStale = (lead: Pick<Lead, 'foundAt' | 'postedAt'>, now: number) =>
-  now - (postedTime(lead) ?? Date.parse(lead.foundAt)) > POSTING_MAX_DAYS * DAY_MS
+  now - postingTime(lead) > POSTING_MAX_DAYS * DAY_MS
 
 type Archivable = Pick<Lead, 'column' | 'foundAt' | 'postedAt' | 'history'>
 
 /** Why `archiveStale` takes a lead: how old its posting is, or how long ago it was added. */
 const archiveReason = (lead: Archivable) =>
-  `${postedTime(lead) === undefined ? 'added' : 'posted'} over ${POSTING_MAX_DAYS} days ago`
+  `${postingTime(lead) === Date.parse(lead.foundAt) ? 'added' : 'posted'} over ${POSTING_MAX_DAYS} days ago`
 
 /**
  * Whether `archiveStale` takes this lead: in New, its posting stale (`isStale`), and never moved
