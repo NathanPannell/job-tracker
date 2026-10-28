@@ -235,27 +235,27 @@ test('a New lead added over a week ago or scoring below 50 is archived; kept, re
   assert.equal(archiveStale(clean, AT).leads, clean)
 })
 
-test('scout adds a new lead on its fit score, skips postings over 30 days old, and keeps dates', () => {
+test('scout adds a new lead on its fit score, skips postings over 14 days old, and keeps dates', () => {
   const result = addLeads(
     emptyLeads(),
     [
       incoming('Old', { fitScore: 70, postedAt: daysAgo(9) }),
       incoming('Weak', { fitScore: 59, postedAt: hoursAgo(1) }),
       incoming('New', { fitScore: 61, postedAt: hoursAgo(1) }),
-      incoming('Dead', { fitScore: 100, postedAt: daysAgo(31) }),
-      incoming('Month', { fitScore: 80, postedAt: daysAgo(ADD_MAX_POSTED_DAYS) }),
+      incoming('Dead', { fitScore: 100, postedAt: daysAgo(15) }),
+      incoming('Fortnight', { fitScore: 80, postedAt: daysAgo(ADD_MAX_POSTED_DAYS) }),
       // Exactly at the threshold is kept; an unreadable date is no reason to skip.
       incoming('Undated', { fitScore: 60, postedAt: 'last Tuesday' }),
     ],
     AT,
     60,
   )
-  assert.equal(ADD_MAX_POSTED_DAYS, 30)
+  assert.equal(ADD_MAX_POSTED_DAYS, 14)
   assert.deepEqual(result.dropped, ['weak-backend-developer', 'dead-backend-developer'])
   assert.deepEqual(result.added, [
     'old-backend-developer',
     'new-backend-developer',
-    'month-backend-developer',
+    'fortnight-backend-developer',
     'undated-backend-developer',
   ])
   const kept = result.leads.leads[0] as Lead
@@ -264,10 +264,10 @@ test('scout adds a new lead on its fit score, skips postings over 30 days old, a
   assert.equal(kept.fitScore, 70)
   // A new lead has not aged: the board shows its fit score.
   assert.equal(effectiveScore(kept, NOW), 70)
-  // Over 30 days is skipped whatever the threshold: the posting is likely filled.
+  // Over 14 days is skipped whatever the threshold: the posting is likely filled.
   const anyScore = addLeads(
     emptyLeads(),
-    [incoming('Dead', { fitScore: 100, postedAt: daysAgo(31) })],
+    [incoming('Dead', { fitScore: 100, postedAt: daysAgo(15) })],
     AT,
     0,
   )
@@ -284,7 +284,7 @@ test('scout adds a new lead on its fit score, skips postings over 30 days old, a
   assert.equal(again.leads.leads[0]?.postedAt, daysAgo(9))
   assert.equal(again.leads.leads[1]?.postedAt, hoursAgo(1))
   // A lead already on the board is refreshed even when its score is under the threshold or its
-  // posting is over 30 days old, and a readable earlier date replaces an unreadable or later one.
+  // posting is over 14 days old, and a readable earlier date replaces an unreadable or later one.
   const onBoard = board(lead({ column: 'applied', postedAt: 'last Tuesday', comp: '' }))
   const refound = addLeads(
     onBoard,

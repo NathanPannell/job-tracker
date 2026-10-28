@@ -55,7 +55,7 @@ export type Lead = {
   foundAt: string
   /**
    * When the posting went up, when its source says (ATS boards do). Shown beside the lead's age;
-   * it does not age the score, and scout skips a posting dated over 30 days ago.
+   * it does not age the score, and scout skips a posting dated over 14 days ago.
    */
   postedAt?: string
   /** When the nudge named this lead in a conversation. */

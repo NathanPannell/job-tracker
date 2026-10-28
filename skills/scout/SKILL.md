@@ -30,7 +30,7 @@ You never apply, email anyone, create accounts, or log into job sites.
    at most 1500 characters of the posting's own words, keeping what it says about the company
    and what sets the role apart (team, stack, comp, setup). Tell each: do not apply, do not log in
    anywhere, do not open linkedin.com or indeed.com pages, drop anything on the seen list, drop
-   postings older than 30 days, and return at most 25 items. The Gmail source has no cap: every
+   postings older than 14 days, and return at most 25 items. The Gmail source has no cap: every
    email it reads is marked read, so it returns every relevant posting in those emails.
    - **ATS boards** (`source: "greenhouse" | "lever" | "ashby"`): run `jobs ats`, read the file it
      names, keep engineering roles (backend, platform, API, data, applied AI, full-stack, integration,
@@ -121,7 +121,7 @@ You never apply, email anyone, create accounts, or log into job sites.
    (`postedAt` as the source gave it, ISO; omit it when unknown) and run
    `jobs add @<that file> --threshold 60`. It dedupes again, drops a new lead whose fit score is
    under 60 (a lead starts ageing only once it is added, so an older posting is judged on its fit
-   like any other) or whose `postedAt` is over 30 days old (likely filled), archives New leads
+   like any other) or whose `postedAt` is over 14 days old (likely filled), archives New leads
    added over 7 days ago or scoring below 50 as aged,
    marks Applied leads with no reply a month after submitting ghosted, and prints `added`,
    `updated`, `dropped`, `archived`, `ghosted` (ids of those applications), `alerts` (added leads

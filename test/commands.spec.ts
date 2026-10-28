@@ -94,8 +94,8 @@ test('archive and add move New leads added over a week ago to Archived', () => {
   const dir = fresh()
   const daysAgo = (days: number) => new Date(Date.now() - days * 86_400_000).toISOString()
   commands.add(dir, [
-    { ...lead('Old', 99), postedAt: daysAgo(20) },
-    { ...lead('Kept', 99), postedAt: daysAgo(20) },
+    { ...lead('Old', 99), postedAt: daysAgo(10) },
+    { ...lead('Kept', 99), postedAt: daysAgo(10) },
   ])
   commands.move(dir, 'kept-backend-developer', 'drafting')
   assert.deepEqual(commands.archive(dir), { archived: [], ghosted: [] })

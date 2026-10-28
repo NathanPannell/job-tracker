@@ -60,6 +60,7 @@ type GreenhouseJob = {
   absolute_url?: string
   location?: { name?: string }
   content?: string
+  first_published?: string
   updated_at?: string
 }
 type LeverJob = {
@@ -95,7 +96,10 @@ export function parseBoard(board: Board, body: unknown): Posting[] {
       url: job.absolute_url ?? '',
       location: job.location?.name ?? '',
       description: cut(job.content ?? ''),
-      ...(job.updated_at ? { postedAt: job.updated_at } : {}),
+      // `updated_at` moves on every edit, so an old posting can look new; prefer first posted.
+      ...(job.first_published || job.updated_at
+        ? { postedAt: job.first_published || job.updated_at }
+        : {}),
     }))
   }
   if (board.ats === 'lever') {

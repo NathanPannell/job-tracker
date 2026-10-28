@@ -189,8 +189,8 @@ export const ARCHIVE_AFTER_DAYS = 7
 export const ARCHIVE_BELOW_SCORE = 50
 /** The most age takes off: the whole curve, after which a lead the person kept stops sinking. */
 export const DECAY_MAX_POINTS = DECAY_POINTS_BY_DAY.reduce((sum, points) => sum + points, 0)
-/** Scout does not add a posting whose own date is older than this: it is likely filled. */
-export const ADD_MAX_POSTED_DAYS = 30
+/** Scout does not add a posting whose own date is older than this (two weeks): it is likely filled. */
+export const ADD_MAX_POSTED_DAYS = 14
 /** Columns whose leads age: not applied yet, so a lead left waiting is less worth the time. */
 export const DECAYING_COLUMNS: readonly Column[] = ['new', 'drafting', 'ready']
 

@@ -79,7 +79,7 @@ The types of every file are in `types/index.d.ts`.
   not archived for its score; Drafting and Ready leads stay where you put them. Only New, Drafting
   and Ready age; once applied, a lead keeps its fit score. Opening an aged lead shows both, e.g.
   `Fit 86 → 62, added 3d ago · posted 9d ago`. Scout judges a new posting on its fit score (it has
-  not aged yet) and skips one whose posting date is over 30 days old. The fit score in
+  not aged yet) and skips one whose posting date is over 14 days old. The fit score in
   `leads.json` never changes with age: score corrections, feedback, the weekly `learn` review and
   scout's add threshold use it, while sorting, the nudge,
   and `list_leads` (its `score` field and `minScore`) use the aged score.
