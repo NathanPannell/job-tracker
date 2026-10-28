@@ -16,14 +16,18 @@ import {
   ADD_MIN_SCORE,
   addLeads,
   appendEvent,
+  approvedText,
   archiveStale,
   byScore,
+  checkProposal,
   checkSummary,
   COLUMN_TITLES,
   correctScore,
   counts,
+  decideChanges,
   eventId,
   ghostSilent,
+  hasApproved,
   hasBlurb,
   hasHighlights,
   hasTagline,
@@ -31,6 +35,8 @@ import {
   markMentioned,
   missingSummaries,
   moveLead,
+  newProposal,
+  normalizeProposal,
   patchLead,
 } from '../../hooks/lib/model.ts'
 import type {
@@ -46,6 +52,7 @@ import type {
   MoveResult,
   PackageFiles,
   Proposal,
+  ProposalInput,
 } from '../../hooks/lib/model.ts'
 import { fetchBoards, isReachable } from './ats.ts'
 import type { Ats, Board, Fetch, Posting } from './ats.ts'
@@ -480,21 +487,24 @@ export function submitted(dir: string, id: string) {
   })
 }
 
-export type ProposalInput = Pick<Proposal, 'summary' | 'funnel' | 'changes'> & { id?: string }
+export type { ProposalInput }
 
+/**
+ * Saves the learn skill's proposal: 3 to 10 changes (fewer with a reason), each pending on its
+ * own. Saving under the id of a proposal with decided changes is refused, so a rerun of the
+ * review never wipes the person's decisions.
+ */
 export function propose(dir: string, input: ProposalInput) {
-  if (!Array.isArray(input.changes)) throw new Error('A proposal needs a changes array')
+  const problem = checkProposal(input)
+  if (problem) throw new Error(problem)
   const at = now()
   const id = input.id ?? `proposal-${at.slice(0, 10)}`
   return transact<Proposal>(dir, data => {
-    const entry: Proposal = {
-      id,
-      createdAt: at,
-      status: 'pending',
-      summary: input.summary,
-      funnel: input.funnel,
-      changes: input.changes,
+    const existing = data.proposals.proposals.find(one => one.id === id)
+    if (existing && normalizeProposal(existing).changes.some(one => one.status !== 'pending')) {
+      throw new Error(`Proposal ${id} already has decided changes; save this one under another id`)
     }
+    const entry = newProposal(input, id, at)
     return {
       write: {
         proposals: {
@@ -507,36 +517,37 @@ export function propose(dir: string, input: ProposalInput) {
   })
 }
 
-/** Approves or rejects a pending proposal; approving appends each change to its profile file. */
-export function decide(dir: string, id: string, decision: string) {
+/**
+ * Approves or rejects one change of a proposal (`decide <id> c3 approve`), or every pending one
+ * (`decide <id> all approve`, or the older `decide <id> approve`). Approving appends just that
+ * change's text to its profile file, once: repeating a decision changes nothing.
+ */
+export function decide(dir: string, id: string, first: string, second?: string) {
+  const [target, decision] = second === undefined ? ['all', first] : [first, second]
   if (decision !== 'approve' && decision !== 'reject') throw new Error('Decide approve or reject')
   const at = now()
   return transact(dir, data => {
-    const proposal = data.proposals.proposals.find(one => one.id === id)
-    if (!proposal) throw new Error(`No proposal ${id}`)
-    if (proposal.status !== 'pending')
-      throw new Error(`Proposal ${id} is already ${proposal.status}`)
-    if (decision === 'approve') {
-      mkdirSync(join(dir, 'profile'), { recursive: true })
-      for (const change of proposal.changes) {
-        const file = change.file === 'preferences.md' ? 'preferences.md' : 'learnings.md'
-        appendFileSync(
-          join(dir, 'profile', file),
-          `\n\n## ${change.title} (approved ${at.slice(0, 10)})\n\n${change.text.trim()}\n`,
-        )
-      }
+    const decided = decideChanges(data.proposals, id, target, decision, at)
+    const approved = decided.decided.filter(one => one.status === 'approved')
+    if (approved.length > 0) mkdirSync(join(dir, 'profile'), { recursive: true })
+    for (const change of approved) {
+      const file = join(
+        dir,
+        'profile',
+        change.file === 'preferences.md' ? 'preferences.md' : 'learnings.md',
+      )
+      // An earlier try that appended but failed to save left it there: never append it twice.
+      if (existsSync(file) && hasApproved(readFileSync(file, 'utf8'), change)) continue
+      appendFileSync(file, approvedText(change, at))
     }
-    const status = decision === 'approve' ? ('approved' as const) : ('rejected' as const)
     return {
-      write: {
-        proposals: {
-          ...data.proposals,
-          proposals: data.proposals.proposals.map(one =>
-            one.id === id ? { ...one, status, decidedAt: at } : one,
-          ),
-        },
+      write: { proposals: decided.file },
+      result: {
+        id,
+        status: decided.proposal.status,
+        decided: decided.decided.map(({ id: change, status }) => ({ id: change, status })),
+        changes: decided.proposal.changes.map(({ id: change, status }) => ({ id: change, status })),
       },
-      result: { id, status },
     }
   })
 }

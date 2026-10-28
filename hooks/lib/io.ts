@@ -11,6 +11,7 @@ import {
   isArchivable,
   isGhostable,
   migrateLeads,
+  normalizeProposal,
   parseOr,
 } from './model.ts'
 import type { ApplicationsFile, LeadsFile, ProposalsFile } from './model.ts'
@@ -75,7 +76,10 @@ export async function refresh($: EngineInterface, sweep = true): Promise<JobBoar
         new Date(loadedAt).toISOString(),
       ).leads,
       applications: parseOr<ApplicationsFile>(applications, emptyApplications).applications ?? [],
-      proposals: parseOr<ProposalsFile>(proposals, emptyProposals).proposals ?? [],
+      // A proposal saved before per-change decisions reads as one decision per change.
+      proposals: (parseOr<ProposalsFile>(proposals, emptyProposals).proposals ?? []).map(
+        normalizeProposal,
+      ),
       loadedAt,
       error:
         leads === undefined ? 'No leads.json yet: run the scout skill to fill the board.' : null,

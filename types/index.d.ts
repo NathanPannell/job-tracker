@@ -124,23 +124,38 @@ export type FeedbackEvent = {
 
 export type FeedbackFile = { version: 1; events: FeedbackEvent[] }
 
+export type ChangeStatus = 'pending' | 'approved' | 'rejected'
+
+/** One learning in a proposal, approved or rejected on its own. */
 export type ProposalChange = {
+  /** `c1`, `c2`, ... in proposal order; a change saved before ids existed takes its place's. */
+  id: string
   file: 'learnings.md' | 'preferences.md'
   title: string
   rationale: string
   /** Markdown appended to the file under a dated heading when approved. */
   text: string
+  /** A change saved before per-change decisions takes its proposal's status. */
+  status: ChangeStatus
+  decidedAt?: string
 }
 
-/** A weekly learning proposal (`proposals.json`), applied only when approved. */
+/**
+ * A weekly learning proposal (`proposals.json`): each change is applied only when approved.
+ * `status` follows from the changes: `pending` while any is pending, `decided` once none are.
+ * A proposal saved before per-change decisions may still read `approved` or `rejected`.
+ */
 export type Proposal = {
   id: string
   createdAt: string
-  status: 'pending' | 'approved' | 'rejected'
+  status: 'pending' | 'decided' | 'approved' | 'rejected'
   summary: string
   /** The funnel summary in Markdown. */
   funnel: string
   changes: ProposalChange[]
+  /** Why the review proposed fewer than three changes. */
+  fewerReason?: string
+  /** When the last change was decided. */
   decidedAt?: string
 }
 

@@ -6,12 +6,15 @@ import type {
   Actor,
   Application,
   ApplicationsFile,
+  ChangeStatus,
   Column,
   FeedbackEvent,
   FeedbackFile,
   HistoryEntry,
   Lead,
   LeadsFile,
+  Proposal,
+  ProposalChange,
   ProposalsFile,
 } from '../../types/index.d.ts'
 
@@ -27,6 +30,7 @@ export type {
   Lead,
   LeadsFile,
   PackageFiles,
+  ChangeStatus,
   Proposal,
   ProposalChange,
   ProposalsFile,
@@ -451,6 +455,171 @@ export const emptyLeads = (): LeadsFile => ({ version: 1, leads: [] })
 export const emptyApplications = (): ApplicationsFile => ({ version: 1, applications: [] })
 export const emptyFeedback = (): FeedbackFile => ({ version: 1, events: [] })
 export const emptyProposals = (): ProposalsFile => ({ version: 1, proposals: [] })
+
+/** A weekly review proposes 3 to 10 changes; fewer only with a reason, never more. */
+export const MIN_CHANGES = 3
+export const MAX_CHANGES = 10
+/** Each change is short: these bounds keep a page of proposals well under the pane's cap. */
+export const CHANGE_LIMITS = { title: 120, rationale: 300, text: 1200 } as const
+
+/** A proposal as `proposals.json` may hold it: changes saved before per-change decisions. */
+export type StoredProposal = Omit<Proposal, 'changes'> & {
+  changes: (Omit<ProposalChange, 'id' | 'status'> &
+    Partial<Pick<ProposalChange, 'id' | 'status'>>)[]
+}
+
+/** What a proposal's changes say of it: pending while any change is, decided once none is. */
+export const proposalStatus = (changes: readonly Pick<ProposalChange, 'status'>[]) =>
+  changes.some(one => one.status === 'pending') ? ('pending' as const) : ('decided' as const)
+
+/**
+ * A proposal with an id and a status on every change. A change saved before per-change
+ * decisions takes its proposal's status (and decision time). Ids go by place (c1, c2, ...)
+ * whenever one is missing or repeated, so no two changes ever share one.
+ */
+export function normalizeProposal(proposal: StoredProposal): Proposal {
+  const legacy: ChangeStatus =
+    proposal.status === 'approved' || proposal.status === 'rejected' ? proposal.status : 'pending'
+  const stored = proposal.changes ?? []
+  const ids = stored.map(one => one.id)
+  const byPlace = ids.some((id, n) => !id || ids.indexOf(id) !== n)
+  const changes = stored.map((change, n): ProposalChange => {
+    const status = change.status ?? legacy
+    const decidedAt = change.decidedAt ?? (status === 'pending' ? undefined : proposal.decidedAt)
+    return {
+      ...change,
+      id: byPlace ? `c${n + 1}` : (change.id ?? `c${n + 1}`),
+      status,
+      ...(decidedAt ? { decidedAt } : {}),
+    }
+  })
+  return { ...proposal, changes, status: proposalStatus(changes) }
+}
+
+export type ProposalInput = Pick<Proposal, 'summary' | 'funnel' | 'fewerReason'> & {
+  id?: string
+  changes: Pick<ProposalChange, 'file' | 'title' | 'rationale' | 'text'>[]
+}
+
+/** Why a proposal from the learn skill cannot be saved; null when it can. */
+export function checkProposal(input: ProposalInput): string | null {
+  if (!Array.isArray(input.changes)) return 'A proposal needs a changes array'
+  const count = input.changes.length
+  if (count > MAX_CHANGES) {
+    return `A proposal holds at most ${MAX_CHANGES} changes, not ${count}: keep the best-evidenced ones`
+  }
+  if (count < MIN_CHANGES && !input.fewerReason?.trim()) {
+    return `A proposal with fewer than ${MIN_CHANGES} changes needs a fewerReason saying why`
+  }
+  for (const [n, change] of input.changes.entries()) {
+    if (change?.file !== 'learnings.md' && change?.file !== 'preferences.md') {
+      return `Change ${n + 1} needs file learnings.md or preferences.md`
+    }
+    if (typeof change.title !== 'string' || !change.title.trim()) {
+      return `Change ${n + 1} needs a title`
+    }
+    if (typeof change.text !== 'string' || !change.text.trim()) {
+      return `Change ${n + 1} needs the text to append`
+    }
+    for (const field of ['title', 'rationale', 'text'] as const) {
+      const length = (change[field] ?? '').length
+      if (length > CHANGE_LIMITS[field]) {
+        return `Change ${n + 1}'s ${field} is ${length} characters; keep it under ${CHANGE_LIMITS[field]}`
+      }
+    }
+  }
+  return null
+}
+
+/** A new proposal from checked input: every change pending, with ids c1, c2, ... */
+export function newProposal(input: ProposalInput, id: string, at: string): Proposal {
+  return {
+    id,
+    createdAt: at,
+    status: input.changes.length > 0 ? 'pending' : 'decided',
+    summary: input.summary,
+    funnel: input.funnel,
+    // The reason is for a short week only.
+    ...(input.fewerReason?.trim() && input.changes.length < MIN_CHANGES
+      ? { fewerReason: input.fewerReason.trim() }
+      : {}),
+    changes: input.changes.map((change, n) => ({
+      id: `c${n + 1}`,
+      file: change.file,
+      title: change.title.trim(),
+      rationale: change.rationale ?? '',
+      text: change.text,
+      status: 'pending' as const,
+    })),
+  }
+}
+
+export type Decision = 'approve' | 'reject'
+
+export type DecideResult = {
+  file: ProposalsFile
+  proposal: Proposal
+  /** The changes this call decided, in order; empty when it repeated an earlier decision. */
+  decided: ProposalChange[]
+}
+
+/**
+ * Decides one change of a proposal (`c3`, or `3`), or `all` its pending ones. Repeating a
+ * change's decision is a no-op, so a double press appends nothing twice; the opposite decision
+ * on a decided change is refused.
+ */
+export function decideChanges(
+  file: ProposalsFile,
+  id: string,
+  target: string,
+  decision: Decision,
+  at: string,
+): DecideResult {
+  const stored = file.proposals.find(one => one.id === id)
+  if (!stored) throw new Error(`No proposal ${id}`)
+  const proposal = normalizeProposal(stored)
+  const status: ChangeStatus = decision === 'approve' ? 'approved' : 'rejected'
+  const changeId = /^\d+$/.test(target) ? `c${target}` : target
+  let ids: string[]
+  if (changeId === 'all') {
+    ids = proposal.changes.filter(one => one.status === 'pending').map(one => one.id)
+  } else {
+    const change = proposal.changes.find(one => one.id === changeId)
+    if (!change) throw new Error(`Proposal ${id} has no change ${target}`)
+    if (change.status !== 'pending' && change.status !== status) {
+      throw new Error(`Change ${change.id} of ${id} is already ${change.status}`)
+    }
+    ids = change.status === 'pending' ? [change.id] : []
+  }
+  const changes = proposal.changes.map(one =>
+    ids.includes(one.id) ? { ...one, status, decidedAt: at } : one,
+  )
+  const next: Proposal = { ...proposal, changes, status: proposalStatus(changes) }
+  if (ids.length > 0 && next.status === 'decided') next.decidedAt = at
+  return {
+    file: { ...file, proposals: file.proposals.map(one => (one.id === id ? next : one)) },
+    proposal: next,
+    decided: changes.filter(one => ids.includes(one.id)),
+  }
+}
+
+/**
+ * Whether a profile file already holds an approved change's text under its heading, from any
+ * day: a decision whose append landed but whose save did not is not appended again.
+ */
+export function hasApproved(content: string, change: Pick<ProposalChange, 'title' | 'text'>) {
+  const head = `## ${change.title} (approved `
+  const body = `)\n\n${change.text.trim()}\n`
+  // The heading's date is ten characters: YYYY-MM-DD.
+  for (let at = content.indexOf(head); at !== -1; at = content.indexOf(head, at + 1)) {
+    if (content.startsWith(body, at + head.length + 10)) return true
+  }
+  return false
+}
+
+/** The Markdown an approved change appends to its profile file. */
+export const approvedText = (change: Pick<ProposalChange, 'title' | 'text'>, at: string) =>
+  `\n\n## ${change.title} (approved ${at.slice(0, 10)})\n\n${change.text.trim()}\n`
 
 export const isColumn = (value: unknown): value is Column =>
   typeof value === 'string' && (COLUMNS as readonly string[]).includes(value)

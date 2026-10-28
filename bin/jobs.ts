@@ -37,8 +37,12 @@ const USAGE = `jobs <command> [args] [--data <dir>]
   preview <id>                           render a package's résumé preview again
   diff <id>                              the tailored résumé against the master
   submitted <id>                         the person submitted it: move to Applied, follow up in 7 days
-  propose <json|@file>                   add a learning proposal
-  decide <proposal-id> approve|reject
+  propose <json|@file>                   add a learning proposal: 3-10 changes, each decided
+                                         on its own (fewer than 3 needs a fewerReason)
+  decide <proposal-id> <change-id>|all approve|reject
+                                         approve (append to its profile file) or reject one
+                                         change (c1, c2, ... or 1, 2, ...), or all pending ones;
+                                         decide <proposal-id> approve|reject decides all
   edits                                  the person's edits to drafted packages, as diffs
   ats [--all]                            fetch the Greenhouse/Lever/Ashby boards in profile/ats-boards.json
   probe <slug>... [--company name]       which ATS (if any) has a public board under this slug
@@ -123,7 +127,7 @@ async function main(argv: string[]): Promise<unknown> {
     case 'propose':
       return commands.propose(dir, commands.readJsonArg<ProposalInput>(args[0]))
     case 'decide':
-      return commands.decide(dir, need(args[0], 'proposal id'), need(args[1], 'decision'))
+      return commands.decide(dir, need(args[0], 'proposal id'), need(args[1], 'decision'), args[2])
     case 'edits':
       return commands.edits(dir)
     case 'ats':
