@@ -31,6 +31,7 @@ import {
   CHROME_UNAVAILABLE,
   isChromeUnavailable,
   submitFollowUp,
+  submitBatchRelay,
   submitRelay,
   submitTask,
   TAGLINE_LIMIT,
@@ -332,6 +333,14 @@ test('a prefill runs aside and never submits; its report goes to the conversatio
   assert.match(task, /never click the final submit/)
   assert.match(task, new RegExp(CHROME_UNAVAILABLE))
   assert.match(submitRelay(lead), /stop before the final submit so I can confirm here/)
+  assert.equal(submitBatchRelay([lead]), submitRelay(lead))
+  const batch = submitBatchRelay([lead, { id: 'beta-api', company: 'Beta', role: 'SRE' }])
+  assert.match(
+    batch,
+    /as one batch: Acme — Backend Developer \(lead acme-api\); Beta — SRE \(lead beta-api\)\./,
+  )
+  assert.match(batch, /ask me in one message .* step 4/)
+  assert.match(batch, /stop before each final submit so I can confirm here/)
   const next = submitFollowUp(lead, '  Tab: Acme — https://jobs.example\n')
   assert.match(next, /from step 4/)
   assert.match(next, /only after my yes here/)
