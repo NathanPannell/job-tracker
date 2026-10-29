@@ -211,6 +211,13 @@ export type DraftRun = {
   company: string
   task: string
   at: number
+  /**
+   * A prefill's Chrome tabs, the ones it opened with tabs_create_mcp: the only tabs it may act
+   * in, which no other caller may touch while it runs, and the ones checked when it ends.
+   */
+  tabs?: number[]
+  /** The Claude in Chrome server those tabs belong to, as its tool names spell it. */
+  browser?: string
 }
 
 declare module 'claude-code' {

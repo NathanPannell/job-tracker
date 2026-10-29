@@ -2,6 +2,7 @@
 // logic over it: board moves, feedback events, counts and the once-a-session nudge. Nothing
 // here touches a file; the callers read and write.
 
+import { isStraySubmit } from './chrome.ts'
 import type {
   Actor,
   Application,
@@ -1134,8 +1135,10 @@ export function submitTask(lead: Named): string {
     `(${lead.company} — ${lead.role}), whose package the person approved; its steps are in`,
     '$JOB_TRACKER_HOME/skills/submit/SKILL.md. You run in the background: follow its',
     '"In the background" section. Nobody can answer you here, so ask nothing, and never click',
-    'the final submit, send, apply or confirm. If the Claude in Chrome tools cannot be loaded or',
-    `reach a browser, finish at once with a report that starts with "${CHROME_UNAVAILABLE}".`,
+    'the final submit, send, apply or confirm. Other prefills share this browser: open your own',
+    'tab with tabs_create_mcp, pass its tabId on every call, and act only through element refs',
+    '(no screen coordinates); the Chrome guard refuses anything else. If the Claude in Chrome',
+    `tools cannot be loaded or reach a browser, finish at once with a report that starts with "${CHROME_UNAVAILABLE}".`,
   ].join(' ')
 }
 
@@ -1216,6 +1219,16 @@ export function submitFollowUp(
   report: string,
   others: readonly BatchLead[] = [],
 ): string {
+  if (isStraySubmit(report)) {
+    return [
+      `Before anything else: the background prefill of the application for lead ${lead.id}`,
+      `(${lead.company} — ${lead.role}) ended on a page that reads as a submitted application,`,
+      'though I never approved a submit. Open your reply with one line saying so, then look at',
+      'the tab the report names and tell me what it shows. Do not click, fill or submit anything',
+      'for this lead and do not move its card; ask me what to do with it.',
+      `${batchNote(others)} ${fencedReport(report)}`,
+    ].join(' ')
+  }
   if (isChromeUnavailable(report)) {
     return `${submitRelay(lead)} A background agent could not drive Chrome, so do all of it here. ${batchNote(others)} ${fencedReport(report)}`
   }
