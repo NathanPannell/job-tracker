@@ -1144,6 +1144,13 @@ export function submitRelay(lead: Named): string {
   return `I approved the package for lead ${lead.id} (${lead.company} — ${lead.role}) on the job board. Use the job-tracker:submit skill: prefill the application, ask me in one message for anything it is missing, and stop before the final submit so I can confirm here.`
 }
 
+/** What the conversation is asked when the pane could not start a batch's prefills aside. */
+export function submitBatchRelay(leads: readonly Named[]): string {
+  if (leads.length === 1 && leads[0]) return submitRelay(leads[0])
+  const listed = leads.map(one => `${one.company} — ${one.role} (lead ${one.id})`).join('; ')
+  return `I approved the packages for these leads on the job board together, as one batch: ${listed}. Use the job-tracker:submit skill for each: prefill every application, then ask me in one message for anything the batch is missing, as its step 4 says, and stop before each final submit so I can confirm here.`
+}
+
 /** Longest prefill report handed on to the conversation. */
 const REPORT_CHARS = 8000
 /** The markers around a handed-on report; any copy inside the report is taken out. */

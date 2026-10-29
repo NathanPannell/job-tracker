@@ -14,6 +14,7 @@ import {
   isColumn,
   leadsToMention,
   nudgeContext,
+  submitBatchRelay,
   submitFollowUp,
   submitRelay,
   submitTask,
@@ -227,6 +228,25 @@ const busyNote = (run: DraftRun) =>
  * says yes. Where the engine refuses the spawn, the conversation is asked to do all of it.
  */
 async function submitApplication($: EngineInterface, lead: Lead) {
+  const started = await startPrefill($, lead)
+  const label = `Prefilling the ${lead.company} application`
+  if (started === 'spawned') {
+    $.ui.toast(`${label} in Chrome in the background; Claude asks here before submitting.`)
+  } else if (started === 'refused') {
+    await sendPrompt($, submitRelay(lead), label)
+  } else {
+    $.ui.toast(busyNote(started))
+  }
+}
+
+/**
+ * Starts one lead's background prefill: `spawned`, `refused` (the claim is released, so the
+ * conversation can be asked instead), or the run already going for that lead.
+ */
+async function startPrefill(
+  $: EngineInterface,
+  lead: Lead,
+): Promise<'spawned' | 'refused' | DraftRun> {
   const at = await $.clock.now()
   const task = submitTask(lead)
   const running = await claimRun($, {
@@ -236,11 +256,7 @@ async function submitApplication($: EngineInterface, lead: Lead) {
     task,
     at,
   })
-  if (running) {
-    $.ui.toast(busyNote(running))
-    return
-  }
-  const label = `Prefilling the ${lead.company} application`
+  if (running) return running
   try {
     const spawned = await $.agent.spawn({
       prompt: task,
@@ -249,23 +265,54 @@ async function submitApplication($: EngineInterface, lead: Lead) {
     })
     if (spawned.deny === undefined) {
       if (spawned.agentId) await startDraft($, spawned.agentId, task)
-      $.ui.toast(`${label} in Chrome in the background; Claude asks here before submitting.`)
-      return
+      return 'spawned'
     }
   } catch {
-    // the conversation does it instead, below
+    // the conversation does it instead
   }
   await update($, drafts, list => list.filter(one => one.task !== task))
-  await sendPrompt($, submitRelay(lead), label)
+  return 'refused'
 }
+
+/**
+ * "Approve and submit all": every Ready lead with a package starts its prefill at once, as if
+ * each card's button were pressed in turn, so their reports form one batch (`batchOf`). One
+ * toast says what started; the leads whose spawn was refused go to the conversation in one
+ * prompt, so it still asks once for the whole batch.
+ */
+async function submitAll($: EngineInterface, leads: readonly Lead[]) {
+  // One lead's failure is that lead's alone: it counts as refused, so the conversation asks.
+  const settled = await Promise.allSettled(leads.map(lead => startPrefill($, lead)))
+  const started = settled.map(one => (one.status === 'fulfilled' ? one.value : 'refused'))
+  const spawned = started.filter(one => one === 'spawned').length
+  const running = started.filter(one => typeof one === 'object').length
+  const refused = leads.filter((_, n) => started[n] === 'refused')
+  const notes = [
+    spawned > 0 &&
+      `Prefilling ${plural(spawned, 'application')} in Chrome in the background; Claude asks here once for the batch before submitting.`,
+    running > 0 && `${plural(running, 'application')} already underway.`,
+  ].filter(Boolean)
+  if (notes.length > 0) $.ui.toast(notes.join(' '))
+  if (refused.length > 0) {
+    await sendPrompt(
+      $,
+      submitBatchRelay(refused),
+      `Prefilling ${plural(refused.length, 'application')}`,
+    )
+  }
+}
+
+const plural = (n: number, noun: string) => `${n} ${noun}${n === 1 ? '' : 's'}`
 
 /** A subagent's run started: a build spawned without an id learns it from its prompt. */
 async function startDraft($: EngineInterface, agentId: string, text: string) {
-  const list = await read($, drafts)
-  if (list.some(one => one.agentId === agentId)) return
-  const at = list.findIndex(one => one.agentId === undefined && one.task === text)
-  if (at < 0) return
-  await update($, drafts, runs => runs.map((one, n) => (n === at ? { ...one, agentId } : one)))
+  // Found inside the update: a batch's other runs come and go meanwhile, so a position read
+  // before it could name another lead's run.
+  await update($, drafts, runs => {
+    if (runs.some(one => one.agentId === agentId)) return runs
+    const at = runs.findIndex(one => one.agentId === undefined && one.task === text)
+    return at < 0 ? runs : runs.map((one, n) => (n === at ? { ...one, agentId } : one))
+  })
 }
 
 /**
@@ -409,6 +456,7 @@ function actions($: EngineInterface): Actions {
       void show($, { kind: 'package', id: lead.id, tab }),
     // Back to the board first: a relayed prompt can wait for the current reply to end.
     submit: lead => void leave($, lead).then(() => submitApplication($, lead)),
+    submitAll: leads => void submitAll($, leads),
     openPdf: path => void openFile($, path),
     decide: (id, changeId, decision) =>
       void (async () => {

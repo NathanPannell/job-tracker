@@ -858,6 +858,219 @@ describe('kanban', () => {
     expect(about('beta-api')).toContain('one batch: acme — Backend Developer (lead acme-api')
   })
 
+  for (const surface of ACTING) {
+    test(`Approve and submit all on Ready to review prefills every lead there as one batch (${surface})`, async ($, on) => {
+      const ids = Array.from({ length: 15 }, (_, n) => `co${n}-api`)
+      const w = world(on, {
+        leads: [
+          ...ids.map(id => lead(id, { column: 'ready', tagline: 'x'.repeat(40) })),
+          // In Ready by hand, with no package: nothing to approve.
+          lead('bare-api', { column: 'ready' }),
+          lead('new-api'),
+        ],
+        applications: ids.map(leadId => ({
+          leadId,
+          dir: `packages/${leadId}`,
+          createdAt: '',
+          updatedAt: '',
+          files: {},
+          status: 'ready' as const,
+        })),
+      })
+      const prompts: string[] = []
+      on('prompt.submit', (_, e) => {
+        prompts.push(e.text)
+        return { text: e.text }
+      })
+      const toasts: string[] = []
+      on('ui.toast', (_, e) => {
+        toasts.push(e.text)
+        return { value: undefined }
+      })
+      on('turn.start', (_, e) => ({ turnId: e.turnId }))
+      on('turn.complete', (_, e) => ({ text: e.answer }))
+      await start($)
+      const ui = await $.ui.mount({ ...pane, surface })
+      const all = { key: 'submit-all' } as const
+
+      // Only on Ready to review, counting the leads with a package.
+      await ui.press({ key: 'tab:new' })
+      expect(await ui.find(all)).toBeUndefined()
+      await ui.press({ key: 'tab:ready' })
+      expect((await ui.find(all))?.text).toBe('Approve and submit all (15)')
+      const root = (await ui.findAll({}))[0]
+      expect(JSON.stringify(root).length).toBeLessThan(100_000)
+
+      // One press: every prefill starts at once, nothing reaches the conversation yet.
+      await $.turn.start({ text: 'what is new on my board?', turnId: 't1' })
+      await ui.press(all)
+      const spawned = (id: string) =>
+        w.spawns.findIndex(one => one.prompt.includes(`prefill the application for lead ${id} `))
+      expect(w.spawns).toHaveLength(15)
+      expect(ids.every(id => spawned(id) >= 0)).toBe(true)
+      expect(prompts).toEqual([])
+      expect(toasts).toEqual([
+        'Prefilling 15 applications in Chrome in the background; Claude asks here once for the batch before submitting.',
+      ])
+      expect(w.leads().filter(one => one.column === 'ready')).toHaveLength(16)
+
+      // A second press starts nothing more.
+      await ui.press(all)
+      expect(w.spawns).toHaveLength(15)
+      expect(toasts.at(-1)).toBe('15 applications already underway.')
+
+      // Each report names the rest of the batch, and waits, queued, for the current reply.
+      for (const [n, spawn] of w.spawns.entries()) {
+        await $.turn.start({ text: spawn.prompt, turnId: `p-${n}`, agentId: `agent-${n}` })
+      }
+      const n = spawned('co3-api')
+      await $.turn.complete({
+        answer: 'Tab: co3',
+        durationMs: 1,
+        isAborted: false,
+        turnId: `p-${n}`,
+        agentId: `agent-${n}`,
+        reason: 'answer',
+      })
+      expect(prompts).toHaveLength(1)
+      expect(prompts[0]).toContain('lead co3-api (co3 — Backend Developer) was prefilled')
+      expect(prompts[0]).toContain('one batch: co0 — Backend Developer (lead co0-api, still being')
+      expect(prompts[0]).toContain('co14-api')
+      expect(prompts[0]).not.toContain('bare-api')
+      expect(prompts[0]).toContain('one message with every application in the batch')
+      expect(
+        await ui.find({ type: 'Text', text: /^Finishing the co3 application: queued…$/ }),
+      ).toBeDefined()
+      await ui.unmount()
+    })
+  }
+
+  test('a batch member ending while others start keeps every report with its own lead', async ($, on) => {
+    const ids = ['acme-api', 'beta-api', 'gamma-api']
+    const w = world(on, {
+      leads: ids.map(id => lead(id, { column: 'ready' })),
+      applications: ids.map(leadId => ({
+        leadId,
+        dir: `packages/${leadId}`,
+        createdAt: '',
+        updatedAt: '',
+        files: {},
+        status: 'ready' as const,
+      })),
+    })
+    const prompts: string[] = []
+    on('prompt.submit', (_, e) => {
+      prompts.push(e.text)
+      return { text: e.text }
+    })
+    on('turn.start', (_, e) => ({ turnId: e.turnId }))
+    on('turn.complete', (_, e) => ({ text: e.answer }))
+    const end = (n: number) =>
+      $.turn.complete({
+        answer: `Tab: report ${n}`,
+        durationMs: 1,
+        isAborted: false,
+        turnId: `p-${n}`,
+        agentId: `agent-${n}`,
+        reason: 'answer',
+      })
+    await start($)
+    const ui = await $.ui.mount({ ...pane, surface: 'desktop' })
+    await ui.press({ key: 'submit-all' })
+    const of = (n: number) => ids.find(id => w.spawns[n]?.prompt.includes(`lead ${id} `)) ?? ''
+    await $.turn.start({ text: w.spawns[0]?.prompt ?? '', turnId: 'p-0', agentId: 'agent-0' })
+    // The first ends (its run leaves the list) while the other two start.
+    await Promise.all([
+      end(0),
+      ...[1, 2].map(n =>
+        $.turn.start({ text: w.spawns[n]?.prompt ?? '', turnId: `p-${n}`, agentId: `agent-${n}` }),
+      ),
+    ])
+    await end(2)
+    await end(1)
+    expect(prompts).toHaveLength(3)
+    for (const n of [0, 1, 2]) {
+      const sent = prompts.find(one => one.includes(`Tab: report ${n}`)) ?? ''
+      expect(sent).toContain(`lead ${of(n)} (`)
+    }
+  })
+
+  test('Approve and submit all hides with nothing to approve, and on a read-only surface', async ($, on) => {
+    world(on, {
+      leads: [lead('acme-api', { column: 'ready' })],
+      applications: [
+        {
+          leadId: 'acme-api',
+          dir: 'packages/acme-api',
+          createdAt: '',
+          updatedAt: '',
+          files: {},
+          status: 'ready',
+        },
+      ],
+    })
+    await start($)
+    const mobile = await $.ui.mount({ ...pane, surface: 'mobile' })
+    expect(await mobile.find({ key: 'tab:ready', text: /Ready to review 1/ })).toBeDefined()
+    expect(await mobile.find({ key: 'submit-all' })).toBeUndefined()
+    await mobile.unmount()
+    const ui = await $.ui.mount({ ...pane, surface: 'desktop' })
+    expect((await ui.find({ key: 'submit-all' }))?.text).toBe('Approve and submit all (1)')
+    await $.tool.call({ tool: 'mcp__job-tracker__update_lead', id: 'acme-api', column: 'applied' })
+    await ui.press({ key: 'tab:ready' })
+    expect(await ui.find({ text: /^Nothing in Ready to review yet\.$/ })).toBeDefined()
+    expect(await ui.find({ key: 'submit-all' })).toBeUndefined()
+  })
+
+  test('where no subagent can start, Approve and submit all asks the conversation once for the batch, queued until its turn', async ($, on) => {
+    const ids = ['acme-api', 'beta-api', 'gamma-api']
+    const w = world(on, {
+      leads: ids.map(id => lead(id, { column: 'ready' })),
+      applications: ids.map(leadId => ({
+        leadId,
+        dir: `packages/${leadId}`,
+        createdAt: '',
+        updatedAt: '',
+        files: {},
+        status: 'ready' as const,
+      })),
+    })
+    w.refuseSpawns('background tasks are disabled')
+    const prompts: string[] = []
+    on('prompt.submit', (_, e) => {
+      prompts.push(e.text)
+      return { text: e.text }
+    })
+    const toasts: string[] = []
+    on('ui.toast', (_, e) => {
+      toasts.push(e.text)
+      return { value: undefined }
+    })
+    on('turn.start', (_, e) => ({ turnId: e.turnId }))
+    on('turn.complete', (_, e) => ({ text: e.answer }))
+    await start($)
+    const ui = await $.ui.mount({ ...pane, surface: 'desktop' })
+    await $.turn.start({ text: 'what is new on my board?', turnId: 't1' })
+    await ui.press({ key: 'submit-all' })
+    expect(prompts).toHaveLength(1)
+    expect(prompts[0]).toContain(
+      'as one batch: acme — Backend Developer (lead acme-api); beta — Backend Developer (lead beta-api); gamma — Backend Developer (lead gamma-api).',
+    )
+    expect(prompts[0]).toContain('stop before each final submit so I can confirm here')
+    expect(toasts).toEqual(['Prefilling 3 applications once Claude finishes the current reply.'])
+    const queued = { type: 'Text', text: /^Prefilling 3 applications: queued…$/ } as const
+    expect(await ui.find(queued)).toBeDefined()
+    await $.turn.complete({
+      answer: 'Done.',
+      durationMs: 1,
+      isAborted: false,
+      turnId: 't1',
+      reason: 'answer',
+    })
+    await $.turn.start({ text: prompts[0] ?? '', turnId: 't2' })
+    expect(await ui.find(queued)).toBeUndefined()
+  })
+
   test('a handed-on prefill holds the lead from draft_package, and a dropped hand-off frees it', async ($, on) => {
     const w = world(on, {
       leads: [lead('acme-api', { company: 'Acme', column: 'ready' })],

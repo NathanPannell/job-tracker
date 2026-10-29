@@ -30,8 +30,9 @@ the person's conversation:
   are still filled, and redo steps 1–3 only for what is not. If the report starts with
   `CHROME UNAVAILABLE`, do every step here.
 
-Several presses close together are **one batch**. Each lead gets its own subagent at once, side
-by side; none waits for another or for the conversation. Their reports arrive as separate
+Several presses close together are **one batch**, and so is one press of "Approve and submit
+all" on the Ready to review column, which approves every lead there at once. Each lead gets its
+own subagent at once, side by side; none waits for another or for the conversation. Their reports arrive as separate
 prompts, in the order the prefills end, and each names the batch's other leads: still being
 prefilled, or prefilled with its report earlier in the conversation. Every reply to a report asks
 for the whole batch (step 4), never only the lead whose report just came.

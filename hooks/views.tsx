@@ -47,6 +47,8 @@ export type Actions = {
   draft: (lead: Lead) => void
   review: (lead: Lead, tab?: PackageTab) => void
   submit: (lead: Lead) => void
+  /** Approves and submits these leads together, as one batch. */
+  submitAll: (leads: Lead[]) => void
   openPdf: (path: string) => void
   /** Decides one change of a proposal, or `all` its pending ones. */
   decide: (proposalId: string, changeId: string, decision: 'approve' | 'reject') => void
@@ -282,6 +284,11 @@ export function boardView(
   const stage = options.stage && tabs.includes(options.stage) ? options.stage : defaultStage(file)
   const leads = columnLeads(file, stage)
   const visible = leads.slice(0, Math.max(options.shown, PAGE))
+  // Ready to review's header approves every lead there with a package at once.
+  const approvable =
+    stage === 'ready'
+      ? leads.filter(lead => ctx.board.applications.some(one => one.leadId === lead.id))
+      : []
   return (
     <Box flexDirection="column" gap={1}>
       <Box flexDirection="row" gap={1} flexWrap="wrap" alignItems="center">
@@ -321,6 +328,16 @@ export function boardView(
         ))}
       </Box>
       <Box key={`stage:${stage}`} flexDirection="column" gap={0}>
+        {ctx.act && approvable.length > 0 && (
+          <Box key="stage-header" flexDirection="row" gap={1}>
+            <Button
+              key="submit-all"
+              variant="primary"
+              label={`Approve and submit all (${approvable.length})`}
+              onPress={() => ctx.act?.submitAll(approvable)}
+            />
+          </Box>
+        )}
         {leads.length === 0 && <Text dimColor>{`Nothing in ${COLUMN_TITLES[stage]} yet.`}</Text>}
         {visible.map(lead => card(ctx, lead))}
         {leads.length > visible.length && (
