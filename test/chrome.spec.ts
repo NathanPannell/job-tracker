@@ -8,6 +8,7 @@ import {
   isPressable,
   isStraySubmit,
   isSubmitControl,
+  isTextField,
   judgeOther,
   judgePrefill,
   STRAY_SUBMIT,
@@ -108,9 +109,13 @@ test('a prefill clicks only by ref, and each ref is read before the click', () =
   assert.deepEqual(checks(click({ action: 'left_click', ref: ' ref_4 ' })), [
     { tabId: 11, ref: 'ref_4', kind: 'click' },
   ])
+  // A double or triple click selects text, and only in a text field.
   assert.deepEqual(checks(click({ action: 'triple_click', ref: 'ref_5' })), [
-    { tabId: 11, ref: 'ref_5', kind: 'click' },
+    { tabId: 11, ref: 'ref_5', kind: 'select' },
   ])
+  assert.equal(isTextField('textbox "Email" [ref_5]\n\nViewport: 824x764'), true)
+  assert.equal(isTextField('combobox "Country" [ref_5]'), true)
+  assert.equal(isTextField('button "Next" [ref_5]'), false)
   // A fill names its field by ref too, and the field is read first.
   assert.deepEqual(checks(judgePrefill(chrome('form_input', { tabId: 11, ref: 'ref_6' }), OWN)), [
     { tabId: 11, ref: 'ref_6', kind: 'fill' },
@@ -305,6 +310,7 @@ test('a page that reads as a sent application is found by its line; a form or FA
     'Thank you for your interest in Acme. Fill in the form below.',
     "Once you've applied, you'll receive an email from our team.",
     'We process any application submitted through this site under our privacy policy.',
+    "If we received your application, you'll hear from us within two weeks.",
   ]) {
     assert.equal(submittedLine(page), undefined, page)
   }

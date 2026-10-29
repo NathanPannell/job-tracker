@@ -854,6 +854,11 @@ describe('kanban', () => {
     expect((await click({ coordinate: [400, 600] })).text).toContain('only through element refs')
     expect((await click({ ref: 'ref_9' })).text).toContain('ref_9 looks like it submits')
     expect((await click({ ref: 'ref_404' })).text).toContain('could not be read')
+    // A double click on Next could land its second click on what the first revealed.
+    expect(
+      (await chrome('agent-1', 'computer', { tabId: 101, action: 'double_click', ref: 'ref_3' }))
+        .text,
+    ).toContain('not a text field')
     await click({ ref: 'ref_3' })
     // A fill goes to a field, never to a button it would press.
     const fill = (ref: string) =>
@@ -937,6 +942,11 @@ describe('kanban', () => {
     on('mcp.call', () => ({
       value: { content: [{ type: 'text', text: 'Thank you for applying!' }], isError: false },
     }))
+    // The engine's agent list: the prefill runs until it says otherwise.
+    let status: 'running' | 'completed' = 'running'
+    on('agent.list', () => ({
+      value: [{ id: 'agent-1', description: 'Prefill', type: 'general-purpose', status }],
+    }))
     await start($)
     const ui = await $.ui.mount({ ...pane, surface: 'desktop' })
     await ui.press({ key: 'tab:ready' })
@@ -961,6 +971,65 @@ describe('kanban', () => {
       tabId: 101,
     } as Parameters<Engine['tool']['call']>[0])
     expect(intruder.deny).toContain('belongs to a background prefill')
+    // Once the engine no longer runs it, an end never heard does not hold its tab for good.
+    status = 'completed'
+    const freed = await $.tool.call({
+      tool: 'mcp__claude-in-chrome__read_page',
+      tabId: 101,
+    } as Parameters<Engine['tool']['call']>[0])
+    expect(freed.deny).toBeUndefined()
+    // Sent on again after that, it acts no more.
+    const resumed = await $.tool.call({
+      tool: 'mcp__claude-in-chrome__read_page',
+      tabId: 101,
+      agentId: 'agent-1',
+    } as Parameters<Engine['tool']['call']>[0])
+    expect(resumed.deny).toContain('has ended')
+  })
+
+  test('a prefill whose end is heard has its tab checked, and the tab is the conversation’s after', async ($, on) => {
+    const w = world(on, {
+      leads: [lead('acme-api', { column: 'ready' }), lead('beta-api', { column: 'new' })],
+      applications: [
+        {
+          leadId: 'acme-api',
+          dir: 'packages/acme-api',
+          createdAt: '',
+          updatedAt: '',
+          files: {},
+          status: 'ready',
+        },
+      ],
+    })
+    const toasts: string[] = []
+    on('ui.toast', (_, e) => {
+      toasts.push(e.text)
+      return { value: undefined }
+    })
+    on('turn.start', (_, e) => ({ turnId: e.turnId }))
+    on('turn.complete', (_, e) => ({ text: e.answer }))
+    const opened = 'Created new tab. Tab ID: 101'
+    on('tool.call', () => ({ result: opened, text: opened }))
+    on('mcp.call', () => ({
+      value: { content: [{ type: 'text', text: 'Thank you for applying!' }], isError: false },
+    }))
+    on('agent.list', () => ({
+      value: [
+        { id: 'agent-1', description: 'Prefill', type: 'general-purpose', status: 'running' },
+      ],
+    }))
+    await start($)
+    const ui = await $.ui.mount({ ...pane, surface: 'desktop' })
+    await ui.press({ key: 'tab:ready' })
+    await ui.press({ key: 'submit:acme-api' })
+    await $.turn.start({ text: w.spawns[0]?.prompt ?? '', turnId: 'p-1', agentId: 'agent-1' })
+    await $.tool.call({
+      tool: 'mcp__claude-in-chrome__tabs_create_mcp',
+      agentId: 'agent-1',
+    } as Parameters<Engine['tool']['call']>[0])
+    // Its row lapses under another build, so its end has no lead to report to.
+    await w.clock.advance(60 * 60_000)
+    await $.tool.call({ tool: 'mcp__job-tracker__draft_package', leadId: 'beta-api' })
     // Its end is still checked, with no row left to report to the conversation: a toast says it.
     await $.turn.complete({
       answer: 'Tab: Acme',

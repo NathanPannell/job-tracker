@@ -219,6 +219,8 @@ export type DraftRun = {
  */
 export type PrefillGuard = {
   agentId: string
+  /** When it started (ms): past the run hold, an end never heard is looked for in the agent list. */
+  at: number
   /**
    * The tabs it opened with tabs_create_mcp: the only ones it may act in, which no other caller
    * may touch while it runs, and the ones checked when it ends.

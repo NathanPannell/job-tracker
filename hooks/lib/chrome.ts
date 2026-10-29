@@ -85,9 +85,10 @@ const SAFE_KEYS = new Set([
 
 /**
  * An element to read before acting on it: a click goes ahead only if the element does not submit,
- * a fill only if it is a field (form_input on a button or link would press it).
+ * a fill only if it is a field (form_input on a button or link would press it), and a double or
+ * triple click only on a text field (on a button, the form could redraw it between the clicks).
  */
-export type RefCheck = { tabId: number; ref: string; kind: 'click' | 'fill' }
+export type RefCheck = { tabId: number; ref: string; kind: 'click' | 'fill' | 'select' }
 
 /** What a prefill's call may do: refused with a reason, or allowed once each check passes. */
 export type Verdict = { deny: string } | { checks: RefCheck[] }
@@ -180,7 +181,7 @@ function judgeComputer(input: Record<string, unknown>, tabId: number): Verdict {
   if (CLICKS.has(action)) {
     const ref = typeof input.ref === 'string' ? input.ref.trim() : ''
     if (input.coordinate !== undefined || ref === '') return { deny: REFS_ONLY }
-    return { checks: [{ tabId, ref, kind: 'click' }] }
+    return { checks: [{ tabId, ref, kind: action === 'left_click' ? 'click' : 'select' }] }
   }
   return {
     deny: `The computer action "${action}" is not available to a background prefill. ${REFS_ONLY}`,
@@ -215,6 +216,11 @@ export function isSubmitControl(element: string): boolean {
   })
 }
 
+/** Whether an element, as read_page shows it by its ref, is a text field (to select text in). */
+export function isTextField(element: string): boolean {
+  return /^(textbox|searchbox|combobox)\b/i.test(shownOf(element))
+}
+
 /**
  * Whether an element, as read_page shows it by its ref, is no field to fill: a button, link or
  * menu item (form_input on it would press it), or an element that cannot be read.
@@ -242,7 +248,7 @@ const SUBMITTED = [
   /thank(s| you) for (applying|your application|submitting)/i,
   /^(your )?application (successfully )?(submitted|received|sent)\b/i,
   /your application (has been|was) (successfully )?(submitted|received|sent)\b/i,
-  /we('ve| have)? received your application/i,
+  /we('ve| have) received your application/i,
   /you('ve| have) successfully applied/i,
   /successfully (submitted|applied)/i,
   /your application (is|has been) (on its way|in)\b/i,
@@ -278,6 +284,8 @@ const PREFILL_TOOLS: ReadonlySet<string> = new Set([
   'TaskUpdate',
   'TaskGet',
   'TaskList',
+  'WaitForMcpServers',
+  'ListMcpResourcesTool',
   'mcp__job-tracker__list_leads',
 ])
 

@@ -25,6 +25,7 @@ import {
   isPressable,
   isStraySubmit,
   isSubmitControl,
+  isTextField,
   judgeOther,
   judgePrefill,
   STRAY_SUBMIT,
@@ -345,8 +346,9 @@ async function startDraft($: EngineInterface, agentId: string, text: string) {
   // call) to its end, however long it runs.
   const run = (await read($, drafts)).find(one => one.agentId === agentId)
   if (run?.kind !== 'submit') return
+  const at = await $.clock.now()
   await update($, prefills, list =>
-    list.some(one => one.agentId === agentId) ? list : [...list, { agentId, tabs: [] }],
+    list.some(one => one.agentId === agentId) ? list : [...list, { agentId, at, tabs: [] }],
   )
 }
 
@@ -489,9 +491,13 @@ async function guardChrome(
 ): Promise<string | undefined> {
   const guards = await read($, prefills)
   const guard = prefillOf(guards, agentId)
+  // A prefill that ended and is sent on again would run unguarded: it does nothing more.
+  if (guards.some(one => one.agentId === agentId && one.isDone)) {
+    return 'This background prefill has ended and its report went to the conversation; it acts no more.'
+  }
   if (!guard) {
     if (!call) return undefined
-    const held = guards.flatMap(one => (one.isDone ? [] : one.tabs))
+    const held = (await stillRunning($, guards)).flatMap(one => one.tabs)
     if (held.length === 0) return undefined
     const items = flatten(call)
     if (items.some(one => one.tool === 'navigate' && tabOf(one) === undefined)) {
@@ -513,11 +519,40 @@ async function guardChrome(
     if (kind === 'click' && isSubmitControl(shown)) {
       return `${ref} looks like it submits, sends or confirms, or could not be read; a background prefill never clicks it. Leave it for the conversation, which asks the person first.`
     }
+    if (kind === 'select' && !isTextField(shown)) {
+      return `${ref} is not a text field; a background prefill double- or triple-clicks only to select text in one (a button could change between the clicks).`
+    }
     if (kind === 'fill' && isPressable(shown)) {
       return `${ref} is a button or link, or could not be read; form_input fills fields only. Use a computer click with its ref for a button such as Next.`
     }
   }
   return undefined
+}
+
+/**
+ * The prefills still holding their tabs. Past the run hold, one whose subagent the engine no
+ * longer runs (its end was never heard) lets go of them; while the agent list cannot be read,
+ * every one holds on.
+ */
+async function stillRunning(
+  $: EngineInterface,
+  guards: readonly PrefillGuard[],
+): Promise<PrefillGuard[]> {
+  const live = guards.filter(one => !one.isDone && one.tabs.length > 0)
+  const now = await $.clock.now()
+  if (!live.some(one => now - one.at >= DRAFT_FOR_MS)) return live
+  const agents = await $.agent.list().catch(() => undefined)
+  if (!agents) return live
+  const running = new Set(
+    agents.flatMap(one => (['completed', 'failed', 'killed'].includes(one.status) ? [] : [one.id])),
+  )
+  const ended = live.filter(one => now - one.at >= DRAFT_FOR_MS && !running.has(one.agentId))
+  if (ended.length === 0) return live
+  const gone = new Set(ended.map(one => one.agentId))
+  await update($, prefills, list =>
+    list.map(one => (gone.has(one.agentId) ? { ...one, isDone: true as const } : one)),
+  )
+  return live.filter(one => !gone.has(one.agentId))
 }
 
 /** Records the tab a prefill just opened with tabs_create_mcp (never inside a batch) as its own. */
@@ -803,7 +838,10 @@ export const register: Register = on => {
     }
     return result
   }).catch(async ($, e, next) => {
-    if (next.called || !prefillOf(await read($, prefills), e.agentId)) return next(e)
+    if (next.called || e.agentId === undefined) return next(e)
+    // Where even the record cannot be read, a subagent's call is taken for a prefill's.
+    const guards = await read($, prefills).catch(() => undefined)
+    if (guards && !guards.some(one => one.agentId === e.agentId)) return next(e)
     return { deny: 'The Chrome guard could not check this call, so it was not made; try again.' }
   })
 

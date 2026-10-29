@@ -118,7 +118,8 @@ When the prompt says you run in the background, nobody can answer you:
   call, and never touch another tab, even one that looks like yours.
 - Act only through element refs from find or read_page: form_input for fields, selects, radios
   and checkboxes; file_upload for the résumé; a computer click with `ref` for buttons such as
-  Next or Continue. Never click by screen coordinates, press Enter, Return or Space, type text
+  Next or Continue (double or triple clicks only to select text in a field). Never click by
+  screen coordinates, press Enter, Return or Space, type text
   with line breaks, run JavaScript, run shortcuts or resize the window. Screenshots, scrolling
   and hovering are fine. In a browser_batch, a click or navigate must be the last item: read the
   new page before acting on it.
