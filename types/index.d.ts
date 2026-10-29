@@ -213,6 +213,25 @@ export type DraftRun = {
   at: number
 }
 
+/**
+ * A background prefill as the Chrome guard knows it, kept for the whole session (unlike its
+ * DraftRun, which lapses), so a long run never slips out from under the guard.
+ */
+export type PrefillGuard = {
+  agentId: string
+  /** When it started (ms): past the run hold, an end never heard is looked for in the agent list. */
+  at: number
+  /**
+   * The tabs it opened with tabs_create_mcp: the only ones it may act in, which no other caller
+   * may touch while it runs, and the ones checked when it ends.
+   */
+  tabs: number[]
+  /** The Claude in Chrome server those tabs belong to, as its tool names spell it. */
+  browser?: string
+  /** Its subagent ended: its tabs are the conversation's now. */
+  isDone?: true
+}
+
 declare module 'claude-code' {
   interface PluginState {
     'job-tracker': {
@@ -241,6 +260,8 @@ declare module 'claude-code' {
       swept: string[]
       /** Package builds this session spawned as background subagents, until each one ends. */
       drafts: DraftRun[]
+      /** Every background prefill this session started, for the Chrome guard. */
+      prefills: PrefillGuard[]
     }
   }
 }

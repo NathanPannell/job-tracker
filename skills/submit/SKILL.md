@@ -28,7 +28,10 @@ the person's conversation:
 - **In the conversation**, a prompt arrives with the subagent's report once it ends. Start at
   step 4 with the form as the report and the tab left it: check the tab is there and the fields
   are still filled, and redo steps 1–3 only for what is not. If the report starts with
-  `CHROME UNAVAILABLE`, do every step here.
+  `CHROME UNAVAILABLE`, do every step here. If it starts with `STRAY SUBMIT DETECTED`, the
+  application may have been sent without the person's yes: say so in the first line of your
+  reply, show what the tab says, touch nothing for that lead and do not move its card, and ask
+  the person what to do.
 
 Several presses close together are **one batch**, and so is one press of "Approve and submit
 all" on the Ready to review column, which approves every lead there at once. Each lead gets its
@@ -109,6 +112,29 @@ When the prompt says you run in the background, nobody can answer you:
 
 - Do steps 1–3 only, then read the filled form back as in step 6. Never ask, never click the final
   submit, send, apply or confirm, and leave the tab open on the filled form.
+- Other prefills run at the same time in the same Chrome tab group, so work only in a tab of your
+  own: open it with tabs_create_mcp in a call of its own (if it says there is no tab group, call
+  tabs_context_mcp with createIfEmpty first, then tabs_create_mcp), pass its tabId on every
+  call, and never touch another tab, even one that looks like yours.
+- Act only through element refs from find or read_page: form_input for fields, selects, radios
+  and checkboxes; file_upload for the résumé; a computer click with `ref` for buttons such as
+  Next or Continue (double or triple clicks only to select text in a field). Never click by
+  screen coordinates, press Enter, Return or Space, type text
+  with line breaks, run JavaScript, run shortcuts or resize the window. Screenshots, scrolling
+  and hovering are fine. In a browser_batch, a click or navigate must be the last item: read the
+  new page before acting on it.
+- Use no tools beyond these, the skill and reading files (Read, Glob, Grep, Bash): no other
+  browser or desktop control, agents, messages or schedules.
+- The job-tracker Chrome guard enforces all of this: it refuses any other call, and reads every
+  element first. It refuses a click on one labelled like submit, send, confirm, finish or
+  one-click apply, or on a submit-type button labelled as anything but a step (Next, Continue,
+  Review), and a form_input on a button or link. A refusal is not an error to work around: use a
+  ref and form_input instead, or leave that control for the conversation and list it under
+  "Still needed" in the report.
+- Before the report, read your tab with get_page_text. If it reads as a sent application
+  ("Thank you for applying", "Application submitted" and the like), start the report with
+  `STRAY SUBMIT DETECTED` and one line on what the page says. The guard also checks your tabs when
+  you finish, and puts any such finding at the top of the report itself.
 - If step 2 stops you (sign-in, account, password, CAPTCHA, an agreement), stop there too and say
   so in the report.
 - If the Claude in Chrome tools cannot be loaded or reach a browser, finish at once with a report
