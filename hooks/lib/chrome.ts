@@ -97,11 +97,22 @@ const REFS_ONLY =
 
 /**
  * Judges one Claude in Chrome call a background prefill makes, given the tabs it opened. A
- * browser_batch is judged item by item, and refused whole if any item is.
+ * browser_batch is judged item by item, and refused whole if any item is. Its elements are read
+ * before any item runs, so nothing may follow a click or navigate there (the page it read would
+ * be gone), and a tab is opened with a call of its own, so its id is read from its own result.
  */
 export function judgePrefill(call: ChromeCall, own: readonly number[]): Verdict {
+  const items = flatten(call)
   const checks: RefCheck[] = []
-  for (const one of flatten(call)) {
+  for (const [n, one] of items.entries()) {
+    if (call.tool === 'browser_batch' && one.tool === 'tabs_create_mcp') {
+      return { deny: 'Open your tab with tabs_create_mcp on its own, not inside a browser_batch.' }
+    }
+    if (n < items.length - 1 && changesPage(one)) {
+      return {
+        deny: 'In a browser_batch, a click or navigate must be the last item: the next items would act on a page the guard has not read. Send the rest in a new call.',
+      }
+    }
     const verdict = judgeOne(one, own)
     if ('deny' in verdict) return verdict
     checks.push(...verdict.checks)
@@ -109,14 +120,14 @@ export function judgePrefill(call: ChromeCall, own: readonly number[]): Verdict 
   return { checks }
 }
 
+/** Whether a call can replace what the page shows: a click or a navigation. */
+const changesPage = (call: ChromeCall) =>
+  call.tool === 'navigate' ||
+  (call.tool === 'computer' && CLICKS.has(String(call.input.action ?? '')))
+
 function judgeOne(call: ChromeCall, own: readonly number[]): Verdict {
   const { tool, input } = call
   if (tool === 'browser_batch') return { deny: 'A browser_batch cannot hold another.' }
-  if (tool === 'tabs_context_mcp' && input.createIfEmpty === true) {
-    return {
-      deny: 'Open your own tab with tabs_create_mcp instead of tabs_context_mcp with createIfEmpty.',
-    }
-  }
   if (UNSCOPED.has(tool)) return { checks: [] }
   if (tool === 'tabs_close_mcp') {
     return { deny: 'Leave your tab open on the form: the conversation picks it up from there.' }
@@ -178,16 +189,30 @@ function judgeComputer(input: Record<string, unknown>, tabId: number): Verdict {
 
 /** Labels of controls that send an application, or may in one step. */
 const SUBMITS =
-  /\b(submit|send|confirm|finish|complete|place order|apply with|easy apply|quick apply|one[- ]click|1[- ]click)\b/i
+  /\b(submit|send|confirm|finish|complete|place order|quick apply|one[- ]click|1[- ]click)\b/i
+
+/** Labels of buttons that move a multi-step form on: these may be type="submit" yet send nothing. */
+const STEPS = /^(next|continue|proceed|review|save (and|&) (continue|next))\b/i
+
+/** Roles a click cannot send a form from: fields, choices and options, whatever their label says. */
+const FIELDS =
+  /^(textbox|searchbox|combobox|listbox|option|spinbutton|slider|checkbox|radio|switch|menuitemradio|menuitemcheckbox)\b/i
 
 /**
- * Whether an element, as read_page shows it by its ref, could send the application: its label or
- * anything inside it reads like submit, send, confirm or finish. Link targets are left out, and
- * an element that cannot be read counts as one that submits.
+ * Whether an element, as read_page shows it by its ref, could send the application: it, or
+ * anything inside it, is labelled like submit, send, confirm or finish, or is a submit button
+ * labelled as anything but a step (Next, Continue, Review), an unlabelled icon included. Fields
+ * and choices never count; link targets are left out; an element that cannot be read counts.
  */
 export function isSubmitControl(element: string): boolean {
   const shown = shownOf(element)
-  return shown === '' || /^error\b/i.test(shown) || SUBMITS.test(shown)
+  if (shown === '' || /^error\b/i.test(shown)) return true
+  return shown.split('\n').some(line => {
+    const row = line.trim()
+    if (FIELDS.test(row)) return false
+    const label = (/"([^"]*)"/.exec(row)?.[1] ?? '').trim()
+    return SUBMITS.test(label) || (/\btype="submit"/i.test(row) && !STEPS.test(label))
+  })
 }
 
 /**
@@ -203,17 +228,22 @@ export function isPressable(element: string): boolean {
 const shownOf = (element: string) =>
   (element.split(/\n\s*Viewport:/)[0] ?? '').replace(/\bhref="[^"]*"/g, '').trim()
 
-/** The tabs a tabs_create_mcp result names (one per tab a batch opened): `Created new tab. Tab ID: 123`. */
-export function createdTabs(text: string): number[] {
-  return [...text.matchAll(/Created new tab\.\s*Tab ID:\s*(\d+)/gi)].map(match => Number(match[1]))
+/**
+ * The tab a tabs_create_mcp result opens, read from its first words (`Created new tab. Tab ID:
+ * 123`) and nowhere else, so a page title in its tab list can never name one.
+ */
+export function createdTab(text: string): number | undefined {
+  const match = /^\s*Created new tab\.\s*Tab ID:\s*(\d+)/i.exec(text)
+  return match?.[1] ? Number(match[1]) : undefined
 }
 
-/** Phrases a confirmation page shows once an application has been sent. */
+/** Phrases a confirmation page shows once an application has been sent, and an FAQ does not. */
 const SUBMITTED = [
   /thank(s| you) for (applying|your application|submitting)/i,
-  /application (has been |was )?(successfully )?(submitted|received|sent)/i,
-  /(we('ve| have)|we) received your application/i,
-  /you('ve| have) (successfully )?applied/i,
+  /^(your )?application (successfully )?(submitted|received|sent)\b/i,
+  /your application (has been|was) (successfully )?(submitted|received|sent)\b/i,
+  /we('ve| have)? received your application/i,
+  /you('ve| have) successfully applied/i,
   /successfully (submitted|applied)/i,
   /your application (is|has been) (on its way|in)\b/i,
 ]
@@ -228,6 +258,34 @@ export function submittedLine(page: string): string | undefined {
     .map(one => one.trim())
     .find(one => SUBMITTED.some(pattern => pattern.test(one)))
   return line === undefined ? undefined : line.length > 160 ? `${line.slice(0, 159)}…` : line
+}
+
+/**
+ * The tools a background prefill uses besides Claude in Chrome: the skill, its package files and
+ * the board. Anything else (desktop control, another browser, agents, messages, schedules) could
+ * act outside its own tab, so it is refused.
+ */
+const PREFILL_TOOLS: ReadonlySet<string> = new Set([
+  'Read',
+  'Glob',
+  'Grep',
+  'Bash',
+  'PowerShell',
+  'ToolSearch',
+  'Skill',
+  'TodoWrite',
+  'TaskCreate',
+  'TaskUpdate',
+  'TaskGet',
+  'TaskList',
+  'mcp__job-tracker__list_leads',
+])
+
+/** Why a background prefill may not call a tool other than Claude in Chrome; undefined if it may. */
+export function judgeOther(tool: string): string | undefined {
+  return PREFILL_TOOLS.has(tool)
+    ? undefined
+    : `${tool} is not available to a background prefill: it reads its package and fills the form in its own Claude in Chrome tab, nothing else.`
 }
 
 /** The words that open a prefill's report when its tab reads as submitted. */

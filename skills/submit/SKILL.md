@@ -113,17 +113,23 @@ When the prompt says you run in the background, nobody can answer you:
 - Do steps 1–3 only, then read the filled form back as in step 6. Never ask, never click the final
   submit, send, apply or confirm, and leave the tab open on the filled form.
 - Other prefills run at the same time in the same Chrome tab group, so work only in a tab of your
-  own: open it with tabs_create_mcp (not tabs_context_mcp with createIfEmpty), pass its tabId on
-  every call, and never touch another tab, even one that looks like yours.
+  own: open it with tabs_create_mcp in a call of its own (if it says there is no tab group, call
+  tabs_context_mcp with createIfEmpty first, then tabs_create_mcp), pass its tabId on every
+  call, and never touch another tab, even one that looks like yours.
 - Act only through element refs from find or read_page: form_input for fields, selects, radios
   and checkboxes; file_upload for the résumé; a computer click with `ref` for buttons such as
   Next or Continue. Never click by screen coordinates, press Enter, Return or Space, type text
-  with line breaks, run JavaScript, run shortcuts, resize the window or start other agents.
-  Screenshots, scrolling and hovering are fine.
+  with line breaks, run JavaScript, run shortcuts or resize the window. Screenshots, scrolling
+  and hovering are fine. In a browser_batch, a click or navigate must be the last item: read the
+  new page before acting on it.
+- Use no tools beyond these, the skill and reading files (Read, Glob, Grep, Bash): no other
+  browser or desktop control, agents, messages or schedules.
 - The job-tracker Chrome guard enforces all of this: it refuses any other call, and reads every
-  element before a click, refusing one whose label reads like submit, send, confirm, finish or
-  one-click apply. A refusal is not an error to work around: use a ref and form_input instead,
-  or leave that control for the conversation and say so in the report.
+  element first. It refuses a click on one labelled like submit, send, confirm, finish or
+  one-click apply, or on a submit-type button labelled as anything but a step (Next, Continue,
+  Review), and a form_input on a button or link. A refusal is not an error to work around: use a
+  ref and form_input instead, or leave that control for the conversation and list it under
+  "Still needed" in the report.
 - Before the report, read your tab with get_page_text. If it reads as a sent application
   ("Thank you for applying", "Application submitted" and the like), start the report with
   `STRAY SUBMIT DETECTED` and one line on what the page says. The guard also checks your tabs when

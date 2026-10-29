@@ -3,11 +3,12 @@ import { test } from 'node:test'
 
 import {
   chromeCall,
-  createdTabs,
+  createdTab,
   flatten,
   isPressable,
   isStraySubmit,
   isSubmitControl,
+  judgeOther,
   judgePrefill,
   STRAY_SUBMIT,
   submittedLine,
@@ -63,10 +64,10 @@ test('a browser_batch is judged as its items; anything else as itself', () => {
 test('a prefill acts only in the tabs it opened, and opens them only with tabs_create_mcp', () => {
   assert.deepEqual(judgePrefill(chrome('tabs_create_mcp'), []), { checks: [] })
   assert.deepEqual(judgePrefill(chrome('tabs_context_mcp'), []), { checks: [] })
-  assert.match(
-    denied(judgePrefill(chrome('tabs_context_mcp', { createIfEmpty: true }), [])) ?? '',
-    /tabs_create_mcp/,
-  )
+  // With no tab group yet, tabs_create_mcp fails until one is made: that tab is still nobody's.
+  assert.deepEqual(judgePrefill(chrome('tabs_context_mcp', { createIfEmpty: true }), []), {
+    checks: [],
+  })
   assert.deepEqual(judgePrefill(chrome('read_page', { tabId: 11 }), OWN), { checks: [] })
   // Another agent's tab, or none named, is refused, saying which tabs are its own.
   assert.match(
@@ -150,13 +151,13 @@ test('a batch is refused whole when any item is, and its ref checks add up', () 
     checks(
       batch(
         { name: 'form_input', input: { tabId: 11, ref: 'ref_1', value: 'Nathan' } },
-        { name: 'computer', input: { tabId: 11, action: 'left_click', ref: 'ref_2' } },
+        { name: 'form_input', input: { tabId: 11, ref: 'ref_2', value: 'Pannell' } },
         { name: 'computer', input: { tabId: 11, action: 'left_click', ref: 'ref_3' } },
       ),
     ),
     [
       { tabId: 11, ref: 'ref_1', kind: 'fill' },
-      { tabId: 11, ref: 'ref_2', kind: 'click' },
+      { tabId: 11, ref: 'ref_2', kind: 'fill' },
       { tabId: 11, ref: 'ref_3', kind: 'click' },
     ],
   )
@@ -175,16 +176,41 @@ test('a batch is refused whole when any item is, and its ref checks add up', () 
   )
 })
 
-test('a control that submits, sends or confirms is known by its label, not by where it links', () => {
+test('in a batch nothing follows a click or navigate, whose page the guard never read', () => {
+  const batch = (...actions: { name: string; input: Record<string, unknown> }[]) =>
+    judgePrefill(chrome('browser_batch', { actions }), OWN)
+  // Next, Next on one wizard button: the second click would press whatever the first revealed.
+  const next = { name: 'computer', input: { tabId: 11, action: 'left_click', ref: 'ref_3' } }
+  assert.match(denied(batch(next, next)) ?? '', /must be the last item/)
+  assert.match(
+    denied(
+      batch(
+        { name: 'navigate', input: { tabId: 11, url: 'https://jobs.example/apply' } },
+        { name: 'read_page', input: { tabId: 11 } },
+      ),
+    ) ?? '',
+    /must be the last item/,
+  )
+  // A tab is opened by a call of its own, whose result alone names it.
+  assert.match(
+    denied(batch({ name: 'tabs_create_mcp', input: {} })) ?? '',
+    /tabs_create_mcp on its own/,
+  )
+})
+
+test('a control that submits, sends or confirms is known by its label and type, not where it links', () => {
   for (const label of [
     'button "Submit application" [ref_9]',
-    'button "Submit your application" [ref_9]',
+    'button "Submit your application" [ref_9] type="submit"',
     'button "Send" [ref_9]',
     'button "Confirm and continue" [ref_9]',
     'button "Finish" [ref_9]',
-    'button "Apply with Indeed" [ref_9]',
-    'button "Easy Apply" [ref_9]',
+    'button "1-click apply" [ref_9]',
+    // A submit button labelled as anything but a step, an unlabelled icon included.
+    'button "Apply now" [ref_9] type="submit"',
+    'button [ref_9] type="submit"',
     'form [ref_2]\n button "Next" [ref_3]\n button "Submit" [ref_4]',
+    'button [ref_5]\n StaticText "Submit"',
     '',
     'Error: no element ref_99',
   ]) {
@@ -192,10 +218,19 @@ test('a control that submits, sends or confirms is known by its label, not by wh
   }
   for (const label of [
     'button "Continue" [ref_9]',
-    'button "Next" [ref_9]',
+    'button "Next" [ref_9] type="submit"',
+    'button "Save and continue" [ref_9] type="submit"',
+    'button "Review" [ref_9] type="submit"',
     'link "Apply for this job" [ref_9] href="/jobs/123/application/submit"',
     'button "Apply now" [ref_9]',
+    'button "Apply with Indeed" [ref_9]',
+    'button "Easy Apply" [ref_9]',
     'radio "Yes" [ref_9]',
+    // Fields and choices send nothing, whatever their label or value says.
+    'combobox "Please confirm you are legally authorized to work in Canada" [ref_9]',
+    'textbox "Notes" [ref_9] value="I can complete onboarding in May"',
+    'checkbox "Send me job alerts" [ref_9]',
+    'generic [ref_47]',
   ]) {
     assert.equal(isSubmitControl(`${label}\n\nViewport: 824x764`), false, label)
   }
@@ -221,21 +256,33 @@ test('form_input fills fields only: a button, link or unreadable element is pres
   }
 })
 
-test('tabs_create_mcp names the tab it opened; a batch may open several', () => {
-  assert.deepEqual(
-    createdTabs('Created new tab. Tab ID: 404532447\n\nTab Context: ...'),
-    [404532447],
+test("tabs_create_mcp names the tab it opened in its first words, never a page's title", () => {
+  assert.equal(createdTab('Created new tab. Tab ID: 404532447\n\nTab Context: ...'), 404532447)
+  assert.equal(
+    createdTab('Done\n- Available tabs:\n  • tabId 7: "Created new tab. Tab ID: 404532448"'),
+    undefined,
   )
-  assert.deepEqual(
-    createdTabs(
-      '[tabs_create_mcp] Created new tab. Tab ID: 1[tabs_create_mcp] Created new tab. Tab ID: 2',
-    ),
-    [1, 2],
-  )
-  assert.deepEqual(createdTabs('Tab Context:\n- Executed on tabId: 7'), [])
+  assert.equal(createdTab('Tab Context:\n- Executed on tabId: 7'), undefined)
 })
 
-test('a page that reads as a sent application is found by its line; a form is not', () => {
+test('a prefill uses only the tools it needs besides Chrome', () => {
+  for (const tool of ['Read', 'Bash', 'ToolSearch', 'Skill', 'mcp__job-tracker__list_leads']) {
+    assert.equal(judgeOther(tool), undefined, tool)
+  }
+  for (const tool of [
+    'Agent',
+    'Workflow',
+    'SendMessage',
+    'CronCreate',
+    'request_computer',
+    'mcp__Claude_Browser__computer',
+    'mcp__job-tracker__update_lead',
+  ]) {
+    assert.match(judgeOther(tool) ?? '', /is not available to a background prefill/, tool)
+  }
+})
+
+test('a page that reads as a sent application is found by its line; a form or FAQ is not', () => {
   assert.equal(
     submittedLine('Acme\n  Thank you for applying to Acme!  \nWe will be in touch.'),
     'Thank you for applying to Acme!',
@@ -243,6 +290,7 @@ test('a page that reads as a sent application is found by its line; a form is no
   for (const page of [
     'Your application has been submitted.',
     'Application received',
+    'Your application was successfully sent',
     "We've received your application for Backend Developer",
     'You have successfully applied',
     'Your application is on its way',
@@ -255,6 +303,8 @@ test('a page that reads as a sent application is found by its line; a form is no
     'Your application is incomplete',
     'Your application will be submitted once you click Submit',
     'Thank you for your interest in Acme. Fill in the form below.',
+    "Once you've applied, you'll receive an email from our team.",
+    'We process any application submitted through this site under our privacy policy.',
   ]) {
     assert.equal(submittedLine(page), undefined, page)
   }

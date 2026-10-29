@@ -860,13 +860,23 @@ describe('kanban', () => {
       chrome('agent-1', 'form_input', { tabId: 101, ref, value: 'Nathan' })
     expect((await fill('ref_9')).text).toContain('fills fields only')
     await fill('ref_1')
-    // Nothing that reaches past the tab: no scripts, no resizing the shared window, no agents.
+    // A batch is read before it runs, so nothing may follow its click: Next, Next would press
+    // whatever the first Next revealed.
+    const next = { name: 'computer', input: { tabId: 101, action: 'left_click', ref: 'ref_3' } }
+    expect((await chrome('agent-1', 'browser_batch', { actions: [next, next] })).text).toContain(
+      'must be the last item',
+    )
+    // Nothing that reaches past the tab: no resizing the shared window, no agents, no desktop
+    // control; reading its package is fine.
     expect(
       (await chrome('agent-2', 'resize_window', { tabId: 102, width: 800, height: 600 })).text,
     ).toContain('resize_window is not available')
-    expect(
-      (await call({ tool: 'Agent', prompt: 'x', description: 'x', agentId: 'agent-2' })).text,
-    ).toContain('starts no agents')
+    for (const tool of ['Agent', 'request_computer']) {
+      expect((await call({ tool, prompt: 'x', agentId: 'agent-2' })).text).toContain(
+        `${tool} is not available to a background prefill`,
+      )
+    }
+    await call({ tool: 'Read', file_path: 'packages/beta-api/answers.md', agentId: 'agent-2' })
     // The conversation, too, keeps out of a running prefill's tab.
     expect((await chrome(undefined, 'read_page', { tabId: 102 })).text).toContain(
       'belongs to a background prefill',
@@ -879,6 +889,7 @@ describe('kanban', () => {
       'agent-2 tabs_create_mcp',
       'agent-1 computer 101',
       'agent-1 form_input 101',
+      'agent-2 Read',
     ])
 
     // Acme's tab reads as submitted when its prefill ends: said first, whatever its report says.
@@ -898,6 +909,76 @@ describe('kanban', () => {
     expect(prompts[1]).not.toContain('STRAY SUBMIT')
     await chrome(undefined, 'read_page', { tabId: 101 })
     expect(reached.at(-1)).toBe('main read_page 101')
+  })
+
+  test('a prefill past the run hold stays under the Chrome guard, and its end is still checked', async ($, on) => {
+    const w = world(on, {
+      leads: [lead('acme-api', { column: 'ready' }), lead('beta-api', { column: 'new' })],
+      applications: [
+        {
+          leadId: 'acme-api',
+          dir: 'packages/acme-api',
+          createdAt: '',
+          updatedAt: '',
+          files: {},
+          status: 'ready',
+        },
+      ],
+    })
+    const toasts: string[] = []
+    on('ui.toast', (_, e) => {
+      toasts.push(e.text)
+      return { value: undefined }
+    })
+    on('turn.start', (_, e) => ({ turnId: e.turnId }))
+    on('turn.complete', (_, e) => ({ text: e.answer }))
+    const opened = 'Created new tab. Tab ID: 101'
+    on('tool.call', () => ({ result: opened, text: opened }))
+    on('mcp.call', () => ({
+      value: { content: [{ type: 'text', text: 'Thank you for applying!' }], isError: false },
+    }))
+    await start($)
+    const ui = await $.ui.mount({ ...pane, surface: 'desktop' })
+    await ui.press({ key: 'tab:ready' })
+    await ui.press({ key: 'submit:acme-api' })
+    await $.turn.start({ text: w.spawns[0]?.prompt ?? '', turnId: 'p-1', agentId: 'agent-1' })
+    await $.tool.call({
+      tool: 'mcp__claude-in-chrome__tabs_create_mcp',
+      agentId: 'agent-1',
+    } as Parameters<Engine['tool']['call']>[0])
+    // An hour on, another build drops the prefill's lapsed row; the guard does not let go.
+    await w.clock.advance(60 * 60_000)
+    await $.tool.call({ tool: 'mcp__job-tracker__draft_package', leadId: 'beta-api' })
+    expect(w.spawns).toHaveLength(2)
+    const refused = await $.tool.call({
+      tool: 'mcp__claude-in-chrome__javascript_tool',
+      tabId: 101,
+      agentId: 'agent-1',
+    } as Parameters<Engine['tool']['call']>[0])
+    expect(refused.deny).toContain('javascript_tool is not available')
+    const intruder = await $.tool.call({
+      tool: 'mcp__claude-in-chrome__read_page',
+      tabId: 101,
+    } as Parameters<Engine['tool']['call']>[0])
+    expect(intruder.deny).toContain('belongs to a background prefill')
+    // Its end is still checked, with no row left to report to the conversation: a toast says it.
+    await $.turn.complete({
+      answer: 'Tab: Acme',
+      durationMs: 1,
+      isAborted: false,
+      turnId: 'p-1',
+      agentId: 'agent-1',
+      reason: 'answer',
+    })
+    expect(toasts.at(-1)).toContain(
+      'STRAY SUBMIT DETECTED: tab 101 reads "Thank you for applying!"',
+    )
+    // Ended, its tab is the conversation's.
+    const after = await $.tool.call({
+      tool: 'mcp__claude-in-chrome__read_page',
+      tabId: 101,
+    } as Parameters<Engine['tool']['call']>[0])
+    expect(after.deny).toBeUndefined()
   })
 
   test('approvals close together prefill side by side, and each report asks for the whole batch', async ($, on) => {

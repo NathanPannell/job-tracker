@@ -10,14 +10,22 @@ import type {
   RenderInput,
 } from 'claude-code'
 
-import type { DraftRun, JobPackage, JobView, PackageTab, SentPrompt } from '../types/index.d.ts'
+import type {
+  DraftRun,
+  JobPackage,
+  JobView,
+  PackageTab,
+  PrefillGuard,
+  SentPrompt,
+} from '../types/index.d.ts'
 import {
   chromeCall,
-  createdTabs,
+  createdTab,
   flatten,
   isPressable,
   isStraySubmit,
   isSubmitControl,
+  judgeOther,
   judgePrefill,
   STRAY_SUBMIT,
   submittedLine,
@@ -60,6 +68,7 @@ const passing = atom({ plugin: 'job-tracker', key: 'passing' } as const, null as
 const turning = atom({ plugin: 'job-tracker', key: 'turning' } as const, false)
 const sent = atom({ plugin: 'job-tracker', key: 'sent' } as const, [] as SentPrompt[])
 const drafts = atom({ plugin: 'job-tracker', key: 'drafts' } as const, [] as DraftRun[])
+const prefills = atom({ plugin: 'job-tracker', key: 'prefills' } as const, [] as PrefillGuard[])
 
 /** How long a sent prompt shows as queued before the pane stops waiting for its turn. */
 const SENT_FOR_MS = 30 * 60_000
@@ -332,6 +341,13 @@ async function startDraft($: EngineInterface, agentId: string, text: string) {
     const at = runs.findIndex(one => one.agentId === undefined && one.task === text)
     return at < 0 ? runs : runs.map((one, n) => (n === at ? { ...one, agentId } : one))
   })
+  // A prefill is known to the Chrome guard from its start (`turn.start` comes before any tool
+  // call) to its end, however long it runs.
+  const run = (await read($, drafts)).find(one => one.agentId === agentId)
+  if (run?.kind !== 'submit') return
+  await update($, prefills, list =>
+    list.some(one => one.agentId === agentId) ? list : [...list, { agentId, tabs: [] }],
+  )
 }
 
 /**
@@ -355,9 +371,18 @@ async function batchOf($: EngineInterface, leadId: string, at: number): Promise<
  */
 async function finishDraft($: EngineInterface, agentId: string, answer: string, reason: string) {
   const run = (await read($, drafts)).find(one => one.agentId === agentId)
-  if (!run) return
-  // Read before the run ends, while its tabs are still known to be its own.
-  const stray = run.kind === 'submit' ? await strayFinding($, run, answer) : undefined
+  const guard = prefillOf(await read($, prefills), agentId)
+  // Its tabs are read before the guard lets go of them, even for a run whose row has lapsed.
+  const stray = guard ? await strayFinding($, guard, answer) : undefined
+  if (guard) {
+    await update($, prefills, list =>
+      list.map(one => (one.agentId === agentId ? { ...one, isDone: true as const } : one)),
+    )
+  }
+  if (!run) {
+    if (stray) $.ui.toast(`${stray} Check that tab in Chrome.`)
+    return
+  }
   const report = stray ? `${stray}\n\n${answer}` : answer
   // A prefill's lead is handed on in the same write that ends its run, so it stays claimed
   // throughout and a batch member ending meanwhile still finds it (`batchOf`).
@@ -378,15 +403,17 @@ async function finishDraft($: EngineInterface, agentId: string, answer: string, 
     const release = () => update($, drafts, list => list.filter(one => one.task !== handedOn.task))
     const lead = (await read($, board)).leads.find(one => one.id === run.leadId)
     if (stray !== undefined || isStraySubmit(answer)) {
-      // Said first, whatever else happened: the lead stays claimed, so nothing starts on it
-      // again before the person has looked.
-      $.ui.toast(
-        `The ${run.company} application looks submitted, but nobody approved a submit; Claude tells you in the conversation.`,
-      )
+      // Said first, whatever else happened. The lead stays claimed, even when the conversation
+      // cannot be told, so nothing starts on it again before the person has looked.
       const named = lead ?? { id: run.leadId, company: run.company, role: 'the approved role' }
       const others = await batchOf($, run.leadId, await $.clock.now())
       const label = `Reporting the ${run.company} application`
-      if (!(await sendPrompt($, submitFollowUp(named, report, others), label))) await release()
+      const isTold = await sendPrompt($, submitFollowUp(named, report, others), label)
+      $.ui.toast(
+        isTold
+          ? `The ${run.company} application looks submitted, but nobody approved a submit; Claude tells you in the conversation.`
+          : `The ${run.company} application looks submitted, but nobody approved a submit; check its tab in Chrome.`,
+      )
     } else if (reason !== 'answer') {
       await release()
       $.ui.toast(
@@ -422,13 +449,13 @@ async function finishDraft($: EngineInterface, agentId: string, answer: string, 
  */
 async function strayFinding(
   $: EngineInterface,
-  run: DraftRun,
+  guard: PrefillGuard,
   answer: string,
 ): Promise<string | undefined> {
   if (isStraySubmit(answer)) return undefined
-  for (const tabId of run.tabs ?? []) {
+  for (const tabId of guard.tabs) {
     const page = await $.mcp
-      .call(run.browser ?? 'claude-in-chrome', 'get_page_text', { tabId })
+      .call(guard.browser ?? 'claude-in-chrome', 'get_page_text', { tabId })
       .catch(() => undefined)
     const line = page && !page.isError ? submittedLine(textOf(page)) : undefined
     if (line) {
@@ -438,38 +465,33 @@ async function strayFinding(
   return undefined
 }
 
-/** Tools that start other agents, whose Chrome calls the guard could not tie to a prefill. */
-const SPAWNS: ReadonlySet<string> = new Set(['Agent', 'Workflow'])
-
 /** An MCP result's text blocks, joined. */
 const textOf = (result: McpToolResult) =>
   result.content
     .flatMap(block => (block.type === 'text' && block.text ? [block.text] : []))
     .join('\n')
 
-/** The background prefill a loop belongs to, while it runs (not once it is handed on). */
-const prefillOf = (runs: readonly DraftRun[], agentId: string | undefined) =>
-  agentId === undefined
-    ? undefined
-    : runs.find(one => one.kind === 'submit' && !one.isHandedOn && one.agentId === agentId)
+/** The background prefill a loop belongs to, while its subagent runs. */
+const prefillOf = (guards: readonly PrefillGuard[], agentId: string | undefined) =>
+  agentId === undefined ? undefined : guards.find(one => one.agentId === agentId && !one.isDone)
 
 /**
- * The Chrome guard: a background prefill acts only in the tabs it opened, only through element
- * refs, and never on a control that submits, sends or confirms (the rules are lib/chrome.ts);
- * anyone else may not touch a running prefill's tabs. Undefined lets the call through.
+ * The Chrome guard: a background prefill uses only the tools it needs, acts in Chrome only in
+ * the tabs it opened, only through element refs, and never on a control that submits, sends or
+ * confirms (the rules are lib/chrome.ts); anyone else may not touch a running prefill's tabs.
+ * Undefined lets the call through.
  */
 async function guardChrome(
   $: EngineInterface,
   agentId: string | undefined,
+  tool: string,
   call: ChromeCall | undefined,
 ): Promise<string | undefined> {
-  const runs = await read($, drafts)
-  const run = prefillOf(runs, agentId)
-  if (!run) {
+  const guards = await read($, prefills)
+  const guard = prefillOf(guards, agentId)
+  if (!guard) {
     if (!call) return undefined
-    const held = runs.flatMap(one =>
-      one.kind === 'submit' && !one.isHandedOn ? (one.tabs ?? []) : [],
-    )
+    const held = guards.flatMap(one => (one.isDone ? [] : one.tabs))
     if (held.length === 0) return undefined
     const items = flatten(call)
     if (items.some(one => one.tool === 'navigate' && tabOf(one) === undefined)) {
@@ -480,8 +502,8 @@ async function guardChrome(
       ? undefined
       : `Tab ${taken} belongs to a background prefill that is still running; wait for its report.`
   }
-  if (!call) return 'A background prefill starts no agents of its own.'
-  const verdict = judgePrefill(call, run.tabs ?? [])
+  if (!call) return judgeOther(tool)
+  const verdict = judgePrefill(call, guard.tabs)
   if ('deny' in verdict) return verdict.deny
   for (const { tabId, ref, kind } of verdict.checks) {
     const element = await $.mcp
@@ -498,14 +520,14 @@ async function guardChrome(
   return undefined
 }
 
-/** Records the tabs a prefill just opened as its own. */
-async function keepTabs($: EngineInterface, agentId: string, call: ChromeCall, text: string) {
-  const opened = createdTabs(text)
-  if (opened.length === 0) return
-  await update($, drafts, runs =>
-    runs.map(one =>
-      one.agentId === agentId && one.kind === 'submit' && !one.isHandedOn
-        ? { ...one, tabs: [...(one.tabs ?? []), ...opened], browser: call.server }
+/** Records the tab a prefill just opened with tabs_create_mcp (never inside a batch) as its own. */
+async function keepTab($: EngineInterface, agentId: string, call: ChromeCall, text: string) {
+  const opened = call.tool === 'tabs_create_mcp' ? createdTab(text) : undefined
+  if (opened === undefined) return
+  await update($, prefills, list =>
+    list.map(one =>
+      one.agentId === agentId && !one.isDone
+        ? { ...one, tabs: [...one.tabs, opened], browser: call.server }
         : one,
     ),
   )
@@ -766,24 +788,23 @@ export const register: Register = on => {
     return { result: ran.ok ? json(ran.value) : `Error: ${ran.error}` }
   })
 
-  // Every Claude in Chrome call, and a prefill's call that would start agents, passes the Chrome
-  // guard. A guard that fails or overruns refuses a prefill's call rather than let it through.
+  // Every Claude in Chrome call passes the Chrome guard, and so does every call a subagent makes
+  // (a background prefill's are held to its own tools). A guard that fails before the call
+  // refuses a prefill's call rather than let it through; one that fails after keeps its result.
   on('tool.call', async ($, e, next) => {
     const call = chromeCall(e.tool, toolArgs(e))
-    if (!call && !SPAWNS.has(e.tool)) return next(e)
-    const refused = await guardChrome($, e.agentId, call)
+    if (!call && e.agentId === undefined) return next(e)
+    const refused = await guardChrome($, e.agentId, e.tool, call)
     if (refused) return { deny: refused }
     const result = await next(e)
-    if (call && e.agentId && result.text && prefillOf(await read($, drafts), e.agentId)) {
-      await keepTabs($, e.agentId, call, result.text)
+    // A tab it fails to record is one the prefill may not use: refused, never unguarded.
+    if (call && e.agentId && result.text) {
+      await keepTab($, e.agentId, call, result.text).catch(() => undefined)
     }
     return result
   }).catch(async ($, e, next) => {
-    const isGuarded = chromeCall(e.tool, {}) !== undefined || SPAWNS.has(e.tool)
-    if (isGuarded && prefillOf(await read($, drafts), e.agentId)) {
-      return { deny: 'The Chrome guard could not check this call, so it was not made; try again.' }
-    }
-    return next(e)
+    if (next.called || !prefillOf(await read($, prefills), e.agentId)) return next(e)
+    return { deny: 'The Chrome guard could not check this call, so it was not made; try again.' }
   })
 
   on('tool.call', { tool: 'mcp__job-tracker__update_lead' }, async ($, e) => {
