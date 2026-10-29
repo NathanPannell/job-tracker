@@ -945,6 +945,56 @@ describe('kanban', () => {
     })
   }
 
+  test('a batch member ending while others start keeps every report with its own lead', async ($, on) => {
+    const ids = ['acme-api', 'beta-api', 'gamma-api']
+    const w = world(on, {
+      leads: ids.map(id => lead(id, { column: 'ready' })),
+      applications: ids.map(leadId => ({
+        leadId,
+        dir: `packages/${leadId}`,
+        createdAt: '',
+        updatedAt: '',
+        files: {},
+        status: 'ready' as const,
+      })),
+    })
+    const prompts: string[] = []
+    on('prompt.submit', (_, e) => {
+      prompts.push(e.text)
+      return { text: e.text }
+    })
+    on('turn.start', (_, e) => ({ turnId: e.turnId }))
+    on('turn.complete', (_, e) => ({ text: e.answer }))
+    const end = (n: number) =>
+      $.turn.complete({
+        answer: `Tab: report ${n}`,
+        durationMs: 1,
+        isAborted: false,
+        turnId: `p-${n}`,
+        agentId: `agent-${n}`,
+        reason: 'answer',
+      })
+    await start($)
+    const ui = await $.ui.mount({ ...pane, surface: 'desktop' })
+    await ui.press({ key: 'submit-all' })
+    const of = (n: number) => ids.find(id => w.spawns[n]?.prompt.includes(`lead ${id} `)) ?? ''
+    await $.turn.start({ text: w.spawns[0]?.prompt ?? '', turnId: 'p-0', agentId: 'agent-0' })
+    // The first ends (its run leaves the list) while the other two start.
+    await Promise.all([
+      end(0),
+      ...[1, 2].map(n =>
+        $.turn.start({ text: w.spawns[n]?.prompt ?? '', turnId: `p-${n}`, agentId: `agent-${n}` }),
+      ),
+    ])
+    await end(2)
+    await end(1)
+    expect(prompts).toHaveLength(3)
+    for (const n of [0, 1, 2]) {
+      const sent = prompts.find(one => one.includes(`Tab: report ${n}`)) ?? ''
+      expect(sent).toContain(`lead ${of(n)} (`)
+    }
+  })
+
   test('Approve and submit all hides with nothing to approve, and on a read-only surface', async ($, on) => {
     world(on, {
       leads: [lead('acme-api', { column: 'ready' })],

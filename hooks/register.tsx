@@ -281,7 +281,9 @@ async function startPrefill(
  * prompt, so it still asks once for the whole batch.
  */
 async function submitAll($: EngineInterface, leads: readonly Lead[]) {
-  const started = await Promise.all(leads.map(lead => startPrefill($, lead)))
+  // One lead's failure is that lead's alone: it counts as refused, so the conversation asks.
+  const settled = await Promise.allSettled(leads.map(lead => startPrefill($, lead)))
+  const started = settled.map(one => (one.status === 'fulfilled' ? one.value : 'refused'))
   const spawned = started.filter(one => one === 'spawned').length
   const running = started.filter(one => typeof one === 'object').length
   const refused = leads.filter((_, n) => started[n] === 'refused')
@@ -304,11 +306,13 @@ const plural = (n: number, noun: string) => `${n} ${noun}${n === 1 ? '' : 's'}`
 
 /** A subagent's run started: a build spawned without an id learns it from its prompt. */
 async function startDraft($: EngineInterface, agentId: string, text: string) {
-  const list = await read($, drafts)
-  if (list.some(one => one.agentId === agentId)) return
-  const at = list.findIndex(one => one.agentId === undefined && one.task === text)
-  if (at < 0) return
-  await update($, drafts, runs => runs.map((one, n) => (n === at ? { ...one, agentId } : one)))
+  // Found inside the update: a batch's other runs come and go meanwhile, so a position read
+  // before it could name another lead's run.
+  await update($, drafts, runs => {
+    if (runs.some(one => one.agentId === agentId)) return runs
+    const at = runs.findIndex(one => one.agentId === undefined && one.task === text)
+    return at < 0 ? runs : runs.map((one, n) => (n === at ? { ...one, agentId } : one))
+  })
 }
 
 /**
