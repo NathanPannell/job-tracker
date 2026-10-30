@@ -11,8 +11,12 @@ import type { Lead } from '../../types/index.d.ts'
 /** The person's saved answers, relative to the data folder (skills/submit/SKILL.md). */
 export const SAVED_ANSWERS = 'profile/knowledge-base/application-answers.md'
 
-/** A question as drawn, and the normalised forms it is matched by; the first is its identity. */
-export type Question = { text: string; keys: string[] }
+/**
+ * A question as drawn: `id` is its wording, empty when it has none; `form` the form's wording,
+ * when the file gives it apart from the marker's text; `detail` what the marker's text goes on to
+ * say after the `?`; `keys` the wordings a saved answer can clear it by.
+ */
+export type Question = { text: string; id: string; form: string; detail: string; keys: string[] }
 
 /**
  * One entry of the saved answers. `companies` is absent for any application; empty, when the
@@ -28,19 +32,28 @@ const SECTION = /^#+\s*[*_`]*NEEDS\s+ANSWERS?[*_`:\s]*(?:\([^)]*\)[*_`:\s]*)?$/u
 /** What closes the marker: emphasis, a note in brackets, and the separator before the question. */
 const AFTER_MARKER = /^[\s*_`)\]]*(?:\([^)]*\)[\s*_`)\]]*)?([:—–-]?)[\s*_`]*/
 
-/** Words that make a sentence about the marker a statement that nothing is open. */
+/**
+ * The clause before a marker that denies it ("nothing is", "left as", "there are no"): a negation
+ * in it, and it runs straight into the marker. Elsewhere a negation is about the field ("not on
+ * record", "yes/no"), and the marker stands.
+ */
 const NEGATION = /\b(?:no|not|nothing|none|never|without)\b/i
+const DENYING_END = /\b(?:no|any|none|nothing|is|are|as|be|remains?)$/i
 
-/** What says the marker is being talked about: "NEEDS ANSWER items". */
-const ABOUT_MARKER = /^(?:items?|questions?|entries|fields?|lines?|markers?)\b/i
+/** What says the marker is being talked about: "NEEDS ANSWER items", not "... Question 12:". */
+const ABOUT_MARKER = /^(?:items?|questions?|entries|fields?|lines?|markers?)\b(?!\s*[:\d])/i
 
-/** An entry that says there is nothing to answer. */
-const NOTHING = /^(?:none|nothing|n\/a|no (?:open |more )?questions?)\b/i
+/** An entry that says, and says only, that there is nothing to answer. */
+const NOTHING = /^(?:none|nothing|n\/a|no (?:open |more )?questions?)[.!]?$/i
 
 /** A note in brackets at the end of a question, as opposed to brackets that tell two apart. */
-const NOTE = /\s*\((?:required|optional|if\b|any\b|not\b|no\b|see\b)[^)]*\)?$/i
+const NOTE =
+  /\s*\((?:required|optional|if\b|any (?:form|application)\b|not [io]n\b|see\b)[^)]*\)?$/i
 
-/** A heading's hashes, or a list item's bullet or number. */
+/** A list item's bullet or number. */
+const LIST_MARK = /^(?:[-*+]|\d+[.)])\s+/
+
+/** That, or a heading's hashes. */
 const BLOCK_MARK = /^(?:#+|[-*+]|\d+[.)])\s+/
 
 /** What the card names a marker by when the file gives it no words at all. */
@@ -64,8 +77,8 @@ const key = (text: string) =>
 const plain = (text: string) => text.replace(/[*`]/g, '').replace(/\s+/g, ' ').trim()
 
 /**
- * The question without what follows it: up to its `?`, or without its first sentence's end, a
- * closing note and trailing punctuation. A stop after an initial ("U.S.") ends no sentence.
+ * The question as drawn, without what follows it: up to its `?`, or without its first sentence's
+ * end, a closing note and trailing punctuation. A stop after an initial ("U.S.") ends no sentence.
  */
 const short = (text: string) =>
   /^.*?\?/.exec(text)?.[0] ??
@@ -73,6 +86,9 @@ const short = (text: string) =>
     .replace(/(?<=[a-z)]{2})\.\s.*$/, '')
     .replace(NOTE, '')
     .replace(/[\s.:;,([—–-]+$/, '')
+
+/** The question as matched: only what plainly follows it goes, so two never read as one. */
+const wording = (text: string) => key(/^.*?\?/.exec(text)?.[0] ?? text.replace(NOTE, ''))
 
 /**
  * The file's list items, paragraphs, headings and table rows, each as one string, so that a
@@ -95,10 +111,11 @@ function blocks(markdown: string): string[] {
 }
 
 /**
- * The questions one block marks, skipping prose about the marker: a sentence saying nothing is
- * open ("left as NEEDS ANSWER", "no `NEEDS ANSWER` items"). Beside the marker's own text a question
- * may have the form's wording, the bold text before it or the row's first cell; a marker with no
- * question of its own takes that, or the words before it, or the heading over it.
+ * The questions one block marks, skipping only prose about the marker: a clause denying it ("left
+ * as NEEDS ANSWER", "no `NEEDS ANSWER` items"), "NEEDS ANSWER items", or a bare "NEEDS ANSWER: none".
+ * Anything that asks stands. Beside the marker's own text a question may have the form's wording,
+ * the bold text before it or the row's first cell; a marker with no question of its own takes that,
+ * or the words before it, or the heading over it.
  */
 function marked(block: string, heading: string): Question[] {
   const row = block.startsWith('|')
@@ -112,57 +129,90 @@ function marked(block: string, heading: string): Question[] {
       const rest = plain(after.slice(closing.length))
       const asks = rest.includes('?')
       const bold = /\*\*([^*]+)\*\*[\s:—–-]*$/.exec(before)?.[1]
-      const sentence = before.split(/[.!?;:](?:\s|$)/).at(-1) ?? ''
-      const denied = !asks && !bold && NEGATION.test(sentence)
-      if (denied || NOTHING.test(rest) || (!separator && ABOUT_MARKER.test(rest))) return []
-      const form = n === 0 ? short(plain((row ? first : bold) ?? '')) : ''
-      const said = short(rest)
-      const words = n === 0 ? short(plain(before.replace(BLOCK_MARK, ''))) : ''
-      const text = asks ? said : form || said || words || heading || UNNAMED
-      const keys = asks ? [said, form] : text === UNNAMED ? [] : [text]
-      return [{ text, keys: keys.map(key).filter(Boolean) }]
+      const form = n === 0 ? plain((row ? first : bold) ?? '') : ''
+      const clause =
+        plain(before)
+          .split(/[.!?;:,()—–]|\s-\s/)
+          .at(-1)
+          ?.trim() ?? ''
+      const denied = !bold && NEGATION.test(clause) && DENYING_END.test(clause)
+      const none = !form && NOTHING.test(rest)
+      const about = !separator && !block.startsWith('#') && ABOUT_MARKER.test(rest)
+      if (!asks && (denied || none || about)) return []
+      const words = n === 0 ? plain(before.replace(BLOCK_MARK, '')) : ''
+      const named = asks ? rest : ([form, rest, words, heading].find(short) ?? '')
+      return [
+        {
+          text: short(named) || UNNAMED,
+          id: wording(named),
+          form: wording(form),
+          // Brackets are a note on the question, as in "(question 9, required)".
+          detail: asks ? key(rest.slice(rest.indexOf('?')).replace(/\([^)]*\)/g, '')) : '',
+          keys: (asks ? [rest, form] : [named]).map(wording).filter(Boolean),
+        },
+      ]
     })
   })
 }
 
 /** A block under a bare `## NEEDS ANSWER` that carries no marker of its own. */
 function listed(block: string): Question[] {
-  const text = short(plain(block.replace(BLOCK_MARK, '').replace(/\|/g, ' ')))
-  return /\p{L}/u.test(text) && !NOTHING.test(text) ? [{ text, keys: [key(text)] }] : []
+  const words = plain(block.replace(BLOCK_MARK, '').replace(/\|/g, ' '))
+  const text = short(words)
+  const id = wording(words)
+  return /\p{L}/u.test(text) && !NOTHING.test(text)
+    ? [{ text, id, form: '', detail: '', keys: [id] }]
+    : []
 }
 
 /**
- * The distinct questions an `answers.md` marks: one written twice counts once. Under a bare
- * `## NEEDS ANSWER` heading, whose entries may not repeat the marker, each block counts unless one
- * there does carry it.
+ * The questions as the blocks give them. Under a bare `## NEEDS ANSWER` heading, whose entries may
+ * not repeat the marker, list items count, and with no marker in the section anything does.
  */
-export function parseQuestions(markdown: string): Question[] {
+function questions(markdown: string): Question[] {
   const found: Question[] = []
   let heading = ''
-  let section = undefined as string[] | undefined
+  let section = undefined as { depth: number; entries: string[]; marked: boolean } | undefined
   const closeSection = () => {
-    found.push(...(section ?? []).flatMap(listed))
+    const entries = section?.entries ?? []
+    const counted = section?.marked ? entries.filter(one => LIST_MARK.test(one)) : entries
+    found.push(...counted.flatMap(listed))
     section = undefined
   }
   for (const block of blocks(markdown)) {
-    const title = block.startsWith('#')
-    if (title) closeSection()
-    if (SECTION.test(block)) section = []
+    const depth = /^#+/.exec(block)?.[0].length
+    if (depth !== undefined && (!section || depth <= section.depth)) closeSection()
+    if (SECTION.test(block)) section = { depth: depth ?? 1, entries: [], marked: false }
     else if (hasMarker(block)) {
-      const questions = marked(block, heading)
-      if (questions.length > 0) section = undefined
-      found.push(...questions)
-    } else if (!title) section?.push(block)
-    if (title) heading = plain(block.replace(BLOCK_MARK, ''))
+      const asked = marked(block, heading)
+      if (section && asked.length > 0) section.marked = true
+      found.push(...asked)
+    } else section?.entries.push(block)
+    if (depth !== undefined) heading = plain(block.replace(BLOCK_MARK, ''))
   }
   closeSection()
-  const seen = new Set<string>()
-  return found.filter(({ keys: [identity] }) => {
-    if (identity === undefined) return true
-    if (seen.has(identity)) return false
-    seen.add(identity)
-    return true
-  })
+  return found
+}
+
+/**
+ * The distinct questions an `answers.md` marks. One written twice counts once, but not when the
+ * form's wording or what each goes on to say tells them apart, and a wording two questions share
+ * clears neither.
+ */
+export function parseQuestions(markdown: string): Question[] {
+  const distinct: Question[] = []
+  for (const one of questions(markdown)) {
+    const agree = (a: string, b: string) => !a || !b || a === b
+    const same = (other: Question) =>
+      one.id &&
+      other.id === one.id &&
+      agree(one.form, other.form) &&
+      agree(one.detail, other.detail)
+    if (!distinct.some(same)) distinct.push(one)
+  }
+  const keys = distinct.flatMap(one => [...new Set(one.keys)])
+  const once = (one: string) => keys.indexOf(one) === keys.lastIndexOf(one)
+  return distinct.map(one => ({ ...one, keys: one.keys.filter(once) }))
 }
 
 /** The entries of the saved answers that hold an answer, on the `Answer:` line or quoted below. */
@@ -177,9 +227,9 @@ export function parseSaved(markdown: string): SavedAnswer[] {
       const leadId = /^- Asked by:.*\(`([^`]+)`\)/m.exec(entry)?.[1]
       return [
         {
-          key: key(short(plain(/^.*/.exec(entry)?.[0] ?? ''))),
+          key: wording(plain(/^.*/.exec(entry)?.[0] ?? '')),
           ...(leadId ? { leadId } : {}),
-          ...(/^any application\b/i.test(scope)
+          ...(/^any application\s*(?:\(|$)/i.test(scope)
             ? {}
             : { companies: only.split('/').map(key).filter(Boolean) }),
         },

@@ -43,6 +43,7 @@ describe('the formats answers.md is written in', () => {
 8. **Where are you based?** Canada.
 9. **Are you fluent in French and English, for a professional setting?** NEEDS ANSWER: Are you
    fluent in French as well as English?
+   The record has the English but nothing about French.
 
 ## Still open
 
@@ -183,6 +184,33 @@ describe('a marker in a shape the parser does not know still counts', () => {
     ['**Do you have no visa?** NEEDS ANSWER\n', 'Do you have no visa?'],
     ['Do you not need a visa? NEEDS ANSWER\n', 'Do you not need a visa?'],
     ['- `NEEDS ANSWER`: address and pay.\n', 'address and pay'],
+    // A note that starts like "nothing" is still a note on an open question.
+    ['| Salary | NEEDS ANSWER: nothing on record |\n', 'Salary'],
+    ['| Salary | NEEDS ANSWER: none recorded |\n', 'Salary'],
+    ['- **Salary:** NEEDS ANSWER: none on file\n', 'Salary'],
+    ['- **Salary:** NEEDS ANSWER: n/a\n', 'Salary'],
+    [
+      'NEEDS ANSWER: None of the listed options fit. Which should be chosen?\n',
+      'None of the listed options fit. Which should be chosen?',
+    ],
+    ['- NEEDS ANSWER: No questions for the hiring team?\n', 'No questions for the hiring team?'],
+    // A negation about the field denies nothing.
+    ['| Salary | Not on record — NEEDS ANSWER |\n', 'Salary'],
+    ['Not on record, NEEDS ANSWER: salary expectation\n', 'salary expectation'],
+    ['No figure on record — NEEDS ANSWER: desired base\n', 'desired base'],
+    [
+      'The posting does not give a range\nNEEDS ANSWER: desired base salary\n',
+      'desired base salary',
+    ],
+    ['- Sponsorship required (yes/no) NEEDS ANSWER\n', 'Sponsorship required (yes/no)'],
+    ['- Postal code (not in the record) NEEDS ANSWER\n', 'Postal code'],
+    ['Salary expectation: not on record (NEEDS ANSWER)\n', 'Salary expectation: not on record'],
+    ['- **Salary** not on record, NEEDS ANSWER\n', 'Salary not on record'],
+    // "Question" after the marker introduces one rather than talking about the marker.
+    ['**NEEDS ANSWER** Question: What is your salary?\n', 'Question: What is your salary?'],
+    ['[NEEDS ANSWER] Question 12: your salary\n', 'Question 12: your salary'],
+    ['NEEDS ANSWER items:\n\n- Salary\n', 'items'],
+    ['## NEEDS ANSWER items\n\n- Salary\n', 'items'],
   ]
   for (const [file, text] of counted) {
     test(JSON.stringify(file), () => assert.deepEqual(texts(file), [text]))
@@ -218,6 +246,20 @@ describe('a marker in a shape the parser does not know still counts', () => {
     const file = '## NEEDS ANSWER\n\n- NEEDS ANSWER: First?\n\nSome context on it.\n'
     assert.deepEqual(texts(file), ['First?'])
   })
+
+  test('a plain bullet beside a marked one still counts', () => {
+    const file = '## NEEDS ANSWER\n\n- Salary expectation\n- NEEDS ANSWER: Start date\n'
+    assert.deepEqual(texts(file), ['Start date', 'Salary expectation'])
+    const saved = parseSaved(entry('Start date', 'any application'))
+    assert.deepEqual(openQuestions(file, saved, lead), ['Salary expectation'])
+  })
+
+  test('a deeper heading stays in the section, a sibling closes it', () => {
+    assert.deepEqual(texts('## NEEDS ANSWER\n\n### What is your salary?\n'), [
+      'What is your salary?',
+    ])
+    assert.deepEqual(texts('## NEEDS ANSWER\n\n## Drafted\n\n- A drafted answer.\n'), [])
+  })
 })
 
 describe('different questions stay different', () => {
@@ -252,6 +294,56 @@ describe('different questions stay different', () => {
     ].join('\n')
     const saved = parseSaved(entry('Do you need a visa?', 'any application'))
     assert.deepEqual(openQuestions(file, saved, lead), ['Do you have a clearance?'])
+  })
+
+  test('form wording keeps apart rows whose notes ask the same thing', () => {
+    const file = [
+      '| Voluntary: veteran status | NEEDS ANSWER: which option? |',
+      '| Voluntary: disability status | NEEDS ANSWER: which option? |',
+      '| Voluntary: gender | NEEDS ANSWER: which option? |',
+    ].join('\n')
+    assert.equal(texts(file).length, 3)
+    const saved = parseSaved(entry('Voluntary: veteran status', 'any application'))
+    assert.equal(openQuestions(file, saved, lead).length, 2)
+    const bold =
+      '- **Salary:** NEEDS ANSWER: what should I put?\n- **Start date:** NEEDS ANSWER: what should I put?\n'
+    assert.equal(texts(bold).length, 2)
+    assert.equal(
+      openQuestions(bold, parseSaved(entry('Salary', 'any application')), lead).length,
+      1,
+    )
+  })
+
+  test('a wording two questions share clears neither', () => {
+    const file = [
+      '| Voluntary: veteran status | NEEDS ANSWER: which option? |',
+      '| Voluntary: gender | NEEDS ANSWER: which option? |',
+    ].join('\n')
+    const saved = parseSaved(entry('which option?', 'any application'))
+    assert.equal(openQuestions(file, saved, lead).length, 2)
+  })
+
+  test('questions that open alike and go on differently count apart', () => {
+    const file =
+      '- NEEDS ANSWER: Which option? Veteran status\n- NEEDS ANSWER: Which option? Gender\n'
+    assert.equal(texts(file).length, 2)
+    const saved = parseSaved(entry('Which option?', 'any application'))
+    assert.equal(openQuestions(file, saved, lead).length, 2)
+  })
+
+  test('a saved answer is not cut short before it is compared', () => {
+    const cleared = (question: string, answered: string) =>
+      openQuestions(
+        `NEEDS ANSWER: ${question}\n`,
+        parseSaved(entry(answered, 'any application')),
+        lead,
+      ).length === 0
+    assert.equal(cleared('Approx. years of Go', 'Approx. salary expected'), false)
+    assert.equal(cleared('Min. hours per week', 'Min. salary'), false)
+    assert.equal(cleared('Python vs. Go experience', 'Python vs. Rust experience'), false)
+    assert.equal(cleared('Salary (not including bonus)', 'Salary (not including equity)'), false)
+    assert.equal(cleared('Visa (any country in the EU)', 'Visa (any US state)'), false)
+    assert.equal(cleared('Approx. years of Go', 'Approx. years of Go'), true)
   })
 
   test('an initial does not end the question', () => {
@@ -349,7 +441,16 @@ describe('questions the saved answers already answer', () => {
   })
 
   test('a scope it cannot read covers only the lead it was asked for', () => {
-    for (const scope of ['Beta', 'only Beta', 'Beta applications', 'Any Desk only', '']) {
+    const unread = [
+      'Beta',
+      'only Beta',
+      'Beta applications',
+      'Any Desk only',
+      'any application at Beta',
+      'any application except Acme',
+      '',
+    ]
+    for (const scope of unread) {
       const other = parseSaved(entry('What is your salary expectation?', scope))
       assert.equal(openQuestions(ask, other, lead).length, 1, scope)
       const same = parseSaved(
