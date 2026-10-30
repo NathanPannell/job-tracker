@@ -79,9 +79,20 @@ below: nobody can answer you, so never stop to ask a question.
    application, use that answer word for word; when it was answered more than once, the latest
    entry wins. Reuse other recorded answers exactly where they apply (work authorization,
    sponsorship, travel commitments) and only within their stated limits. Where nothing on record
-   answers it (salary expectation, start date, a disclosure), write `NEEDS ANSWER:` and the
-   question instead of guessing; submit asks the person and saves the answer. A free-text answer
-   you draft is 2–3 sentences in that same voice, never several paragraphs.
+   answers it (salary expectation, start date, a disclosure), do not guess: leave its place among
+   the answers saying "open, see below" and list it under a last heading, `## Open questions`,
+   one line per question, written once in exactly this form:
+
+   ```markdown
+   - NEEDS ANSWER: <the question exactly as the form asks it> (<a short note, if it needs one>)
+   ```
+
+   Keep each to a single line. The board counts these lines to tell the person what a package
+   still needs, and matches them against `application-answers.md`, so never repeat a question
+   inline, in a table or in a summary, and never use the literal marker anywhere else in the file:
+   with nothing open, leave the heading out and say nothing about it. submit asks the person each
+   one and saves the answer. A free-text answer you draft is 2–3 sentences in that same voice,
+   never several paragraphs.
 7. Company brief (`company-brief.md`): what they build and for whom, stage and funding, team size,
    stack, recent news, why it fits, risks and red flags (reviews, runway), and three sharp questions
    to ask. Link every claim's source.
