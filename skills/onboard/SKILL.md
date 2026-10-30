@@ -16,8 +16,9 @@ applications. Nothing goes in that did not come from the person or from a docume
 - Starter files: `$JOB_TRACKER_HOME/skills/onboard/templates/`. Each stage below names the
   template it copies. Replace every `<placeholder>`; delete a line you have no answer for.
 - Run `jobs init`, then read `profile/onboarding-progress.md`. If it exists, say which stages are
-  done and carry on from the first that is not. If it does not, create it with one checkbox per
-  stage below, and copy `unanswered-questions.md` to `profile/UNANSWERED-QUESTIONS.md`.
+  done and carry on from the first that is not. If it does not and they are adding to an existing record, go to
+  "Adding to the record later" below. Otherwise create it with one checkbox per stage below, and
+  copy `unanswered-questions.md` to `profile/UNANSWERED-QUESTIONS.md` if that file is missing.
 - Run in the person's own conversation, never in a subagent: this is an interview.
 
 ## How to run the interview

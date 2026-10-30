@@ -173,9 +173,9 @@ export function transact<R>(dir: string, fn: (data: Data) => Change<R>): R {
 /** Creates the data folder's files and folders that are missing. */
 export function init(dir: string): string {
   for (const sub of ['profile', 'packages', 'scout']) mkdirSync(join(dir, sub), { recursive: true })
-  const boards = join(dir, 'profile', 'ats-boards.json')
-  if (!existsSync(boards)) writeAtomic(boards, '[]\n')
   return transact(dir, data => {
+    const boards = join(dir, 'profile', 'ats-boards.json')
+    if (!existsSync(boards)) writeAtomic(boards, '[]\n')
     const missing = (Object.keys(FILES) as DataName[]).filter(
       name => !existsSync(join(dir, FILES[name])),
     )

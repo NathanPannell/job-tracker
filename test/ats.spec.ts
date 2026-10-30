@@ -108,6 +108,8 @@ test('reachable means Canada, or remote without another country named', () => {
   assert.ok(isReachable(at('Halifax, NS')))
   assert.ok(isReachable(at('Mississauga, Ontario')))
   assert.ok(isReachable(at('Sherbrooke, QC')))
+  assert.ok(isReachable(at('Guelph ON')))
+  assert.ok(isReachable(at('Hybrid - Montréal')))
   assert.ok(isReachable(at('CAN - Remote')))
   assert.ok(isReachable(at('Remote')))
   assert.ok(isReachable(at('')))
@@ -116,6 +118,8 @@ test('reachable means Canada, or remote without another country named', () => {
   assert.ok(!isReachable(at('Sydney · Remote')))
   assert.ok(!isReachable(at('Berlin')))
   assert.ok(!isReachable(at('Amsterdam, NL')))
+  assert.ok(!isReachable(at('Ontario, CA')))
+  assert.ok(!isReachable(at('Lima, PE')))
 })
 
 const fakeFetch =
