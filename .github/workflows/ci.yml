@@ -2,9 +2,9 @@ name: ci
 
 on:
   pull_request:
-    branches: [staging, main]
+    branches: [main]
   push:
-    branches: [staging, main]
+    branches: [main]
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -14,7 +14,8 @@ permissions:
   contents: read
 
 env:
-  # The engine whose plugin API the mod is written against (vendor/claude-code.d.ts).
+  # The engine whose plugin API the mod is written against. Its declarations are generated
+  # (npm run types:engine), never committed: they are Anthropic's, under its own terms.
   CLAUDE_CODE_VERSION: 2.1.299
 
 # Jobs from the standard CI bar that do not apply to a Claude Code mod:
@@ -41,6 +42,16 @@ jobs:
         run: npm run format:check
       - name: Lint (zero warnings)
         run: npm run lint
+      - name: Install Claude Code ${{ env.CLAUDE_CODE_VERSION }}
+        shell: bash
+        # npm's install-scripts gate can skip the package's postinstall, which leaves no native
+        # binary on some runs. Run the postinstall explicitly (it is idempotent) and check it.
+        run: |
+          npm install --global --allow-scripts=@anthropic-ai/claude-code "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}"
+          node "$(npm root --global)/@anthropic-ai/claude-code/install.cjs"
+          claude --version | grep -F "${CLAUDE_CODE_VERSION}"
+      - name: Engine types (generated, not committed)
+        run: npm run types:engine
       - name: Types
         run: npm run typecheck
       - name: Unit tests with coverage floor
@@ -58,9 +69,21 @@ jobs:
         with:
           node-version: 24
       - name: Install Claude Code ${{ env.CLAUDE_CODE_VERSION }}
-        run: npm install --global "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}"
-      - name: Validate the mod
-        run: claude plugin validate .
+        shell: bash
+        # npm's install-scripts gate can skip the package's postinstall, which leaves no native
+        # binary on some runs. Run the postinstall explicitly (it is idempotent) and check it.
+        run: |
+          npm install --global --allow-scripts=@anthropic-ai/claude-code "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}"
+          node "$(npm root --global)/@anthropic-ai/claude-code/install.cjs"
+          claude --version | grep -F "${CLAUDE_CODE_VERSION}"
+      - name: Validate the mod (every hook matcher must be a literal the engine can read)
+        # bash with pipefail, so a failing `claude plugin validate` is not hidden by `tee`.
+        shell: bash
+        run: |
+          claude plugin validate . | tee validate.txt
+          if grep -q '=?' validate.txt; then
+            echo "A hook matcher is not a literal: the engine never matches it in a session." && exit 1
+          fi
       - name: Plugin tests (terminal, desktop, mobile surfaces)
         run: claude plugin test .
 

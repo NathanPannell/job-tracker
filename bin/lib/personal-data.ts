@@ -3,26 +3,34 @@
 
 const FORBIDDEN_EXTENSIONS = ['.pdf', '.tex', '.docx', '.doc', '.rtf']
 const FORBIDDEN_SEGMENTS = ['data/', 'packages/', 'profile/', 'knowledge-base/']
-const SKIPPED = ['vendor/', 'package-lock.json', 'node_modules/']
+const SKIPPED = ['package-lock.json', 'node_modules/']
 const ALLOWED_EMAIL_DOMAINS = [
   'example.com',
   'example.org',
   'anthropic.com',
   'users.noreply.github.com',
 ]
+/** The files that credit the author, and what they may say: nothing else may hold the name. */
+const CREDIT_FILES = ['LICENSE', 'README.md', 'package.json', '.claude-plugin/plugin.json']
+// Spelled in pieces so this file does not carry the name.
+const AUTHOR = ['Nathan', ['Pan', 'nell'].join('')]
+const CREDIT = new RegExp(
+  [
+    `Copyright \\(c\\) 2026 ${AUTHOR.join(' ')}`,
+    `"name": "${AUTHOR.join(' ')}"`,
+    `${AUTHOR.join('')}/job-tracker(?:\\.git)?(?![\\w.-])`,
+  ].join('|'),
+  'g',
+)
 
 const PHONE = /(?<![\d.])(?:\+?1[ .-]?)?\(?\d{3}\)?[ .-]\d{3}[ .-]\d{4}(?![\d.])/g
 const EMAIL = /[A-Za-z0-9._%+-]+@((?:[A-Za-z0-9-]+\.)+[A-Za-z]{2,})\b/g
+// Spelled in pieces so this file does not match itself.
 const LATEX = new RegExp(String.fromCharCode(92, 92) + 'document' + 'class')
 
-/**
- * @param {string} path repository-relative path with forward slashes
- * @param {string} text the file's contents
- * @param {string[]} [denyList] exact strings that must never appear (read from the data folder)
- * @returns {string[]} problems found, empty when clean
- */
-export function scanFile(path, text, denyList = []) {
-  const problems = []
+/** Problems found in one file about to be committed; empty when it is clean. */
+export function scanFile(path: string, text: string, denyList: readonly string[] = []): string[] {
+  const problems: string[] = []
   if (SKIPPED.some(skip => path.startsWith(skip) || path.includes(`/${skip}`))) return problems
   const lower = path.toLowerCase()
   if (FORBIDDEN_EXTENSIONS.some(ext => lower.endsWith(ext))) {
@@ -40,7 +48,8 @@ export function scanFile(path, text, denyList = []) {
     if (!isAllowed) problems.push(`${path}: contains an email address (${match[0]})`)
   }
   if (LATEX.test(text)) problems.push(`${path}: contains a LaTeX document`)
-  const haystack = text.toLowerCase()
+  const credited = CREDIT_FILES.includes(path) ? text.replace(CREDIT, '') : text
+  const haystack = credited.toLowerCase()
   for (const term of denyList) {
     if (term.length >= 4 && haystack.includes(term.toLowerCase())) {
       problems.push(`${path}: contains a profile value from the data folder`)
@@ -50,13 +59,11 @@ export function scanFile(path, text, denyList = []) {
 }
 
 /**
- * Pulls the identity values (name, phone, email) out of a profile.md written as
+ * The identity values (name, surname, phone, email) of a profile.md written as
  * `- **Name:** value` lines, so a local run can check for them exactly.
- * @param {string} profile
- * @returns {string[]}
  */
-export function denyListFromProfile(profile) {
-  const terms = []
+export function denyListFromProfile(profile: string): string[] {
+  const terms: string[] = []
   for (const line of profile.split(/\r?\n/)) {
     const match = /^- \*\*(Name|Phone|Email):\*\*\s*(.+)$/.exec(line.trim())
     if (!match) continue

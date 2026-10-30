@@ -1,9 +1,10 @@
-// Fails when a file that git would commit holds personal data. Run in CI and before every commit.
+// Fails when a file that git would commit holds personal data. Run in CI and before every commit;
+// with JOB_TRACKER_DATA set it also checks for the exact identity values in the local profile.
 import { execFileSync } from 'node:child_process'
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 
-import { denyListFromProfile, scanFile } from '../bin/lib/personal-data.mjs'
+import { denyListFromProfile, scanFile } from '../bin/lib/personal-data.ts'
 
 const files = execFileSync('git', ['ls-files', '--cached', '--others', '--exclude-standard'], {
   encoding: 'utf8',
@@ -19,7 +20,9 @@ const denyList =
     : []
 
 const problems = files.flatMap(file =>
-  existsSync(file) ? scanFile(file, readFileSync(file, 'utf8'), denyList) : [],
+  existsSync(file) && statSync(file).isFile()
+    ? scanFile(file, readFileSync(file, 'utf8'), denyList)
+    : [],
 )
 
 if (problems.length > 0) {
