@@ -189,6 +189,9 @@ describe('a marker in a shape the parser does not know still counts', () => {
     ['| Salary | NEEDS ANSWER: none recorded |\n', 'Salary'],
     ['- **Salary:** NEEDS ANSWER: none on file\n', 'Salary'],
     ['- **Salary:** NEEDS ANSWER: n/a\n', 'Salary'],
+    ['Salary: NEEDS ANSWER: none\n', 'Salary'],
+    ['- Salary: NEEDS ANSWER: n/a\n', 'Salary'],
+    ['Start date — NEEDS ANSWER: nothing\n', 'Start date'],
     [
       'NEEDS ANSWER: None of the listed options fit. Which should be chosen?\n',
       'None of the listed options fit. Which should be chosen?',
@@ -329,6 +332,17 @@ describe('different questions stay different', () => {
     assert.equal(texts(file).length, 2)
     const saved = parseSaved(entry('Which option?', 'any application'))
     assert.equal(openQuestions(file, saved, lead).length, 2)
+  })
+
+  test('a saved question that goes on differently clears nothing', () => {
+    const file = '- NEEDS ANSWER: Tell us about working remotely? What tools do you use?\n'
+    const saved = (question: string) => parseSaved(entry(question, 'any application'))
+    const open = (question: string) => openQuestions(file, saved(question), lead).length
+    assert.equal(open('Tell us about working remotely? What challenges have you faced?'), 1)
+    // The same question, its first part alone, and a note on it all clear.
+    assert.equal(open('Tell us about working remotely? What tools do you use?'), 0)
+    assert.equal(open('Tell us about working remotely?'), 0)
+    assert.equal(open('Tell us about working remotely? (any form of it)'), 0)
   })
 
   test('a saved answer is not cut short before it is compared', () => {

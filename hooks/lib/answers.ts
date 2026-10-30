@@ -20,9 +20,10 @@ export type Question = { text: string; id: string; form: string; detail: string;
 
 /**
  * One entry of the saved answers. `companies` is absent for any application; empty, when the
- * scope names none it can read, the entry covers only the lead it was asked for.
+ * scope names none it can read, the entry covers only the lead it was asked for. `detail` is as
+ * on a question.
  */
-export type SavedAnswer = { key: string; leadId?: string; companies?: string[] }
+export type SavedAnswer = { key: string; detail: string; leadId?: string; companies?: string[] }
 
 const MARKER = /(?<![\p{L}\p{N}])NEEDS\s+ANSWERS?(?![\p{L}\p{N}])/gu
 
@@ -87,8 +88,18 @@ const short = (text: string) =>
     .replace(NOTE, '')
     .replace(/[\s.:;,([—–-]+$/, '')
 
-/** The question as matched: only what plainly follows it goes, so two never read as one. */
+/** The question as matched: up to its `?`, or whole but for a closing note. */
 const wording = (text: string) => key(/^.*?\?/.exec(text)?.[0] ?? text.replace(NOTE, ''))
+
+/**
+ * What a text goes on to say after its `?`, which can make two that open alike different questions.
+ * Brackets there are a note on the question, as in "(question 9, required)".
+ */
+const beyond = (text: string) =>
+  text.includes('?') ? key(text.slice(text.indexOf('?')).replace(/\([^)]*\)/g, '')) : ''
+
+/** Whether two details of a question fit: one is absent, or they say the same. */
+const agree = (a: string, b: string) => !a || !b || a === b
 
 /**
  * The file's list items, paragraphs, headings and table rows, each as one string, so that a
@@ -136,18 +147,17 @@ function marked(block: string, heading: string): Question[] {
           .at(-1)
           ?.trim() ?? ''
       const denied = !bold && NEGATION.test(clause) && DENYING_END.test(clause)
-      const none = !form && NOTHING.test(rest)
+      const words = n === 0 ? plain(before.replace(BLOCK_MARK, '')) : ''
+      const none = !form && !words && NOTHING.test(rest)
       const about = !separator && !block.startsWith('#') && ABOUT_MARKER.test(rest)
       if (!asks && (denied || none || about)) return []
-      const words = n === 0 ? plain(before.replace(BLOCK_MARK, '')) : ''
       const named = asks ? rest : ([form, rest, words, heading].find(short) ?? '')
       return [
         {
           text: short(named) || UNNAMED,
           id: wording(named),
           form: wording(form),
-          // Brackets are a note on the question, as in "(question 9, required)".
-          detail: asks ? key(rest.slice(rest.indexOf('?')).replace(/\([^)]*\)/g, '')) : '',
+          detail: beyond(rest),
           keys: (asks ? [rest, form] : [named]).map(wording).filter(Boolean),
         },
       ]
@@ -202,7 +212,6 @@ function questions(markdown: string): Question[] {
 export function parseQuestions(markdown: string): Question[] {
   const distinct: Question[] = []
   for (const one of questions(markdown)) {
-    const agree = (a: string, b: string) => !a || !b || a === b
     const same = (other: Question) =>
       one.id &&
       other.id === one.id &&
@@ -225,9 +234,11 @@ export function parseSaved(markdown: string): SavedAnswer[] {
       const scope = /^- Scope:\s*(.*)$/m.exec(entry)?.[1] ?? ''
       const only = /^(.+?)[\s-]+only\b/i.exec(scope)?.[1] ?? ''
       const leadId = /^- Asked by:.*\(`([^`]+)`\)/m.exec(entry)?.[1]
+      const question = plain(/^.*/.exec(entry)?.[0] ?? '')
       return [
         {
-          key: wording(plain(/^.*/.exec(entry)?.[0] ?? '')),
+          key: wording(question),
+          detail: beyond(question),
           ...(leadId ? { leadId } : {}),
           ...(/^any application\s*(?:\(|$)/i.test(scope)
             ? {}
@@ -253,9 +264,12 @@ export function openQuestions(
   saved: readonly SavedAnswer[],
   lead: Pick<Lead, 'id' | 'company'>,
 ): string[] {
-  const applies = saved.filter(entry => covers(entry, lead)).map(entry => entry.key)
+  const applies = saved.filter(entry => covers(entry, lead))
+  const clears = (entry: SavedAnswer, question: Question) =>
+    question.keys.includes(entry.key) &&
+    (entry.key !== question.id || agree(entry.detail, question.detail))
   return parseQuestions(answers)
-    .filter(question => !question.keys.some(one => applies.includes(one)))
+    .filter(question => !applies.some(entry => clears(entry, question)))
     .map(question => question.text)
 }
 
