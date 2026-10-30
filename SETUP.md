@@ -70,13 +70,30 @@ The types of every file are in `types/index.d.ts`.
   the ten best first ("Show more" adds ten). Each card is three lines: a coloured fit badge (green
   90+, amber 75–89, grey below) with company and role; age (since added, and the posting's when known), source and location (remote or
   where); and a one-line tagline of about 40 characters saying what the company makes or what
-  the role is (the fit reason until scout has written one; a longer one ends in "…"). Under them
+  the role is (the fit reason until scout has written one; a longer one ends in "…"). A Ready to
+  review card with a package adds a note: amber `2 answers needed`, or green `Ready to submit` (see
+  "Ready notes"). Under them
   are its stage's next steps as labelled buttons: New: Draft package · Pass — Drafting: Back to
   New — Ready: Review · Approve and submit — Applied: Got interview · Rejected · Ghosted — Interviewing: Got offer ·
   Rejected — Offer: Accepted · Declined. Company decisions (Got interview, Got offer, Rejected,
   Ghosted, Accepted, Declined) move the card and record an outcome for the weekly review, never a
   pass (an application silent for a month is marked Ghosted for you, see "Ghosting"); an archived or passed card offers "Back to <where it was>" to undo a mis-click. Click a card's name to open it: the same next steps, then
   Pass… · Archive · Draft package, then feedback (Score too high / too low).
+- **Ready notes.** The note counts the distinct `NEEDS ANSWER` questions in the package's
+  `answers.md`, leaving out any that `profile/knowledge-base/application-answers.md` already
+  answers. So it clears when you reply, though `answers.md` stays as drafted. The lead's own page
+  names the questions. The note is worked out when the board refreshes and is never saved. It
+  leans towards asking, because a wrong "Ready to submit" costs more than a wrong count. A marker
+  counts unless the clause right before it reads as a denial ("nothing is NEEDS ANSWER"), it is
+  "NEEDS ANSWER items", it says only "NEEDS ANSWER: none", or it is a heading of its own over the
+  questions. These are judgements on wording, and a few unusual shapes can still slip past, so the
+  note is a guide and submit still asks what is missing. An optional question counts, since submit
+  asks it. A saved answer clears a question only when its wording or the form's matches (case and
+  punctuation aside, up to the `?`, and, on the question's own wording, no different after it) and
+  its scope covers the lead: any application, the lead it was asked for, or that exact company. So
+  a card can stay amber on a
+  question submit would not ask again, because submit judges the meaning. A lead with no
+  `answers.md` to read, or an empty one, shows no note.
 - **Posting age.** The badge shows the scout's fit score, which never changes with age. A card
   shows how long ago the lead was added and, when the source gives a posting date (Greenhouse,
   Lever and Ashby boards do), how long ago the posting went up, e.g. `added 3d · posted 9d`.

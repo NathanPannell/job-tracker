@@ -166,6 +166,12 @@ export type JobBoard = {
   leads: Lead[]
   applications: Application[]
   proposals: Proposal[]
+  /**
+   * What each Ready lead's package still asks of the person, by lead id; empty means ready to
+   * submit, and a lead with no readable `answers.md` has no entry. Worked out on every refresh,
+   * never saved. Absent on a board kept across a hot reload from before this field.
+   */
+  openQuestions?: Record<string, string[]>
   loadedAt: number
   error: string | null
 }
