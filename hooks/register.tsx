@@ -932,15 +932,20 @@ export const register: Register = on => {
     if (!text) return next(e)
     const { Box, Button, Text } = $.ui.resolve(e)
     const isReadOnly = e.surface === 'mobile'
+    // Keep what the plugins beneath drew: the band is shared with other mods.
+    const below = await next(e)
     return (
-      <Box key="band" flexDirection="row">
-        {isReadOnly ? (
-          <Text>{`● ${text}`}</Text>
-        ) : (
-          <Button key="open-jobs" plain onPress={() => void openPane($)}>
-            <Text color="claude">●</Text> {text} <Text dimColor>· /jobs</Text>
-          </Button>
-        )}
+      <Box key="band-stack" flexDirection="column">
+        {below}
+        <Box key="band" flexDirection="row">
+          {isReadOnly ? (
+            <Text>{`● ${text}`}</Text>
+          ) : (
+            <Button key="open-jobs" plain onPress={() => void openPane($)}>
+              <Text color="claude">●</Text> {text} <Text dimColor>· /jobs</Text>
+            </Button>
+          )}
+        </Box>
       </Box>
     )
   })
