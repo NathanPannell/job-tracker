@@ -10,22 +10,24 @@ and daily use.
   application, `submit` prefills it in Chrome and waits for your yes, `sync` reads Gmail and
   Calendar for replies, `learn` turns a week of feedback into a proposal.
 - **The mod** (`hooks/register.tsx`) is the interface: the `/jobs` kanban pane, the band above
-  the prompt, one short mention of new leads per conversation, and the tools `list_leads`,
-  `update_lead` and `record_feedback` the model uses.
-- **The CLI** (`bin/jobs.ts`) is the only writer of the data files (lock and atomic rename), used
-  by the skills, the pane and the tools.
+  the prompt, one short mention of new leads per conversation, a guard on background Chrome calls,
+  and the tools the model uses: `list_leads`, `update_lead`, `record_feedback`, `draft_package`
+  and `open_board`.
+- **The CLI** (`bin/jobs.ts`) is the only writer of the board's state files (lock and atomic
+  rename), used by the skills, the pane and the tools. Skills also write to the data folder
+  directly: package documents, scout logs, proposal drafts and, for `submit`, the saved answers.
 
 ## How it loads
 
-The mod loads from this checkout into every Claude Code session, desktop and terminal alike,
-through the `env` block of `~/.claude/settings.json`:
+The mod loads from a checkout of this repository into every Claude Code session, desktop and
+terminal alike, through the `env` block of `~/.claude/settings.json`:
 
 ```json
 {
   "env": {
-    "CLAUDE_CODE_PLUGIN_DIRS": "C:\\repo\\job-tracker-workspace\\job-tracker",
-    "JOB_TRACKER_HOME": "C:\\repo\\job-tracker-workspace\\job-tracker",
-    "JOB_TRACKER_DATA": "C:\\repo\\job-tracker-workspace\\data",
+    "CLAUDE_CODE_PLUGIN_DIRS": "<path to this checkout>",
+    "JOB_TRACKER_HOME": "<path to this checkout>",
+    "JOB_TRACKER_DATA": "<path to your data folder>",
     "CLAUDE_CODE_PLUGIN_DIR_WATCH": "1"
   }
 }
@@ -36,17 +38,18 @@ through the `env` block of `~/.claude/settings.json`:
   session picks them up when it starts.
 - `JOB_TRACKER_HOME` is where the skills find `bin/jobs.ts`.
 - `JOB_TRACKER_DATA` is the data folder (below).
+- `CLAUDE_CODE_PLUGIN_DIR_WATCH` is optional. It reloads the mod when its files change.
 - `CLAUDE_CODE_PLUGIN_DIR_WATCH` reloads the mod when its files change, and writes the reasons for
   any refused hook into the transcript.
 
-The checkout stays on the `staging` branch; after a PR merges, `git pull` in it updates every new
-session. It needs Node 24 or newer on `PATH` (the CLI is TypeScript run by Node directly) and, for
-résumés, a LaTeX install with `pdflatex`, `pdfinfo` and `pdftocairo` (MiKTeX ships all three).
+Create the data files with `node bin/jobs.ts init --data <path to your data folder>`. The running
+checkout stays on the `staging` branch, where work lands first; after a PR merges, `git pull` in
+it updates every new session.
 
 ## Where the data lives
 
-`JOB_TRACKER_DATA` (here `C:\repo\job-tracker-workspace\data`), outside every git repository.
-The repo's `.gitignore` and the `check:personal-data` CI job keep it out of git.
+`JOB_TRACKER_DATA`, a folder outside every git repository. The repo's `.gitignore` and the
+`check:personal-data` step in CI keep it out of git. The CLI's lock file, `.lock`, lives here too.
 
 | Path                  | What                                                                                                                                                                                                                                                                                                                                                                               |
 | --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -54,9 +57,9 @@ The repo's `.gitignore` and the `check:personal-data` CI job keep it out of git.
 | `applications.json`   | One entry per package and its files                                                                                                                                                                                                                                                                                                                                                |
 | `feedback.json`       | Passes, score corrections, moves and outcomes, for `learn`                                                                                                                                                                                                                                                                                                                         |
 | `proposals.json`      | Weekly learning proposals and their status                                                                                                                                                                                                                                                                                                                                         |
-| `packages/<lead-id>/` | `resume.tex`, `resume.pdf`, `cover-letter.md`, `answers.md`, `company-brief.md`, `warm-intro.md`, `posting.md`, `sources.md`, `preview/` (the pane's résumé pages) and `.draft/` (the draft as written, so `learn` can see your edits)                                                                                                                                             |
+| `packages/<lead-id>/` | `resume.tex`, `resume.pdf`, `resume.diff` (against the master résumé), `cover-letter.md`, `answers.md`, `company-brief.md`, `warm-intro.md`, `posting.md`, `sources.md`, `submission.md` (what was sent), `preview/` (the pane's résumé pages) and `.draft/` (the draft as written, so `learn` can see your edits)                                                                 |
 | `profile/`            | The career record written by `onboard`: `master-resume.tex`, `resume-format-template.tex`, `resume-generation-rules.md`, `voice.md`, `cover-letter-prompts.md`, `sources/`, `preferences.md`, `learnings.md`, `target-companies.md`, `ats-boards.json`, `OPEN-QUESTIONS.md` and `knowledge-base/application-answers.md` (your answers to application questions, saved by `submit`) |
-| `scout/`              | Each run's raw candidates, `runs.md` (one line per run), `signals.md` (funding news), `gmail-cursor.json` (where Gmail reading stopped) and learn's proposal files                                                                                                                                                                                                                 |
+| `scout/`              | Each run's raw candidates (`candidates-*.json`, `ats-*.json`, `summaries-*.json`), `runs.md` (one line per run), `signals.md` (funding news), `gmail-cursor.json` (where Gmail reading stopped) and learn's proposal files                                                                                                                                                         |
 
 The types of every file are in `types/index.d.ts`.
 
@@ -77,8 +80,11 @@ The types of every file are in `types/index.d.ts`.
 - **Posting age.** The badge shows the scout's fit score, which never changes with age. A card
   shows how long ago the lead was added and, when the source gives a posting date (Greenhouse,
   Lever and Ashby boards do), how long ago the posting went up, e.g. `added 3d · posted 9d`.
-  Scout adds a new posting only when its fit score is 70 or more and it went up in the last 14
-  days; older postings are often already filled. A New lead whose posting is over 14 days old
+  Scout adds a new posting only when its fit score is 70 or more and it is not dated over 14 days
+  ago; older postings are often already filled. A posting with no usable date is added, and its
+  age counts from when it was added. Seventy is the default of `jobs add`, and `--threshold <n>`
+  replaces it for that call; a posting dated over 14 days ago is dropped whatever the threshold.
+  A New lead whose posting is over 14 days old
   (counted from when it was added when there is no posting date) moves to Archived on its own.
   Its history says `tracker: moved → Archived (posted over 14 days ago)`, or
   `(added over 14 days ago)` when undated, and no feedback is recorded. Only New leads, which you
@@ -111,14 +117,25 @@ The types of every file are in `types/index.d.ts`.
 - **Review** shows the résumé PDF drawn in the pane (desktop), "Résumé vs master" (the
   diff against the master résumé), the cover letter, answers, company brief and warm-intro note.
   "Open PDF" opens the file in your PDF viewer.
-- **Approve and submit** asks Claude to run `submit` in your conversation: it fills in the form
-  in Chrome and attaches the PDF, asks you in one message for anything the package and your
-  saved answers do not cover, then shows what it entered and asks "Submit it now?". It clicks
-  submit only after your yes. Every answer you give is saved word for word, with the question
-  and date, in `profile/knowledge-base/application-answers.md`; `package` and `submit` read it
-  first, so a question you have answered once is not asked again. Account creation, sign-ins,
-  passwords, CAPTCHAs and agreements are handed back to you with everything ready to paste.
-- The band above the prompt reads `● N new leads · M ready to review`; click it to open the
+- **Approve and submit** starts a background subagent that fills in the form in Chrome and
+  attaches the PDF, so the slow work never holds your conversation. When it ends, `submit` carries
+  on in your conversation: it asks you in one message for anything the package and your saved
+  answers do not cover, then shows what was entered and asks "Submit it now?". It clicks submit
+  only after your yes. "Approve and submit all" on Ready to review does this for every lead there
+  at once, side by side, and their questions arrive together. If Claude in Chrome is not available
+  to the subagent, the conversation does the whole job.
+- **The Chrome guard** holds every background prefill to tabs it opened itself and to an element
+  ref for every click, and reads each element first. It refuses a click on a control labelled like
+  submit, send, confirm, finish or one-click apply, or on a submit-type button not labelled as a
+  step such as Next. That is a check of labels and types, so an unusual final button can get past
+  it. Your conversation cannot touch a tab a prefill is still using. If a prefill's tab looks
+  submitted when it ends, your conversation says so first and leaves that lead alone until you
+  decide. Rules are in `hooks/lib/chrome.ts`.
+- Every answer you give is saved word for word, with the question and date, in
+  `profile/knowledge-base/application-answers.md`; `package` and `submit` read it first, so a
+  question you have answered once is not asked again where that answer applies. Account creation, sign-ins, passwords,
+  CAPTCHAs and agreements are handed back to you with everything ready to paste.
+- The band above the prompt reads `● N new leads · M ready to review · /jobs`; click it to open the
   board. It is hidden when both are zero.
 - In an unrelated conversation, the first reply ends with one short line naming the top new leads,
   at most once per conversation and never within three hours of the last mention.
@@ -149,32 +166,63 @@ Ashby board, add `{ "company", "ats", "slug" }` to `profile/ats-boards.json`
 
 ## The schedule
 
-Desktop scheduled tasks run the skills in their own sessions. [INSTALL.md](INSTALL.md) has their
-prompts:
+Desktop scheduled tasks run the work in their own sessions. They live on your machine, each
+defined in `~/.claude/scheduled-tasks/<name>/SKILL.md`, and [INSTALL.md](INSTALL.md) has their
+prompts.
 
-- `job-tracker-scout`: weekdays at 8:00, 12:00, 16:00 and 20:00 local time (`0 8,12,16,20 * * 1-5`).
-- `job-tracker-scout-weekend`: Saturdays and Sundays at 12:00 (`0 12 * * 0,6`).
-- `job-tracker-learn`: Sundays at 18:00 (`0 18 * * 0`).
-- `job-tracker-tsenta` (optional): daily at 8:30, 11:30, 14:30, 17:30 and 20:30 (`30 8,11,14,17,20 * * *`).
+| Task                        | When (local time)                     | Cron                     | What                                 |
+| --------------------------- | ------------------------------------- | ------------------------ | ------------------------------------ |
+| `job-tracker-scout`         | Weekdays at 8:00, 12:00, 16:00, 20:00 | `0 8,12,16,20 * * 1-5`   | The `scout` skill                    |
+| `job-tracker-scout-weekend` | Saturdays and Sundays at 12:00        | `0 12 * * 0,6`           | The `scout` skill                    |
+| `job-tracker-tsenta`        | Daily, every 3 hours, 8:30 to 20:30   | `30 8,11,14,17,20 * * *` | An optional job source (below)       |
+| `job-tracker-learn`         | Sundays at 18:00                      | `0 18 * * 0`             | The `learn` skill                    |
+| `job-tracker-board-check`   | Manual                                |                          | Optional check that the tools answer |
 
 If the scheduler runs in a different time zone from the PC, set each cron by the offset, and check
 the next run time after any change.
 
+**The Tsenta source** is optional and read-only. The task reads postings from the last 24 hours
+through a connected Tsenta MCP server, scores them with the same rubric, and never applies or
+changes anything there. Without the server and the task, nothing else changes. The prompt in
+INSTALL.md calls `jobs add @<file>`, so it uses the same bar of 70 as `scout`. A prompt can pass
+`--threshold <n>` to set its own: with 60, new leads from 60 up reach the board. A posting dated
+over 14 days ago is dropped either way.
+
 To pause, open the desktop app's scheduled tasks (sidebar → Scheduled) and turn the task off, or
-ask Claude to disable `job-tracker-scout`. Turn it back on the same way. Deleting the task stops it
-for good; re-create it with the same prompt and cron.
+ask Claude to disable it. Turn it back on the same way. Deleting a task stops it for good; re-create
+it with the same prompt and cron.
 
 ## Developing
 
+Use the engine version pinned in `.github/workflows/ci.yml`. An older `claude` on `PATH` may not
+have `plugin test`, so install the pinned one in a scratch folder if you need to, and set
+`CLAUDE_BIN` to its binary (on Windows `claude.exe`, not the `.cmd` shim).
+
 ```bash
 npm ci
+```
+
+```bash
+npm run types:engine
+```
+
+```bash
 npm run ci
+```
+
+```bash
 claude plugin validate .
+```
+
+```bash
 claude plugin test .
 ```
 
-`npm run ci` is format, lint (zero warnings), types, unit tests with the coverage floor, and the
-personal-data scan. `claude plugin test` mounts the pane and band on the terminal, desktop and
-mobile surfaces through the engine. The plugin API is `vendor/claude-code.d.ts`, from the engine
-version pinned in `.github/workflows/ci.yml`. Delivery: branch from `origin/staging`, PR to
-`staging` with the local checks green, squash-merge. GitHub CI runs only for PRs and pushes to `main`.
+`npm run types:engine` has the engine write its plugin API to
+`.claude-plugin/types/claude-code/index.d.ts`, which is git-ignored. The file is Anthropic's, so it
+is generated, not committed. An interactive session that loads a checkout as a mod writes it too,
+and a fresh worktree needs this step. `npm run ci` is format, lint (zero warnings), types, unit tests with
+the coverage floor, and the personal-data scan. `claude plugin test` mounts the pane and band on the
+terminal, desktop and mobile surfaces through the engine. Delivery: branch from `origin/staging`, PR
+to `staging` with the local checks green, squash-merge. GitHub CI runs only for PRs and pushes to
+`main`.

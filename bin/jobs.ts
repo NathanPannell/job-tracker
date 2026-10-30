@@ -1,4 +1,4 @@
-// The job-tracker data CLI: the one writer of the data folder, used by the skills and the pane.
+// The job-tracker data CLI: the one writer of the board's state, used by the skills and the pane.
 // Prints JSON on stdout; exits 1 with a message on stderr when a command fails.
 import { parseArgs } from 'node:util'
 

@@ -1,4 +1,4 @@
-// The one writer of the data folder. Every change takes a lock, reads the files, applies a pure
+// The one writer of the board's state files. Every change takes a lock, reads the files, applies a pure
 // function from hooks/lib/model.ts and renames a temporary file over the old one, so the
 // scheduled skills and the pane can write at the same time without losing either change.
 import {

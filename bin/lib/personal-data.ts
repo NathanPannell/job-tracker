@@ -3,13 +3,25 @@
 
 const FORBIDDEN_EXTENSIONS = ['.pdf', '.tex', '.docx', '.doc', '.rtf']
 const FORBIDDEN_SEGMENTS = ['data/', 'packages/', 'profile/', 'knowledge-base/']
-const SKIPPED = ['vendor/', 'package-lock.json', 'node_modules/']
+const SKIPPED = ['package-lock.json', 'node_modules/']
 const ALLOWED_EMAIL_DOMAINS = [
   'example.com',
   'example.org',
   'anthropic.com',
   'users.noreply.github.com',
 ]
+/** The files that credit the author, and what they may say: nothing else may hold the name. */
+const CREDIT_FILES = ['LICENSE', 'README.md', 'package.json', '.claude-plugin/plugin.json']
+// Spelled in pieces so this file does not carry the name.
+const AUTHOR = ['Nathan', ['Pan', 'nell'].join('')]
+const CREDIT = new RegExp(
+  [
+    `Copyright \\(c\\) 2026 ${AUTHOR.join(' ')}`,
+    `"name": "${AUTHOR.join(' ')}"`,
+    `${AUTHOR.join('')}/job-tracker(?:\\.git)?(?![\\w.-])`,
+  ].join('|'),
+  'g',
+)
 
 const PHONE = /(?<![\d.])(?:\+?1[ .-]?)?\(?\d{3}\)?[ .-]\d{3}[ .-]\d{4}(?![\d.])/g
 const EMAIL = /[A-Za-z0-9._%+-]+@((?:[A-Za-z0-9-]+\.)+[A-Za-z]{2,})\b/g
@@ -36,7 +48,8 @@ export function scanFile(path: string, text: string, denyList: readonly string[]
     if (!isAllowed) problems.push(`${path}: contains an email address (${match[0]})`)
   }
   if (LATEX.test(text)) problems.push(`${path}: contains a LaTeX document`)
-  const haystack = text.toLowerCase()
+  const credited = CREDIT_FILES.includes(path) ? text.replace(CREDIT, '') : text
+  const haystack = credited.toLowerCase()
   for (const term of denyList) {
     if (term.length >= 4 && haystack.includes(term.toLowerCase())) {
       problems.push(`${path}: contains a profile value from the data folder`)
