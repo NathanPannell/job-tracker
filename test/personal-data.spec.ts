@@ -18,7 +18,7 @@ test('flags documents, data folders, phone numbers, emails and LaTeX', () => {
   assert.match(scanFile('a.md', LATEX)[0] ?? '', /LaTeX/)
   assert.deepEqual(scanFile('a.md', 'uses: actions/checkout@v7.0.1'), [])
   assert.deepEqual(scanFile('a.md', ['noreply', 'anthropic.com'].join('@')), [])
-  assert.deepEqual(scanFile('vendor/x.d.ts', PHONE), [])
+  assert.deepEqual(scanFile('node_modules/x.d.ts', PHONE), [])
 })
 
 test('checks exact profile values when a deny-list is given', () => {
@@ -33,6 +33,20 @@ test('checks exact profile values when a deny-list is given', () => {
   assert.ok(deny.includes(PHONE.replace(/\s/g, '')))
   assert.equal(scanFile('a.md', 'Written by lovelace', deny).length, 1)
   assert.deepEqual(scanFile('a.md', 'nothing here', deny), [])
+})
+
+test('the deny-list passes the public credit and nothing else with the name', () => {
+  // Assembled here, like the fixtures above, so the name is not in this file's own text.
+  const first = 'Nathan'
+  const surname = ['Pan', 'nell'].join('')
+  const name = `${first} ${surname}`
+  const deny = [name, surname]
+  assert.deepEqual(scanFile('LICENSE', `Copyright (c) 2026 ${name}`, deny), [])
+  assert.deepEqual(scanFile('m.json', `{ "name": "${name}" }`, deny), [])
+  assert.deepEqual(scanFile('a.md', `github.com/${first}${surname}/job-tracker`, deny), [])
+  assert.notDeepEqual(scanFile('a.md', `Written by ${name}`, deny), [])
+  assert.equal(scanFile('a.md', `Dear ${surname}`, deny).length, 1)
+  assert.equal(scanFile('a.md', `github.com/${first}${surname}/other`, deny).length, 1)
 })
 
 test('the repository itself holds no personal data', () => {

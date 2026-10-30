@@ -3,12 +3,18 @@
 
 const FORBIDDEN_EXTENSIONS = ['.pdf', '.tex', '.docx', '.doc', '.rtf']
 const FORBIDDEN_SEGMENTS = ['data/', 'packages/', 'profile/', 'knowledge-base/']
-const SKIPPED = ['vendor/', 'package-lock.json', 'node_modules/']
+const SKIPPED = ['package-lock.json', 'node_modules/']
 const ALLOWED_EMAIL_DOMAINS = [
   'example.com',
   'example.org',
   'anthropic.com',
   'users.noreply.github.com',
+]
+/** The author's public credit: the only places the profile's name may appear. */
+const PUBLIC_CREDIT = [
+  'Copyright (c) 2026 Nathan Pannell',
+  '"name": "Nathan Pannell"',
+  'NathanPannell/job-tracker',
 ]
 
 const PHONE = /(?<![\d.])(?:\+?1[ .-]?)?\(?\d{3}\)?[ .-]\d{3}[ .-]\d{4}(?![\d.])/g
@@ -36,7 +42,10 @@ export function scanFile(path: string, text: string, denyList: readonly string[]
     if (!isAllowed) problems.push(`${path}: contains an email address (${match[0]})`)
   }
   if (LATEX.test(text)) problems.push(`${path}: contains a LaTeX document`)
-  const haystack = text.toLowerCase()
+  const haystack = PUBLIC_CREDIT.reduce(
+    (rest, credit) => rest.replaceAll(credit, ''),
+    text,
+  ).toLowerCase()
   for (const term of denyList) {
     if (term.length >= 4 && haystack.includes(term.toLowerCase())) {
       problems.push(`${path}: contains a profile value from the data folder`)

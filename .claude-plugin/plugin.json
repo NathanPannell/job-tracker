@@ -4,6 +4,8 @@
   "description": "A job-search assistant: a kanban of scored leads, application packages, and a learning loop.",
   "types": "./types/index.d.ts",
   "author": {
-    "name": "job-tracker maintainers"
-  }
+    "name": "Nathan Pannell"
+  },
+  "repository": "https://github.com/NathanPannell/job-tracker",
+  "license": "MIT"
 }

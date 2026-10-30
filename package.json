@@ -3,6 +3,11 @@
   "version": "0.1.0",
   "private": true,
   "description": "Claude Code mod: a job-search kanban, application packages and a learning loop.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/NathanPannell/job-tracker.git"
+  },
   "type": "module",
   "engines": {
     "node": ">=24"
@@ -11,6 +16,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "eslint . --max-warnings=0",
+    "types:engine": "node scripts/write-engine-types.ts",
     "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.node.json",
     "test": "node --test --experimental-test-coverage --test-coverage-lines=95 --test-coverage-branches=90 --test-coverage-functions=95 --test-coverage-include=hooks/lib/** --test-coverage-include=bin/lib/** \"test/**/*.spec.ts\"",
     "test:plugin": "claude plugin test .",
