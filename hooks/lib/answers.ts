@@ -148,10 +148,12 @@ function marked(block: string, heading: string): Question[] {
           ?.trim() ?? ''
       const denied = !bold && NEGATION.test(clause) && DENYING_END.test(clause)
       const words = n === 0 ? plain(before.replace(BLOCK_MARK, '')) : ''
-      const none = !form && !words && NOTHING.test(rest)
+      const blank = NOTHING.test(rest)
+      const none = !form && !words && blank
       const about = !separator && !block.startsWith('#') && ABOUT_MARKER.test(rest)
       if (!asks && (denied || none || about)) return []
-      const named = asks ? rest : ([form, rest, words, heading].find(short) ?? '')
+      const said = blank ? '' : rest
+      const named = asks ? rest : ([form, said, words, heading].find(short) ?? '')
       return [
         {
           text: short(named) || UNNAMED,
