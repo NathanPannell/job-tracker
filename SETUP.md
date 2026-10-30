@@ -88,9 +88,10 @@ The types of every file are in `types/index.d.ts`.
   "NEEDS ANSWER items", it says only "NEEDS ANSWER: none", or it is a heading of its own over the
   questions. These are judgements on wording, and a few unusual shapes can still slip past, so the
   note is a guide and submit still asks what is missing. An optional question counts, since submit
-  asks it. A saved answer clears a question only when its wording matches (case and punctuation
-  aside, up to the question's `?`, and no different after it) and its scope covers the lead: any
-  application, the lead it was asked for, or that exact company. So a card can stay amber on a
+  asks it. A saved answer clears a question only when its wording or the form's matches (case and
+  punctuation aside, up to the `?`, and, on the question's own wording, no different after it) and
+  its scope covers the lead: any application, the lead it was asked for, or that exact company. So
+  a card can stay amber on a
   question submit would not ask again, because submit judges the meaning. A lead with no
   `answers.md` to read, or an empty one, shows no note.
 - **Posting age.** The badge shows the scout's fit score, which never changes with age. A card
