@@ -36,7 +36,7 @@ const USAGE = `jobs <command> [args] [--data <dir>]
                                          record packages/<id>/, render the résumé preview and diff
   preview <id>                           render a package's résumé preview again
   diff <id>                              the tailored résumé against the master
-  submitted <id>                         the person submitted it: move to Applied, follow up in 7 days
+  submitted <id>                         the person submitted it: move to Applied
   propose <json|@file>                   add a learning proposal: 3-10 changes, each decided
                                          on its own (fewer than 3 needs a fewerReason)
   decide <proposal-id> <change-id>|all approve|reject
