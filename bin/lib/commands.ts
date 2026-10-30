@@ -89,7 +89,7 @@ export function list(dir: string, { column, min, limit }: ListOptions = {}): Lea
 }
 
 export function summary(dir: string): Counts {
-  return counts(readData(dir, 'leads'), Date.now())
+  return counts(readData(dir, 'leads'))
 }
 
 /** Everything scout should skip: what is already on the board, in any column. */
@@ -461,17 +461,15 @@ export function rerenderPreview(dir: string, id: string, run?: Run): Application
   })
 }
 
-/** The person submitted it: the card moves to Applied with a follow-up a week out. */
+/** The person submitted it: the card moves to Applied. */
 export function submitted(dir: string, id: string) {
   const at = now()
-  const followUpAt = new Date(Date.now() + 7 * 86_400_000).toISOString()
   return transact(dir, data => {
     const moved = moveLead(data.leads, id, 'applied', at, 'submit')
     if (moved.error || !moved.event) throw new Error(moved.error ?? `No lead ${id}`)
-    const leads = patchLead(moved.leads, id, { followUpAt }, at, 'submit').leads
     return {
       write: {
-        leads,
+        leads: moved.leads,
         applications: {
           ...data.applications,
           applications: data.applications.applications.map(one =>
@@ -482,7 +480,7 @@ export function submitted(dir: string, id: string) {
         },
         feedback: appendEvent(data.feedback, moved.event),
       },
-      result: { id, followUpAt },
+      result: { id },
     }
   })
 }

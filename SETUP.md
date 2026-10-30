@@ -111,8 +111,8 @@ The types of every file are in `types/index.d.ts`.
   and date, in `profile/knowledge-base/application-answers.md`; `package` and `submit` read it
   first, so a question you have answered once is not asked again. Account creation, sign-ins,
   passwords, CAPTCHAs and agreements are handed back to you with everything ready to paste.
-- The band above the prompt reads `● N new leads · M ready to review · K follow-ups due`; click it
-  to open the board. It is hidden when all three are zero.
+- The band above the prompt reads `● N new leads · M ready to review`; click it to open the
+  board. It is hidden when both are zero.
 - In an unrelated conversation, the first reply ends with one short line naming the top new leads,
   at most once per conversation and never within three hours of the last mention.
 - On mobile the board and packages are view-only.

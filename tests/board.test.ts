@@ -1689,14 +1689,13 @@ describe('kanban', () => {
 })
 
 describe('band', () => {
-  test('counts new leads, packages to review and follow-ups due; hidden when all zero', async ($, on) => {
+  test('counts new leads and packages to review', async ($, on) => {
     world(on, {
       leads: [
         lead('a-1'),
         lead('b-2'),
         lead('c-3', { column: 'ready' }),
-        lead('d-4', { column: 'applied', followUpAt: '2026-10-01T00:00:00.000Z' }),
-        lead('e-5', { column: 'applied', followUpAt: '2026-12-01T00:00:00.000Z' }),
+        lead('d-4', { column: 'applied' }),
       ],
     })
     await start($)
@@ -1714,9 +1713,8 @@ describe('band', () => {
           view: {},
         },
       })
-      expect(
-        await band.find({ text: /2 new leads · 1 ready to review · 1 follow-up due/ }),
-      ).toBeDefined()
+      expect(await band.find({ text: /2 new leads · 1 ready to review/ })).toBeDefined()
+      expect(await band.find({ text: /follow-up/ })).toBeUndefined()
       await band.unmount()
     }
   })

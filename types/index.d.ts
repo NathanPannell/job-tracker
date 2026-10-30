@@ -60,7 +60,6 @@ export type Lead = {
   postedAt?: string
   /** When the nudge named this lead in a conversation. */
   mentionedAt?: string
-  followUpAt?: string
   /** The person's correction of the score, kept beside the original. */
   scoreCorrection?: 'too-high' | 'too-low'
   closesAt?: string

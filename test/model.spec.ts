@@ -162,7 +162,22 @@ test('a lead saved while snoozing existed loses its snooze date, and every New l
   assert.equal(migrated.leads[0]?.history.length, legacy.leads[0]?.history.length)
   assert.equal(migrated.leads[1], legacy.leads[1])
   assert.equal(migrateLeads(migrated, AT), migrated)
-  assert.equal(counts(legacy, NOW).newLeads, 2)
+  assert.equal(counts(legacy).newLeads, 2)
+})
+
+test('a lead saved with a follow-up date loses it and keeps its history', () => {
+  const file = seeded([{}, {}])
+  const legacy: LeadsFile = {
+    ...file,
+    leads: file.leads.map((one, n) =>
+      n === 0 ? ({ ...one, followUpAt: '2026-10-29T00:00:00.000Z' } as Lead) : one,
+    ),
+  }
+  const migrated = migrateLeads(legacy, AT)
+  assert.ok(migrated.leads.every(one => !('followUpAt' in one)))
+  assert.equal(migrated.leads[0]?.history.length, legacy.leads[0]?.history.length)
+  assert.equal(migrated.leads[1], legacy.leads[1])
+  assert.equal(migrateLeads(migrated, AT), migrated)
 })
 
 test('patchLead validates, moves and records the fields it changed', () => {
@@ -461,21 +476,12 @@ test('counts and the band line', () => {
   const file = seeded([{}, {}, {}])
   const [a, b, c] = file.leads.map(lead => lead.id) as [string, string, string]
   let next = moveLead(file, b, 'ready', AT, 'package').leads
-  next = patchLead(
-    moveLead(next, c, 'applied', AT, 'submit').leads,
-    c,
-    { followUpAt: AT },
-    AT,
-    'submit',
-  ).leads
-  const c1 = counts(next, NOW)
-  assert.deepEqual(c1, { newLeads: 1, readyToReview: 1, followUpsDue: 1 })
-  assert.equal(bandText(c1), '1 new lead · 1 ready to review · 1 follow-up due')
-  assert.equal(
-    bandText({ newLeads: 2, readyToReview: 0, followUpsDue: 2 }),
-    '2 new leads · 0 ready to review · 2 follow-ups due',
-  )
-  assert.equal(bandText({ newLeads: 0, readyToReview: 0, followUpsDue: 0 }), undefined)
+  next = moveLead(next, c, 'applied', AT, 'submit').leads
+  const c1 = counts(next)
+  assert.deepEqual(c1, { newLeads: 1, readyToReview: 1 })
+  assert.equal(bandText(c1), '1 new lead · 1 ready to review')
+  assert.equal(bandText({ newLeads: 2, readyToReview: 0 }), '2 new leads · 0 ready to review')
+  assert.equal(bandText({ newLeads: 0, readyToReview: 0 }), undefined)
   assert.equal(columnLeads(next, 'new')[0]?.id, a)
 })
 
