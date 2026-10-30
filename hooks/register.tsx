@@ -698,7 +698,7 @@ export const register: Register = on => {
     await $.tool.register({
       name: 'update_lead',
       description:
-        "Changes one lead on the person's job board: move it to a column, rescore it, add notes, set a follow-up date, or write its company blurb, tagline and role highlights. Moving to passed needs passReason.",
+        "Changes one lead on the person's job board: move it to a column, rescore it, add notes, or write its company blurb, tagline and role highlights. Moving to passed needs passReason.",
       inputSchema: {
         type: 'object',
         required: ['id'],
@@ -725,7 +725,6 @@ export const register: Register = on => {
           },
           notes: { type: 'string' },
           passReason: { type: 'string' },
-          followUpAt: { type: 'string', description: 'ISO date' },
         },
       },
     })
@@ -776,7 +775,7 @@ export const register: Register = on => {
     await refresh($)
     await show($, { kind: 'board' })
     const opened = await openPane($)
-    const c = counts({ version: 1, leads: (await read($, board)).leads }, await $.clock.now())
+    const c = counts({ version: 1, leads: (await read($, board)).leads })
     return {
       text: opened.isPlaced
         ? `Opened the job board: ${bandText(c) ?? 'nothing new'}.`
@@ -929,7 +928,7 @@ export const register: Register = on => {
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     if (e.props.hasSurvey) return next(e)
     const current = await read($, board)
-    const text = bandText(counts({ version: 1, leads: current.leads }, current.loadedAt))
+    const text = bandText(counts({ version: 1, leads: current.leads }))
     if (!text) return next(e)
     const { Box, Button, Text } = $.ui.resolve(e)
     const isReadOnly = e.surface === 'mobile'

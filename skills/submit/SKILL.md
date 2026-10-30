@@ -99,8 +99,7 @@ step here.
    not click submit, send, apply or confirm before the person answers.
 7. Only after the person replies yes, "submit" or "submit all" in this conversation, covering this
    lead: click the final submit, wait for the confirmation page, save its text and the time to
-   `packages/<id>/submission.md`, and run `jobs submitted <id>` (moves the card to Applied and
-   sets a follow-up a week out). Reply with the confirmation in one line per lead, then list
+   `packages/<id>/submission.md`, and run `jobs submitted <id>` (moves the card to Applied). Reply with the confirmation in one line per lead, then list
    anything the batch still needs as in step 4.
 8. If they say no or want changes: make the changes (saving any new answer as in step 5), show
    the checklist again, and ask again. If they stop, leave the tab as it is and change nothing on

@@ -21,14 +21,12 @@ Keep the board in step with the inbox and the calendar. You read; the person dec
 3. Search Google Calendar for the next 30 days for events naming those companies (interviews,
    screens).
 4. Propose moves in one table: lead, what you found (one line, with the date and sender), the
-   proposed column (Interviewing, Offer, Archived for a rejection) and a follow-up date if one is
-   implied. A ghosted lead with a reply moves back like any other (to Interviewing, Offer, or
-   stays Archived for a rejection). Also list Applied leads with no reply after 7 days as "follow-up due" and suggest a
-   follow-up date. Ask: "Apply these moves?"
+   proposed column (Interviewing, Offer, Archived for a rejection). A ghosted lead with a reply
+   moves back like any other (to Interviewing, Offer, or stays Archived for a rejection). Ask:
+   "Apply these moves?"
 5. After the person confirms (all, or the ones they name): for each, run
    `jobs move <id> <column> --by sync --note "<what you found>"` and record the outcome with
    `jobs feedback '{"leadId":"<id>","kind":"outcome","reason":"<rejection|screen|interview|offer>: <one line>"}'`.
-   For follow-ups, `jobs patch <id> '{"followUpAt":"<ISO date>"}' --by sync`.
 6. Reply with what changed in two lines.
 
 ## Rules

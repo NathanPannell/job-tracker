@@ -156,7 +156,7 @@ test('a batch is refused whole when any item is, and its ref checks add up', () 
     checks(
       batch(
         { name: 'form_input', input: { tabId: 11, ref: 'ref_1', value: 'Nathan' } },
-        { name: 'form_input', input: { tabId: 11, ref: 'ref_2', value: 'Pannell' } },
+        { name: 'form_input', input: { tabId: 11, ref: 'ref_2', value: 'Tester' } },
         { name: 'computer', input: { tabId: 11, action: 'left_click', ref: 'ref_3' } },
       ),
     ),

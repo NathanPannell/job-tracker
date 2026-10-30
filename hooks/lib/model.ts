@@ -739,7 +739,6 @@ export type LeadPatch = Partial<
     | 'tagline'
     | 'roleHighlights'
     | 'notes'
-    | 'followUpAt'
     | 'comp'
     | 'location'
     | 'url'
@@ -757,7 +756,6 @@ const PATCH_KEYS: readonly (keyof LeadPatch)[] = [
   'tagline',
   'roleHighlights',
   'notes',
-  'followUpAt',
   'comp',
   'location',
   'url',
@@ -986,16 +984,20 @@ const RETIRED_COLUMNS: Readonly<Record<string, Column>> = { shortlisted: 'new' }
  */
 export function migrateLeads(file: LeadsFile, at: string): LeadsFile {
   const retired = (lead: Lead): Column | undefined => RETIRED_COLUMNS[lead.column]
-  // Snoozing was removed: a lead keeps its history, but not the date it was snoozed until.
-  const hasSnoozeDate = (lead: Lead) => 'snoozedUntil' in lead
-  if (!file.leads.some(lead => retired(lead) || hasSnoozeDate(lead))) return file
+  // Snoozing and follow-up dates were removed: a lead keeps its history, but not those dates.
+  const hasRetiredField = (lead: Lead) => 'snoozedUntil' in lead || 'followUpAt' in lead
+  if (!file.leads.some(lead => retired(lead) || hasRetiredField(lead))) return file
   return {
     ...file,
     leads: file.leads.map(lead => {
-      const { snoozedUntil, ...kept } = lead as Lead & { snoozedUntil?: string }
+      const { snoozedUntil, followUpAt, ...kept } = lead as Lead & {
+        snoozedUntil?: string
+        followUpAt?: string
+      }
       void snoozedUntil
+      void followUpAt
       const to = retired(lead)
-      if (!to) return hasSnoozeDate(lead) ? kept : lead
+      if (!to) return hasRetiredField(lead) ? kept : lead
       const note = `${lead.column} was removed from the board`
       return {
         ...kept,
@@ -1019,32 +1021,25 @@ export function appendEvent(file: FeedbackFile, event: FeedbackEvent): FeedbackF
   return { ...file, events: [...file.events, event] }
 }
 
-export type Counts = { newLeads: number; readyToReview: number; followUpsDue: number }
+export type Counts = { newLeads: number; readyToReview: number }
 
-export function counts(file: LeadsFile, now: number): Counts {
+export function counts(file: LeadsFile): Counts {
   let newLeads = 0
   let readyToReview = 0
-  let followUpsDue = 0
   for (const lead of file.leads) {
     if (lead.column === 'new') newLeads += 1
     if (lead.column === 'ready') readyToReview += 1
-    const isWaiting = lead.column === 'applied' || lead.column === 'interviewing'
-    if (isWaiting && lead.followUpAt !== undefined && Date.parse(lead.followUpAt) <= now) {
-      followUpsDue += 1
-    }
   }
-  return { newLeads, readyToReview, followUpsDue }
+  return { newLeads, readyToReview }
 }
 
 /** The band's line, or undefined when there is nothing to say. */
 export function bandText(c: Counts): string | undefined {
-  if (c.newLeads + c.readyToReview + c.followUpsDue === 0) return undefined
+  if (c.newLeads + c.readyToReview === 0) return undefined
   const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`
-  return [
-    plural(c.newLeads, 'new lead', 'new leads'),
-    `${c.readyToReview} ready to review`,
-    plural(c.followUpsDue, 'follow-up due', 'follow-ups due'),
-  ].join(' · ')
+  return [plural(c.newLeads, 'new lead', 'new leads'), `${c.readyToReview} ready to review`].join(
+    ' · ',
+  )
 }
 
 /** Best first by fit score. */

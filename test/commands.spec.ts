@@ -382,8 +382,8 @@ test('a package is registered with its diff, draft snapshot and files, then subm
   commands.registerPackage(dir, id, { redraft: true })
   assert.equal(commands.edits(dir).length, 0)
 
-  const done = commands.submitted(dir, id)
-  assert.ok(done.followUpAt)
+  assert.deepEqual(commands.submitted(dir, id), { id })
+  assert.ok(!('followUpAt' in (readData(dir, 'leads').leads[0] ?? {})))
   assert.equal(readData(dir, 'leads').leads[0]?.column, 'applied')
   assert.equal(readData(dir, 'applications').applications[0]?.status, 'submitted')
   assert.throws(() => commands.submitted(dir, 'missing'), /No lead/)
