@@ -1,4 +1,4 @@
-// The one writer of the data folder. Every change takes a lock, reads the files, applies a pure
+// The one writer of the board's state files. Every change takes a lock, reads the files, applies a pure
 // function from hooks/lib/model.ts and renames a temporary file over the old one, so the
 // scheduled skills and the pane can write at the same time without losing either change.
 import {
@@ -174,6 +174,8 @@ export function transact<R>(dir: string, fn: (data: Data) => Change<R>): R {
 export function init(dir: string): string {
   for (const sub of ['profile', 'packages', 'scout']) mkdirSync(join(dir, sub), { recursive: true })
   return transact(dir, data => {
+    const boards = join(dir, 'profile', 'ats-boards.json')
+    if (!existsSync(boards)) writeAtomic(boards, '[]\n')
     const missing = (Object.keys(FILES) as DataName[]).filter(
       name => !existsSync(join(dir, FILES[name])),
     )

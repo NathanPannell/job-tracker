@@ -40,13 +40,22 @@ test('the deny-list passes the public credit and nothing else with the name', ()
   const first = 'Nathan'
   const surname = ['Pan', 'nell'].join('')
   const name = `${first} ${surname}`
+  const slug = `${first}${surname}/job-tracker`
   const deny = [name, surname]
+  const manifest = '.claude-plugin/plugin.json'
   assert.deepEqual(scanFile('LICENSE', `Copyright (c) 2026 ${name}`, deny), [])
-  assert.deepEqual(scanFile('m.json', `{ "name": "${name}" }`, deny), [])
-  assert.deepEqual(scanFile('a.md', `github.com/${first}${surname}/job-tracker`, deny), [])
-  assert.notDeepEqual(scanFile('a.md', `Written by ${name}`, deny), [])
+  assert.deepEqual(scanFile(manifest, `{ "name": "${name}" }`, deny), [])
+  assert.deepEqual(scanFile('README.md', `git clone https://github.com/${slug}.git`, deny), [])
+  assert.deepEqual(scanFile(manifest, `"repository": "https://github.com/${slug}"`, deny), [])
+  // Elsewhere in a credited file, and everywhere in any other file.
+  assert.notDeepEqual(scanFile('README.md', `Written by ${name}`, deny), [])
+  assert.notDeepEqual(scanFile('LICENSE', `Copyright (c) 2025 ${name}`, deny), [])
+  assert.equal(scanFile('README.md', `github.com/${slug}-private`, deny).length, 1)
+  assert.equal(scanFile('README.md', `github.com/${slug}-data/leads`, deny).length, 1)
+  assert.equal(scanFile('README.md', `github.com/${first}${surname}/dotfiles`, deny).length, 1)
+  assert.notDeepEqual(scanFile('test/a.spec.ts', `{ "name": "${name}" }`, deny), [])
+  assert.notDeepEqual(scanFile('LICENSE.md', `Copyright (c) 2026 ${name}`, deny), [])
   assert.equal(scanFile('a.md', `Dear ${surname}`, deny).length, 1)
-  assert.equal(scanFile('a.md', `github.com/${first}${surname}/other`, deny).length, 1)
 })
 
 test('the repository itself holds no personal data', () => {

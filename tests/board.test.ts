@@ -1698,6 +1698,7 @@ describe('band', () => {
         lead('d-4', { column: 'applied' }),
       ],
     })
+    on('ui.render', { component: 'AbovePrompt' }, ($, e) => $.ui.resolve(e).Box({ key: 'engine' }))
     await start($)
     for (const surface of ['terminal', 'desktop', 'mobile'] as const) {
       const band = await $.ui.mount({
@@ -1717,6 +1718,27 @@ describe('band', () => {
       expect(await band.find({ text: /follow-up/ })).toBeUndefined()
       await band.unmount()
     }
+  })
+
+  test('keeps what the plugins beneath it drew', async ($, on) => {
+    world(on, { leads: [lead('a-1', { column: 'new' })] })
+    on('ui.render', { component: 'AbovePrompt' }, ($, e) => $.ui.resolve(e).Box({ key: 'engine' }))
+    await start($)
+    const band = await $.ui.mount({
+      plugin: 'job-tracker',
+      surface: 'desktop',
+      component: 'AbovePrompt',
+      props: {
+        hasSurvey: false,
+        isWorking: false,
+        maxRows: 10,
+        bodyColumns: 100,
+        scroll: { offset: 0, bodyRows: 10 },
+        view: {},
+      },
+    })
+    expect(await band.find({ text: /1 new lead/ })).toBeDefined()
+    expect(await band.find({ key: 'engine' })).toBeDefined()
   })
 
   test('draws nothing of its own with nothing to say', async ($, on) => {

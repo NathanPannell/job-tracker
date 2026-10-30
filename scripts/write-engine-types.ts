@@ -14,6 +14,7 @@ const API = join(TYPES, 'claude-code', 'index.d.ts')
 const WRITTEN = [API, join(TYPES, 'claude-code-tools', 'index.d.ts'), join(TYPES, 'tsconfig.json')]
 const WAIT_MS = 60_000
 const POLL_MS = 200
+const KILL_MS = 5_000
 
 rmSync(TYPES, { recursive: true, force: true })
 const config = mkdtempSync(join(tmpdir(), 'job-tracker-types-'))
@@ -26,6 +27,8 @@ const engine = spawn(
       ...process.env,
       CLAUDE_CONFIG_DIR: config,
       CLAUDE_CODE_PLUGIN_DIRS: '',
+      // A headless session writes them only with this set.
+      CLAUDE_CODE_PLUGIN_DIR_WATCH: '1',
       JOB_TRACKER_DATA: '',
       ANTHROPIC_API_KEY: 'unused',
       ANTHROPIC_BASE_URL: 'http://127.0.0.1:9',
@@ -48,6 +51,7 @@ while (!isWritten() && engine.exitCode === null && Date.now() - started < WAIT_M
 // The engine may be part way through the last file it saw through.
 await new Promise(resolve => setTimeout(resolve, POLL_MS))
 engine.kill()
+setTimeout(() => engine.kill('SIGKILL'), KILL_MS).unref()
 await exited
 rmSync(config, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 })
 

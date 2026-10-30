@@ -105,6 +105,11 @@ test('reachable means Canada, or remote without another country named', () => {
   })
   assert.ok(isReachable(at('Victoria, BC')))
   assert.ok(isReachable(at('Remote (Canada)')))
+  assert.ok(isReachable(at('Halifax, NS')))
+  assert.ok(isReachable(at('Mississauga, Ontario')))
+  assert.ok(isReachable(at('Sherbrooke, QC')))
+  assert.ok(isReachable(at('Guelph ON')))
+  assert.ok(isReachable(at('Hybrid - Montréal')))
   assert.ok(isReachable(at('CAN - Remote')))
   assert.ok(isReachable(at('Remote')))
   assert.ok(isReachable(at('')))
@@ -112,6 +117,9 @@ test('reachable means Canada, or remote without another country named', () => {
   assert.ok(!isReachable(at('San Francisco / New York · Remote')))
   assert.ok(!isReachable(at('Sydney · Remote')))
   assert.ok(!isReachable(at('Berlin')))
+  assert.ok(!isReachable(at('Amsterdam, NL')))
+  assert.ok(!isReachable(at('Ontario, CA')))
+  assert.ok(!isReachable(at('Lima, PE')))
 })
 
 const fakeFetch =
@@ -136,6 +144,7 @@ test('fetchBoards reports a failing board without failing the rest', async () =>
 test('jobs ats writes the reachable postings not already on the board; probe finds boards', async () => {
   const dir = join(root, 'data')
   commands.init(dir)
+  rmSync(join(dir, 'profile', 'ats-boards.json'))
   await assert.rejects(commands.ats(dir, { fetcher: fakeFetch({}) }), /ats-boards\.json/)
   mkdirSync(join(dir, 'profile'), { recursive: true })
   writeFileSync(

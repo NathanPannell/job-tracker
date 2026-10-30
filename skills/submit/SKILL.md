@@ -15,7 +15,7 @@ chat, every time.
 - The lead must be in Ready to review with a package (`jobs list --column ready`). If it is not,
   say so and stop.
 - Read first `profile/knowledge-base/application-answers.md` (see "Saved answers" below; it may
-  not exist yet), then `packages/<id>/answers.md`, `cover-letter.md`, `posting.md`, and the
+  not exist yet), then `profile/learnings.md`, `packages/<id>/answers.md`, `cover-letter.md`, `posting.md`, and the
   identity and links in `profile/knowledge-base/profile.md`.
 
 ## Where it runs
@@ -159,9 +159,7 @@ Left blank on purpose:
 ## Drafted answers
 
 A free-text answer you draft for a form, or suggest to the person, is 2–3 sentences in their
-voice, from the record only, never several paragraphs. Bring up Claude Code or agentic work only
-when the question is about AI, automation or tooling; otherwise answer from the rest of the
-record.
+voice, from the record only, never several paragraphs.
 
 ## Saved answers
 
