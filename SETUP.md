@@ -1,8 +1,12 @@
 # Setup and daily use
 
+Installing from scratch: follow [INSTALL.md](INSTALL.md). This file covers how the install works
+and daily use.
+
 ## What it is
 
-- **Skills** (in `skills/`) do the work: `scout` finds and scores roles, `package` drafts an
+- **Skills** (in `skills/`) do the work: `onboard` builds the profile from a résumé, writing
+  samples and an interview, `scout` finds and scores roles, `package` drafts an
   application, `submit` prefills it in Chrome and waits for your yes, `sync` reads Gmail and
   Calendar for replies, `learn` turns a week of feedback into a proposal.
 - **The mod** (`hooks/register.tsx`) is the interface: the `/jobs` kanban pane, the band above
@@ -21,7 +25,8 @@ through the `env` block of `~/.claude/settings.json`:
   "env": {
     "CLAUDE_CODE_PLUGIN_DIRS": "C:\\repo\\job-tracker-workspace\\job-tracker",
     "JOB_TRACKER_HOME": "C:\\repo\\job-tracker-workspace\\job-tracker",
-    "JOB_TRACKER_DATA": "C:\\repo\\job-tracker-workspace\\data"
+    "JOB_TRACKER_DATA": "C:\\repo\\job-tracker-workspace\\data",
+    "CLAUDE_CODE_PLUGIN_DIR_WATCH": "1"
   }
 }
 ```
@@ -31,6 +36,8 @@ through the `env` block of `~/.claude/settings.json`:
   session picks them up when it starts.
 - `JOB_TRACKER_HOME` is where the skills find `bin/jobs.ts`.
 - `JOB_TRACKER_DATA` is the data folder (below).
+- `CLAUDE_CODE_PLUGIN_DIR_WATCH` reloads the mod when its files change, and writes the reasons for
+  any refused hook into the transcript.
 
 The checkout stays on the `staging` branch; after a PR merges, `git pull` in it updates every new
 session. It needs Node 24 or newer on `PATH` (the CLI is TypeScript run by Node directly) and, for
@@ -41,15 +48,15 @@ résumés, a LaTeX install with `pdflatex`, `pdfinfo` and `pdftocairo` (MiKTeX s
 `JOB_TRACKER_DATA` (here `C:\repo\job-tracker-workspace\data`), outside every git repository.
 The repo's `.gitignore` and the `check:personal-data` CI job keep it out of git.
 
-| Path                  | What                                                                                                                                                                                                                                                                |
-| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `leads.json`          | The board: one entry per posting, its column, score, reason and history                                                                                                                                                                                             |
-| `applications.json`   | One entry per package and its files                                                                                                                                                                                                                                 |
-| `feedback.json`       | Passes, score corrections, moves and outcomes, for `learn`                                                                                                                                                                                                          |
-| `proposals.json`      | Weekly learning proposals and their status                                                                                                                                                                                                                          |
-| `packages/<lead-id>/` | `resume.tex`, `resume.pdf`, `cover-letter.md`, `answers.md`, `company-brief.md`, `warm-intro.md`, `posting.md`, `sources.md`, `preview/` (the pane's résumé pages) and `.draft/` (the draft as written, so `learn` can see your edits)                              |
-| `profile/`            | The career record copied from the Resume Revamp folder, plus `preferences.md`, `learnings.md`, `target-companies.md`, `ats-boards.json`, `OPEN-QUESTIONS.md` and `knowledge-base/application-answers.md` (your answers to application questions, saved by `submit`) |
-| `scout/`              | Each run's raw candidates, `runs.md` (one line per run), `signals.md` (funding news), `gmail-cursor.json` (where Gmail reading stopped) and learn's proposal files                                                                                                  |
+| Path                  | What                                                                                                                                                                                                                                                                                                                                                                               |
+| --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `leads.json`          | The board: one entry per posting, its column, score, reason and history                                                                                                                                                                                                                                                                                                            |
+| `applications.json`   | One entry per package and its files                                                                                                                                                                                                                                                                                                                                                |
+| `feedback.json`       | Passes, score corrections, moves and outcomes, for `learn`                                                                                                                                                                                                                                                                                                                         |
+| `proposals.json`      | Weekly learning proposals and their status                                                                                                                                                                                                                                                                                                                                         |
+| `packages/<lead-id>/` | `resume.tex`, `resume.pdf`, `cover-letter.md`, `answers.md`, `company-brief.md`, `warm-intro.md`, `posting.md`, `sources.md`, `preview/` (the pane's résumé pages) and `.draft/` (the draft as written, so `learn` can see your edits)                                                                                                                                             |
+| `profile/`            | The career record written by `onboard`: `master-resume.tex`, `resume-format-template.tex`, `resume-generation-rules.md`, `voice.md`, `cover-letter-prompts.md`, `sources/`, `preferences.md`, `learnings.md`, `target-companies.md`, `ats-boards.json`, `OPEN-QUESTIONS.md` and `knowledge-base/application-answers.md` (your answers to application questions, saved by `submit`) |
+| `scout/`              | Each run's raw candidates, `runs.md` (one line per run), `signals.md` (funding news), `gmail-cursor.json` (where Gmail reading stopped) and learn's proposal files                                                                                                                                                                                                                 |
 
 The types of every file are in `types/index.d.ts`.
 
@@ -121,6 +128,7 @@ The types of every file are in `types/index.d.ts`.
 
 Ask in any session:
 
+- "Use the job-tracker:onboard skill" — build the profile, or add a new job or project to it.
 - "Use the job-tracker:scout skill" — find and score new roles now.
 - "Draft a package for lead `<id>`" — or press Draft package on the card. Either way it runs in
   a background subagent.
@@ -141,14 +149,20 @@ Ashby board, add `{ "company", "ats", "slug" }` to `profile/ats-boards.json`
 
 ## The schedule
 
-Two desktop scheduled tasks run the skills in their own sessions:
+Desktop scheduled tasks run the skills in their own sessions. [INSTALL.md](INSTALL.md) has their
+prompts:
 
-- `job-tracker-scout`: weekdays at 8:00, 12:00 and 16:00 local time (`0 8,12,16 * * 1-5`).
+- `job-tracker-scout`: weekdays at 8:00, 12:00, 16:00 and 20:00 local time (`0 8,12,16,20 * * 1-5`).
+- `job-tracker-scout-weekend`: Saturdays and Sundays at 12:00 (`0 12 * * 0,6`).
 - `job-tracker-learn`: Sundays at 18:00 (`0 18 * * 0`).
+- `job-tracker-tsenta` (optional): daily at 8:30, 11:30, 14:30, 17:30 and 20:30 (`30 8,11,14,17,20 * * *`).
+
+If the scheduler runs in a different time zone from the PC, set each cron by the offset, and check
+the next run time after any change.
 
 To pause, open the desktop app's scheduled tasks (sidebar → Scheduled) and turn the task off, or
 ask Claude to disable `job-tracker-scout`. Turn it back on the same way. Deleting the task stops it
-for good; re-create it with the same prompt ("Use the job-tracker:scout skill.") and cron.
+for good; re-create it with the same prompt and cron.
 
 ## Developing
 

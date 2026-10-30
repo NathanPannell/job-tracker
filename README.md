@@ -12,3 +12,13 @@ An application with no reply a month after it was submitted is marked ghosted on
 This repository holds code only. Profiles, résumés, leads and packages live in a data
 folder outside it; CI fails if personal data is committed. [SETUP.md](SETUP.md) covers how
 it loads, running each skill, editing preferences, where data lives and pausing the schedule.
+
+## Install
+
+Open [INSTALL.md](INSTALL.md), copy its address, open Claude Code in the Claude desktop app, and
+say:
+
+> Read INSTALL.md at <the address you copied> and set this up for me.
+
+It walks Claude through everything outside the code, and the `onboard` skill builds your profile
+from your résumé, your writing and a short interview.
