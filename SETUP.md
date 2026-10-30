@@ -81,12 +81,14 @@ The types of every file are in `types/index.d.ts`.
   Pass… · Archive · Draft package, then feedback (Score too high / too low).
 - **Ready notes.** The note counts the distinct `NEEDS ANSWER` questions in the package's
   `answers.md`, leaving out any that `profile/knowledge-base/application-answers.md` already
-  answers, matched on the question's wording (case and punctuation aside) and within the saved
-  answer's scope. An optional question still counts, since submit asks it. So the note clears
-  when you reply, though `answers.md` stays as drafted. The lead's own page names the questions.
-  The note is worked out when the board refreshes and is never saved. A saved answer worded
-  differently from the question does not match: the card stays amber, and submit, which judges the
-  meaning, still does not ask it again. A lead with no `answers.md` to read shows no note.
+  answers. So it clears when you reply, though `answers.md` stays as drafted. The lead's own page
+  names the questions. The note is worked out when the board refreshes and is never saved. It
+  leans towards asking, because a wrong "Ready to submit" costs more than a wrong count: any
+  marker counts unless a sentence plainly says nothing is open, an optional question counts since
+  submit asks it, and a saved answer clears a question only when its wording matches (case and
+  punctuation aside) and its scope covers the lead: any application, the lead it was asked for, or
+  that exact company. So a card can stay amber on a question submit would not ask again, because
+  submit judges the meaning. A lead with no `answers.md` to read, or an empty one, shows no note.
 - **Posting age.** The badge shows the scout's fit score, which never changes with age. A card
   shows how long ago the lead was added and, when the source gives a posting date (Greenhouse,
   Lever and Ashby boards do), how long ago the posting went up, e.g. `added 3d · posted 9d`.

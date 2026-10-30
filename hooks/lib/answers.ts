@@ -2,6 +2,8 @@
 // the record cannot answer with `NEEDS ANSWER:`; older packages wrote the marker inline, bold, in
 // table cells and under a heading, and are never redrafted. The submit skill leaves `answers.md`
 // as drafted and saves replies to the shared record, so a question answered there stops counting.
+// A wrong "Ready to submit" costs more than a wrong count, so a marker counts unless it is plainly
+// prose about the marker, and a saved answer clears a question only on a clear match.
 // Nothing here touches a file; the callers read.
 
 import type { Lead } from '../../types/index.d.ts'
@@ -9,20 +11,45 @@ import type { Lead } from '../../types/index.d.ts'
 /** The person's saved answers, relative to the data folder (skills/submit/SKILL.md). */
 export const SAVED_ANSWERS = 'profile/knowledge-base/application-answers.md'
 
-/** A question as drawn, and the normalised forms it can be matched by. */
+/** A question as drawn, and the normalised forms it is matched by; the first is its identity. */
 export type Question = { text: string; keys: string[] }
 
-/** One entry of the saved answers. `companies` is absent when its scope is not company-only. */
+/**
+ * One entry of the saved answers. `companies` is absent for any application; empty, when the
+ * scope names none it can read, the entry covers only the lead it was asked for.
+ */
 export type SavedAnswer = { key: string; leadId?: string; companies?: string[] }
 
-/**
- * The marker where it marks a question, not where prose mentions it: never in backticks or after
- * a word ("left as NEEDS ANSWER"). A colon, or a bold one around it, introduces the question.
- */
-const MARKER = /(?<![\w`] ?)NEEDS ANSWER(?: \(optional\))?\**(:?)\**/g
+const MARKER = /(?<![\p{L}\p{N}])NEEDS\s+ANSWERS?(?![\p{L}\p{N}])/gu
+
+/** A heading of the marker alone: a label over what follows, not a question of its own. */
+const SECTION = /^#+\s*[*_`]*NEEDS\s+ANSWERS?[*_`:\s]*(?:\([^)]*\)[*_`:\s]*)?$/u
+
+/** What closes the marker: emphasis, a note in brackets, and the separator before the question. */
+const AFTER_MARKER = /^[\s*_`)\]]*(?:\([^)]*\)[\s*_`)\]]*)?([:—–-]?)[\s*_`]*/
+
+/** Words that make a sentence about the marker a statement that nothing is open. */
+const NEGATION = /\b(?:no|not|nothing|none|never|without)\b/i
+
+/** What says the marker is being talked about: "NEEDS ANSWER items". */
+const ABOUT_MARKER = /^(?:items?|questions?|entries|fields?|lines?|markers?)\b/i
+
+/** An entry that says there is nothing to answer. */
+const NOTHING = /^(?:none|nothing|n\/a|no (?:open |more )?questions?)\b/i
+
+/** A note in brackets at the end of a question, as opposed to brackets that tell two apart. */
+const NOTE = /\s*\((?:required|optional|if\b|any\b|not\b|no\b|see\b)[^)]*\)?$/i
+
+/** A heading's hashes, or a list item's bullet or number. */
+const BLOCK_MARK = /^(?:#+|[-*+]|\d+[.)])\s+/
+
+/** What the card names a marker by when the file gives it no words at all. */
+export const UNNAMED = 'A question with no wording, see the Answers tab'
 
 /** A line that starts a new block rather than continuing the one above. */
 const BLOCK_START = /^(?:#|\||[-*+] |\d+[.)] )/
+
+const hasMarker = (text: string) => text.search(MARKER) >= 0
 
 /** Lower case, no accents, words and digits only: how two wordings of a question are compared. */
 const key = (text: string) =>
@@ -36,9 +63,16 @@ const key = (text: string) =>
 /** Markdown's emphasis and code marks out, and all space collapsed. */
 const plain = (text: string) => text.replace(/[*`]/g, '').replace(/\s+/g, ' ').trim()
 
-/** The question alone, without the note after it: up to its `?`, or its first sentence. */
+/**
+ * The question without what follows it: up to its `?`, or without its first sentence's end, a
+ * closing note and trailing punctuation. A stop after an initial ("U.S.") ends no sentence.
+ */
 const short = (text: string) =>
-  /^.*?\?/.exec(text)?.[0] ?? text.replace(/(?: \(|\.\s|[.:]$).*$/, '').trim()
+  /^.*?\?/.exec(text)?.[0] ??
+  text
+    .replace(/(?<=[a-z)]{2})\.\s.*$/, '')
+    .replace(NOTE, '')
+    .replace(/[\s.:;,([—–-]+$/, '')
 
 /**
  * The file's list items, paragraphs, headings and table rows, each as one string, so that a
@@ -61,69 +95,106 @@ function blocks(markdown: string): string[] {
 }
 
 /**
- * The questions one block marks. Beside the marker's own text a question may have the form's
- * wording: the bold text before the marker, or the row's first cell in a table. A bare marker
- * asks that one, and one with neither (a `## NEEDS ANSWER` heading) asks nothing.
+ * The questions one block marks, skipping prose about the marker: a sentence saying nothing is
+ * open ("left as NEEDS ANSWER", "no `NEEDS ANSWER` items"). Beside the marker's own text a question
+ * may have the form's wording, the bold text before it or the row's first cell; a marker with no
+ * question of its own takes that, or the words before it, or the heading over it.
  */
-function marked(block: string): Question[] {
+function marked(block: string, heading: string): Question[] {
   const row = block.startsWith('|')
   const cells = row ? block.split(/(?<!\\)\|/).map(cell => cell.trim()) : [block]
-  const first = cells.find(cell => /\p{L}/u.test(cell) && !cell.includes('NEEDS ANSWER'))
+  const first = cells.find(cell => /\p{L}/u.test(cell) && !hasMarker(cell))
   return cells.flatMap(cell => {
-    const marks = [...cell.matchAll(MARKER)]
-    return marks.flatMap((mark, n) => {
-      const start = mark.index + mark[0].length
-      const rest = plain(cell.slice(start, marks[n + 1]?.index))
-      // Without a colon only an empty remainder marks a question ("NEEDS ANSWER items follow").
-      if (!mark[1] && !/^[\s.]*$/.test(rest)) return []
-      const bold = /\*\*([^*]+)\*\*\s*$/.exec(cell.slice(0, mark.index))?.[1]
-      const form = short(plain((n === 0 && (row ? first : bold)) || ''))
+    const parts = cell.split(MARKER)
+    return parts.slice(1).flatMap((after, n) => {
+      const before = parts[n] ?? ''
+      const [closing = '', separator] = AFTER_MARKER.exec(after) ?? []
+      const rest = plain(after.slice(closing.length))
+      const asks = rest.includes('?')
+      const bold = /\*\*([^*]+)\*\*[\s:—–-]*$/.exec(before)?.[1]
+      const sentence = before.split(/[.!?;:](?:\s|$)/).at(-1) ?? ''
+      const denied = !asks && !bold && NEGATION.test(sentence)
+      if (denied || NOTHING.test(rest) || (!separator && ABOUT_MARKER.test(rest))) return []
+      const form = n === 0 ? short(plain((row ? first : bold) ?? '')) : ''
       const said = short(rest)
-      const text = rest.includes('?') ? said : form || said
-      return text ? [{ text, keys: [said, form].map(key).filter(Boolean) }] : []
+      const words = n === 0 ? short(plain(before.replace(BLOCK_MARK, ''))) : ''
+      const text = asks ? said : form || said || words || heading || UNNAMED
+      const keys = asks ? [said, form] : text === UNNAMED ? [] : [text]
+      return [{ text, keys: keys.map(key).filter(Boolean) }]
     })
   })
 }
 
-/** The distinct questions an `answers.md` marks: one written twice counts once. */
-export function parseQuestions(markdown: string): Question[] {
-  const seen = new Set<string>()
-  return blocks(markdown)
-    .flatMap(marked)
-    .filter(question => {
-      if (question.keys.some(one => seen.has(one))) return false
-      question.keys.forEach(one => seen.add(one))
-      return true
-    })
+/** A block under a bare `## NEEDS ANSWER` that carries no marker of its own. */
+function listed(block: string): Question[] {
+  const text = short(plain(block.replace(BLOCK_MARK, '').replace(/\|/g, ' ')))
+  return /\p{L}/u.test(text) && !NOTHING.test(text) ? [{ text, keys: [key(text)] }] : []
 }
 
-/** The entries of the saved answers that hold an answer. */
+/**
+ * The distinct questions an `answers.md` marks: one written twice counts once. Under a bare
+ * `## NEEDS ANSWER` heading, whose entries may not repeat the marker, each block counts unless one
+ * there does carry it.
+ */
+export function parseQuestions(markdown: string): Question[] {
+  const found: Question[] = []
+  let heading = ''
+  let section = undefined as string[] | undefined
+  const closeSection = () => {
+    found.push(...(section ?? []).flatMap(listed))
+    section = undefined
+  }
+  for (const block of blocks(markdown)) {
+    const title = block.startsWith('#')
+    if (title) closeSection()
+    if (SECTION.test(block)) section = []
+    else if (hasMarker(block)) {
+      const questions = marked(block, heading)
+      if (questions.length > 0) section = undefined
+      found.push(...questions)
+    } else if (!title) section?.push(block)
+    if (title) heading = plain(block.replace(BLOCK_MARK, ''))
+  }
+  closeSection()
+  const seen = new Set<string>()
+  return found.filter(({ keys: [identity] }) => {
+    if (identity === undefined) return true
+    if (seen.has(identity)) return false
+    seen.add(identity)
+    return true
+  })
+}
+
+/** The entries of the saved answers that hold an answer, on the `Answer:` line or quoted below. */
 export function parseSaved(markdown: string): SavedAnswer[] {
   return markdown
     .split(/^## /m)
     .slice(1)
     .flatMap(entry => {
-      if (!/^- Answer:/m.test(entry)) return []
+      if (!/^- Answer:[ \t]*(?:\S|\r?\n\s*>\s*\S)/m.test(entry)) return []
       const scope = /^- Scope:\s*(.*)$/m.exec(entry)?.[1] ?? ''
-      const only = /^(?!any\b)(.+?)\s+only\b/i.exec(scope)?.[1]
+      const only = /^(.+?)[\s-]+only\b/i.exec(scope)?.[1] ?? ''
       const leadId = /^- Asked by:.*\(`([^`]+)`\)/m.exec(entry)?.[1]
       return [
         {
           key: key(short(plain(/^.*/.exec(entry)?.[0] ?? ''))),
           ...(leadId ? { leadId } : {}),
-          ...(only ? { companies: only.split('/').map(key).filter(Boolean) } : {}),
+          ...(/^any application\b/i.test(scope)
+            ? {}
+            : { companies: only.split('/').map(key).filter(Boolean) }),
         },
       ]
     })
 }
 
-/** Whether an entry's scope covers this lead: asked for it, or any application, or its company. */
+/**
+ * Whether an entry's scope covers this lead: any application, the lead it was asked for, or that
+ * exact company, with or without what the lead's name adds in brackets.
+ */
 function covers(entry: SavedAnswer, lead: Pick<Lead, 'id' | 'company'>): boolean {
   if (!entry.companies || entry.leadId === lead.id) return true
-  const company = ` ${key(lead.company)} `
-  return entry.companies.some(
-    name => company.includes(` ${name} `) || ` ${name} `.includes(company),
-  )
+  const names = [key(lead.company), key(lead.company.replace(/\(.*$/, ''))]
+  return entry.companies.some(name => names.includes(name))
 }
 
 /** What a package still needs from the person: its questions with no saved answer that applies. */

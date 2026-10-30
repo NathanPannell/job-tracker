@@ -59,7 +59,7 @@ async function readyQuestions(
 ): Promise<Record<string, string[]>> {
   const ready = leads.flatMap(lead => {
     const app = applications.find(one => one.leadId === lead.id)
-    return lead.column === 'ready' && app?.files.answers
+    return lead.column === 'ready' && app?.files?.answers
       ? [{ lead, path: join(dir, app.dir, app.files.answers) }]
       : []
   })
@@ -71,8 +71,9 @@ async function readyQuestions(
   const entries = parseSaved(saved ?? '')
   return Object.fromEntries(
     ready.flatMap(({ lead }, n) => {
+      // An empty file says as little as a missing one: neither is "nothing to answer".
       const text = answers[n]
-      return text === undefined ? [] : [[lead.id, openQuestions(text, entries, lead)]]
+      return text?.trim() ? [[lead.id, openQuestions(text, entries, lead)]] : []
     }),
   )
 }
@@ -106,7 +107,8 @@ export async function refresh($: EngineInterface, sweep = true): Promise<JobBoar
       dataDir: dir,
       leads: migrated,
       applications: packages,
-      openQuestions: await readyQuestions($, dir, migrated, packages),
+      // The note is an extra: a damaged file costs the notes, never the board.
+      openQuestions: await readyQuestions($, dir, migrated, packages).catch(() => ({})),
       // A proposal saved before per-change decisions reads as one decision per change.
       proposals: (parseOr<ProposalsFile>(proposals, emptyProposals).proposals ?? []).map(
         normalizeProposal,

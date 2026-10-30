@@ -84,11 +84,12 @@ below: nobody can answer you, so never stop to ask a question.
    one line per question, written once in exactly this form:
 
    ```markdown
-   - NEEDS ANSWER: <the question exactly as the form asks it> (<a short note, if it needs one>)
+   - NEEDS ANSWER: <the question exactly as the form asks it>
    ```
 
-   Keep each to a single line. The board counts these lines to tell the person what a package
-   still needs, and matches them against `application-answers.md`, so never repeat a question
+   Keep each to a single line with nothing after the question; a note on it goes at its place
+   among the answers. The board counts these lines to tell the person what a package still needs,
+   and matches them word for word against `application-answers.md`, so never repeat a question
    inline, in a table or in a summary, and never use the literal marker anywhere else in the file:
    with nothing open, leave the heading out and say nothing about it. submit asks the person each
    one and saves the answer. A free-text answer you draft is 2–3 sentences in that same voice,

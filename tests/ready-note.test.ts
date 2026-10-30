@@ -82,6 +82,47 @@ describe('ready notes', () => {
     expect(await notes(ui)).toEqual([])
   })
 
+  test('an empty answers file gets no note: it is no sign the package is ready', async ($, on) => {
+    world(
+      on,
+      { leads: [ready('acme-api', 'Acme')], applications: [application('acme-api')] },
+      { [answers('acme-api')]: ' \n' },
+    )
+    await start($)
+    const ui = await $.ui.mount({ ...pane, surface: 'desktop' })
+    expect(await ui.find({ key: 'submit:acme-api' })).toBeDefined()
+    expect(await notes(ui)).toEqual([])
+  })
+
+  test('a damaged application costs the note, never the board', async ($, on) => {
+    world(on, {
+      leads: [ready('acme-api', 'Acme')],
+      applications: [{ ...application('acme-api'), files: undefined as never }],
+    })
+    await start($)
+    const ui = await $.ui.mount({ ...pane, surface: 'desktop' })
+    expect(await ui.find({ key: 'open:acme-api' })).toBeDefined()
+    expect(await notes(ui)).toEqual([])
+  })
+
+  test('a malformed lead costs the notes, never the board', async ($, on) => {
+    world(
+      on,
+      {
+        leads: [{ ...ready('acme-api', 'Acme'), company: 7 as unknown as string }],
+        applications: [application('acme-api')],
+      },
+      {
+        [answers('acme-api')]: two,
+        [SAVED]: saved('Who referred you?', 'Beta only'),
+      },
+    )
+    await start($)
+    const ui = await $.ui.mount({ ...pane, surface: 'desktop' })
+    expect(await ui.find({ key: 'tab:ready', text: /Ready to review 1/ })).toBeDefined()
+    expect(await notes(ui)).toEqual([])
+  })
+
   test('only Ready cards carry it', async ($, on) => {
     world(
       on,
