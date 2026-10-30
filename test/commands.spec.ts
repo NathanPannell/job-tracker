@@ -36,6 +36,7 @@ test('init creates the files, add merges and alerts on 90+', () => {
   for (const name of ['leads.json', 'applications.json', 'feedback.json', 'proposals.json']) {
     assert.ok(existsSync(join(dir, name)), name)
   }
+  assert.ok(existsSync(join(dir, 'profile', 'ats-boards.json')))
   const added = commands.add(dir, [lead('Acme', 92), lead('Beta'), lead('Low', 10)])
   assert.deepEqual(added.added, ['acme-backend-developer', 'beta-backend-developer'])
   assert.deepEqual(

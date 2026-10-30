@@ -5,7 +5,7 @@ description: Build a tailored application package for one job lead on the board 
 
 # Package
 
-Build everything the person needs to apply to one lead, to the quality of the examples in
+Build everything the person needs to apply to one lead, to the quality of any examples in
 `$JOB_TRACKER_DATA/profile/prior-research/` (earlier applications and tailored résumés).
 You never submit, send an email, or invent a fact.
 
@@ -23,7 +23,9 @@ below: nobody can answer you, so never stop to ask a question.
 
 ## Paths
 
-- CLI: `node "$JOB_TRACKER_HOME/bin/jobs.ts" <command>`; data folder `$JOB_TRACKER_DATA`.
+- CLI: `node "$JOB_TRACKER_HOME/bin/jobs.ts" <command>`; data folder `$JOB_TRACKER_DATA`. If
+  `profile/preferences.md`, `profile/master-resume.tex` or `profile/resume-format-template.tex` is
+  missing, stop and say to finish the job-tracker:onboard skill first.
 - Package folder: `$JOB_TRACKER_DATA/packages/<lead-id>/`. Write these names exactly:
   `posting.md`, `resume.tex`, `resume.pdf`, `cover-letter.md`, `answers.md`, `company-brief.md`,
   `warm-intro.md`, `sources.md`.
@@ -38,6 +40,7 @@ below: nobody can answer you, so never stop to ask a question.
   - `profile/knowledge-base/` — indexed, source-linked facts (start at its `README.md`; read only
     the records relevant to this role).
   - `profile/cover-letter-prompts.md` — reusable stories and answers.
+  - `profile/voice.md` — how the person writes, when it exists.
   - `profile/UNANSWERED-QUESTIONS.md`, `profile/OPEN-QUESTIONS.md`, `profile/learnings.md`.
 
 ## Steps
@@ -68,7 +71,7 @@ below: nobody can answer you, so never stop to ask a question.
    target, two the most. Fix overflow by cutting content, never by changing the layout. Delete the
    `.aux`, `.log` and `.out` files when it compiles.
 5. Cover letter (`cover-letter.md`): at most 300 words, specific to this company and role, in the
-   person's voice from `cover-letter-prompts.md`; open with why this company, give two concrete
+   person's voice from `voice.md` (when it exists) and `cover-letter-prompts.md`; open with why this company, give two concrete
    pieces of evidence from the record, end with a short ask. No facts outside the record.
 6. Answers (`answers.md`): every question found in step 2, each with a drafted answer from the
    record and the prompt bank. First look each one up in `application-answers.md`: where the
@@ -78,8 +81,7 @@ below: nobody can answer you, so never stop to ask a question.
    sponsorship, travel commitments) and only within their stated limits. Where nothing on record
    answers it (salary expectation, start date, a disclosure), write `NEEDS ANSWER:` and the
    question instead of guessing; submit asks the person and saves the answer. A free-text answer
-   you draft is 2–3 sentences, never several paragraphs, and brings up Claude Code or agentic
-   work only when the question is about AI, automation or tooling.
+   you draft is 2–3 sentences in that same voice, never several paragraphs.
 7. Company brief (`company-brief.md`): what they build and for whom, stage and funding, team size,
    stack, recent news, why it fits, risks and red flags (reviews, runway), and three sharp questions
    to ask. Link every claim's source.

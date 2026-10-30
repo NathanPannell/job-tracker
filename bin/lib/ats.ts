@@ -144,7 +144,12 @@ export function parseBoard(board: Board, body: unknown): Posting[] {
 }
 
 const CANADA =
-  /victoria|vancouver|british columbia|\bbc\b|canada|canadian|\bcan\b|toronto|montreal|ottawa|calgary|edmonton|waterloo/i
+  /victoria|vancouver|british columbia|\bbc\b|canada|canadian|\bcan\b|toronto|montr[eé]al|ottawa|calgary|edmonton|waterloo|mississauga|kitchener|halifax|winnipeg|saskatoon|regina|fredericton|moncton|charlottetown/i
+/** Provinces and territories. Names some US places share, so they yield to ELSEWHERE. */
+const REGION =
+  /alberta|saskatchewan|manitoba|ontario|qu[eé]bec|nova scotia|new brunswick|newfoundland|prince edward island|yukon|nunavut|northwest territories/i
+/** Codes after a city. Case-sensitive; NB, NL, PE and SK also mean places abroad, so are left out. */
+const REGION_CODE = /(?:,\s*|\s)(?:AB|MB|NS|ON|QC|NT|NU|YT)\b/
 const REMOTE = /remote|anywhere|distributed|work from home/i
 const ELSEWHERE =
   /united states|\busa?\b|\bu\.s\.|europe|emea|apac|latam|\buk\b|united kingdom|london|germany|berlin|france|paris|india|singapore|australia|brazil|mexico|japan|israel|ireland|netherlands|spain|poland|portugal|new york|san francisco|seattle|menlo park|austin|boston|chicago|denver|sydney|,\s*(ca|ny|wa|tx|ma|co|il)\b/i
@@ -157,6 +162,7 @@ export function isReachable(posting: Posting): boolean {
   const where = posting.location
   if (!where.trim()) return true
   if (CANADA.test(where)) return true
+  if ((REGION.test(where) || REGION_CODE.test(where)) && !ELSEWHERE.test(where)) return true
   return REMOTE.test(where) && !ELSEWHERE.test(where)
 }
 

@@ -11,20 +11,22 @@ You never apply, email anyone, create accounts, or log into job sites.
 ## Paths
 
 - Data folder: `$JOB_TRACKER_DATA` (check it is set: `echo "$JOB_TRACKER_DATA"`; if empty, stop and
-  say SETUP.md explains it).
+  say INSTALL.md explains it).
 - CLI: `node "$JOB_TRACKER_HOME/bin/jobs.ts" <command>`. Every board change goes through it. Never
   edit `leads.json` by hand.
 - Read first, every run: `$JOB_TRACKER_DATA/profile/preferences.md` (roles, level, location,
   dealbreakers and the scoring rubric), `profile/learnings.md` (approved adjustments: they override
   the rubric), `profile/target-companies.md` (companies and local job sources) and
-  `profile/OPEN-QUESTIONS.md` (defaults in force).
+  `profile/OPEN-QUESTIONS.md` (defaults in force). If `preferences.md` is missing, stop and say to
+  run the job-tracker:onboard skill first.
 
 ## Steps
 
 1. Run `jobs init`, then `jobs seen` and keep the list: anything already on the board, in any
    column (Passed included), is not new. Note today's date and time.
 2. Launch one subagent per source below, **all in one message so they run in parallel**. Give each
-   the preferences summary (roles, level, location, dealbreakers) and the seen list, and ask for
+   the preferences summary (roles, level, location, dealbreakers) and the seen list (the ATS subagent
+   also gets the exact `jobs ats` command, below), and ask for
    JSON only: an array of postings (the Gmail source returns the object described below), each
    item `{ company, role, url, location, comp, source, description, postedAt }` with `description`
    at most 1500 characters of the posting's own words, keeping what it says about the company
@@ -33,8 +35,10 @@ You never apply, email anyone, create accounts, or log into job sites.
    postings older than 14 days, and return at most 25 items. The Gmail source has no cap: every
    email it reads is marked read, so it returns every relevant posting in those emails.
    - **ATS boards** (`source: "greenhouse" | "lever" | "ashby"`): run `jobs ats`, read the file it
-     names, keep engineering roles (backend, platform, API, data, applied AI, full-stack, integration,
-     automation; not sales, design, support, legal or finance roles). To widen coverage it may run
+     names. `jobs ats` keeps only postings workable from Canada: when `preferences.md` says
+     `ATS filter: outside Canada`, tell it to run `jobs ats --all` instead and drop postings the
+     person cannot work from itself. Keep the roles that match the target roles in
+     `preferences.md`. To widen coverage it may run
      `jobs probe <slug> --company "<name>"` for target companies not yet in `ats-boards.json` and
      report any board it finds so you can add it to that file.
    - **Local sources** (`source: "<board name>"` or `"careers:<company>"`): the local job boards
@@ -54,8 +58,8 @@ You never apply, email anyone, create accounts, or log into job sites.
        section (links to `members.viatec.ca/job-board`). A YC Work at a Startup message from a
        founder is a lead too (`description` says a founder wrote). Welcome, onboarding and
        marketing emails with no postings give nothing.
-     - `signal` emails are news, not postings: return the companies in British Columbia, or hiring
-       remotely in Canada, that just raised money, launched, or said they are hiring, as
+     - `signal` emails are news, not postings: return the companies in the person's region, or hiring
+       remotely in their country (per `preferences.md`), that just raised money, launched, or said they are hiring, as
        `{ company, event, amount, location, url }` (the article's link).
      - Return `{ postings, signals, newest }`. `newest` is the time of the newest email whose
        postings and signals were all returned, in UTC ending in `Z` (Gmail's `internalDate`
@@ -66,7 +70,7 @@ You never apply, email anyone, create accounts, or log into job sites.
      for the company's own posting.
    - **Web search** (`source: "web"`): WebSearch for this week's postings, built from
      `preferences.md`: each target role with the person's city, then with "remote" and their
-     country, then the target industries (e.g. `<role> "<city>"`, `junior <role> remote <country>`,
+     country, then the target industries (e.g. `<role> "<city>"`, `<level> <role> remote <country>`,
      `<industry> software engineer remote <country>`). Prefer the company's own careers page or ATS
      link over aggregators.
    - **HN Who's Hiring** (`source: "hn"`): fetch
@@ -74,13 +78,11 @@ You never apply, email anyone, create accounts, or log into job sites.
      take the latest "Who is hiring?" story, then
      `https://hn.algolia.com/api/v1/search?tags=comment,story_<id>&hitsPerPage=1000` and keep
      comments whose location the person can work from (per `preferences.md`), or REMOTE without a
-     limit that excludes them, and a
-     backend/AI/data role. `url` is the company's application link from the comment, else
+     limit that excludes them, and a role matching the target roles. `url` is the company's application link from the comment, else
      `https://news.ycombinator.com/item?id=<comment id>`.
 3. Merge the arrays, drop duplicates (same company and role, or same URL) and anything seen.
 4. Score every remaining posting 0-100 with the rubric in `preferences.md`, then apply every rule in
-   `learnings.md`. Be strict: a senior-only role, a student-only role, pay wholly under the floor,
-   US-only remote or relocation is a dealbreaker (under 40). Write `fitReason` as one line naming
+   `learnings.md`. Be strict: anything under Dealbreakers in `preferences.md` scores under 40. Write `fitReason` as one line naming
    the two or three biggest factors, e.g. `Backend APIs + applied AI, hybrid in their city; asks 3+ yrs`.
    Keep `comp` as posted ("" if none) and `location` as posted. Score the fit only, not the
    posting's age: `jobs add` skips postings over 14 days old itself, and the board shows
@@ -146,7 +148,7 @@ You never apply, email anyone, create accounts, or log into job sites.
 7. Funding and hiring signals: for each signal company not already in `profile/ats-boards.json`,
    try `jobs probe <slug> --company "<name>"` with its likely slugs (lowercase name, no spaces or
    punctuation). When a public board is found, run `jobs board-add "<name>" <ats> <slug>`; its
-   engineering roles are read from the next run on. Append each signal, found or not, as one line
+   roles are read from the next run on. Append each signal, found or not, as one line
    to `$JOB_TRACKER_DATA/scout/signals.md`: `<date> · <company> · <event> · <board or "no public board"> · <url>`.
    Never edit `target-companies.md`; the weekly learn review proposes additions from `signals.md`.
 8. If `alerts` is not empty, send one PushNotification naming them, e.g.
