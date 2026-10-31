@@ -123,7 +123,7 @@ test('a lead with a reply, put back by hand, or in any other column is never gho
   assert.equal(isGhostable(lead(), undefined, NOW, [{ ...outcome, leadId: 'other' }]), true)
   assert.equal(isGhostable(lead(), undefined, NOW, [{ ...outcome, kind: 'move' }]), true)
   // Back from an interview, or restored after Rejected or Ghosted.
-  for (const from of ['interviewing', 'archived', 'passed'] as const) {
+  for (const from of ['interviewing', 'rejected', 'archived', 'passed'] as const) {
     const history = [
       applied(month),
       { at: month, by: 'user' as const, action: 'moved', from: 'applied' as const, to: from },
@@ -131,7 +131,16 @@ test('a lead with a reply, put back by hand, or in any other column is never gho
     ]
     assert.equal(isGhostable(lead({ history }), undefined, NOW), false, from)
   }
-  for (const column of ['new', 'drafting', 'ready', 'interviewing', 'offer', 'archived'] as const) {
+  const elsewhere = [
+    'new',
+    'drafting',
+    'ready',
+    'interviewing',
+    'offer',
+    'rejected',
+    'archived',
+  ] as const
+  for (const column of elsewhere) {
     assert.equal(isGhostable(lead({ column }), undefined, NOW), false, column)
   }
 })

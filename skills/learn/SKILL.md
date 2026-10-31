@@ -48,7 +48,8 @@ board archives a New lead once its posting is that old).
 2. Patterns, each needing at least two events (say how many): pass reasons that cluster (for
    example several "Too senior" on leads scored 80+), score corrections by kind and source, leads
    the person moved forward that were scored low, and edits to packages (what the person cut,
-   added or reworded in résumés and cover letters).
+   added or reworded in résumés and cover letters). A move into Rejected files a company's
+   decision: it is never a lead moved forward, and one from Archived is no new outcome.
 3. Write 3 to 10 changes. The person approves or rejects each change on its own, so each one
    is a single small learning that stands alone: it makes sense and does what it says whether
    any other change is approved or rejected, never refers to another change, and never merges

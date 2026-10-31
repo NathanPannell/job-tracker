@@ -117,12 +117,24 @@ test('a New lead is archived once its posting is over 14 days old; worked-on and
     lead({ id: 'drafting', column: 'drafting', postedAt: daysAgo(30) }),
     lead({ id: 'ready', column: 'ready', foundAt: daysAgo(30) }),
     lead({ id: 'applied', column: 'applied', postedAt: daysAgo(60), foundAt: daysAgo(60) }),
+    lead({ id: 'rejected', column: 'rejected', postedAt: daysAgo(60), foundAt: daysAgo(60) }),
   )
   const { leads, archived } = archiveStale(file, AT)
   assert.deepEqual(archived, ['posted', 'undated', 'future'])
   assert.deepEqual(
     leads.leads.map(one => one.column),
-    ['archived', 'archived', 'archived', 'new', 'new', 'new', 'drafting', 'ready', 'applied'],
+    [
+      'archived',
+      'archived',
+      'archived',
+      'new',
+      'new',
+      'new',
+      'drafting',
+      'ready',
+      'applied',
+      'rejected',
+    ],
   )
   assert.deepEqual(leads.leads[0]?.history.at(-1), {
     at: AT,

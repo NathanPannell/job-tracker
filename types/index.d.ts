@@ -2,7 +2,15 @@
 // the pane and band draw from. The hooks module, bin/jobs.mjs and the skills all follow it.
 
 export type Column =
-  'new' | 'drafting' | 'ready' | 'applied' | 'interviewing' | 'offer' | 'passed' | 'archived'
+  | 'new'
+  | 'drafting'
+  | 'ready'
+  | 'applied'
+  | 'interviewing'
+  | 'offer'
+  | 'rejected'
+  | 'passed'
+  | 'archived'
 
 /** Who changed a lead; `tracker` is the board itself, e.g. archiving a lead left too long in New, or ghosting. */
 export type Actor = 'user' | 'scout' | 'package' | 'submit' | 'sync' | 'learn' | 'model' | 'tracker'
@@ -172,12 +180,6 @@ export type JobBoard = {
    * never saved. Absent on a board kept across a hot reload from before this field.
    */
   openQuestions?: Record<string, string[]>
-  /**
-   * How many leads a company rejected (`rejectionCount`). Worked out on every refresh, never saved.
-   * Absent when `feedback.json` cannot be read, and on a board kept across a hot reload from before
-   * this field.
-   */
-  rejections?: number
   loadedAt: number
   error: string | null
 }
