@@ -81,8 +81,9 @@ async function readyQuestions(
   )
 }
 
-/** The rejections `feedback.json` records; undefined for a file too damaged to say, never 0. */
+/** The rejections `feedback.json` records; undefined for a file that cannot say, never 0. */
 function countRejections(text: string | undefined): number | undefined {
+  if (text === undefined) return undefined
   try {
     return rejectionCount(parseStrict<FeedbackFile>(text, emptyFeedback).events)
   } catch {
@@ -136,8 +137,8 @@ export async function refresh($: EngineInterface, sweep = true): Promise<JobBoar
   if (!sweep) return next
   // Each archivable lead is tried once a session: a failed or empty archive is not respawned.
   const tried = await read($, swept)
-  // The board does not read feedback.json, so a ghostable lead here may have a reply recorded
-  // there: `jobs archive` checks it and leaves such a lead alone.
+  // The board keeps only a count from feedback.json, so a ghostable lead here may have a reply
+  // recorded there: `jobs archive` checks it and leaves such a lead alone.
   const application = (id: string) => next.applications.find(one => one.leadId === id)
   const due = next.leads
     .filter(

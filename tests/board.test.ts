@@ -402,7 +402,7 @@ describe('kanban', () => {
     await ui.unmount()
   })
 
-  test('a feedback file that cannot be read costs the number, never the board', async ($, on) => {
+  test('a damaged feedback file costs the number, never the board', async ($, on) => {
     world(on, { leads: [lead('acme-api')] }, { [`${DATA}/feedback.json`]: '{ not json' })
     await start($)
     const ui = await $.ui.mount({ ...pane, surface: 'desktop' })
@@ -411,9 +411,18 @@ describe('kanban', () => {
     await ui.unmount()
   })
 
-  test('with no feedback file yet there are no rejections', async ($, on) => {
+  test('a feedback file that cannot be read shows no number rather than a wrong 0', async ($, on) => {
     const w = world(on, { leads: [lead('acme-api')] })
     w.files.delete(`${DATA}/feedback.json`)
+    await start($)
+    const ui = await $.ui.mount({ ...pane, surface: 'desktop' })
+    expect(await ui.find({ key: 'rejections' })).toBeUndefined()
+    expect(await ui.find({ key: 'card:acme-api' })).toBeDefined()
+    await ui.unmount()
+  })
+
+  test('an empty feedback file is no rejections yet', async ($, on) => {
+    world(on, { leads: [lead('acme-api')] }, { [`${DATA}/feedback.json`]: '' })
     await start($)
     const ui = await $.ui.mount({ ...pane, surface: 'desktop' })
     expect((await ui.find({ type: 'Svg' }))?.props.alt).toBe('Rejections: 0')
