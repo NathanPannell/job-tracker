@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 
-import { bigDigits, draftTask, GHOSTED_REASON } from '../hooks/lib/model.ts'
+import { bigDigits, bigNumberSvg, draftTask, GHOSTED_REASON } from '../hooks/lib/model.ts'
 import type { Lead } from '../hooks/lib/model.ts'
 import { DATA, lead, PANE_PROPS, world } from './world.ts'
 
@@ -354,7 +354,7 @@ describe('kanban', () => {
       await ui.press({ key: `tab:${column}` })
       const number = await ui.find({ type: 'Svg' })
       expect(number?.props.alt).toBe('Rejections: 2')
-      expect(number?.props.source).toContain('>2</text>')
+      expect(number?.props.source).toBe(bigNumberSvg(2))
       expect(await ui.find({ type: 'Text', text: /^Rejections$/ })).toBeDefined()
     }
     await ui.press({ key: 'open:acme-api' })

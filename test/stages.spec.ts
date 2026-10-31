@@ -223,7 +223,7 @@ test('another lead’s move leaves a rejection alone', () => {
   )
 })
 
-test('a big number is five rows of block digits, or a drawing that says its value', () => {
+test('a big number is five rows of block digits', () => {
   assert.equal(bigDigits(3), ['███', '  █', ' ██', '  █', '███'].join('\n'))
   assert.equal(bigDigits(0), ['███', '█ █', '█ █', '█ █', '███'].join('\n'))
   const twelve = bigDigits(12).split('\n')
@@ -237,7 +237,15 @@ test('a big number is five rows of block digits, or a drawing that says its valu
     )
   }
   assert.equal(new Set([0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map(bigDigits)).size, 10)
-  assert.match(bigNumberSvg(3), /width="40" height="64"/)
-  assert.match(bigNumberSvg(3), />3<\/text><\/svg>$/)
-  assert.match(bigNumberSvg(120), /width="120"/)
+})
+
+test('a big number draws as rectangles, one for each block of its digits', () => {
+  const blocks = (value: number) => [...bigDigits(value)].filter(cell => cell === '█').length
+  const rects = (value: number) => bigNumberSvg(value).match(/<rect /g)?.length
+  for (const value of [0, 3, 12, 120]) assert.equal(rects(value), blocks(value), String(value))
+  assert.match(bigNumberSvg(3), /width="36" height="60"/)
+  assert.match(bigNumberSvg(120), /width="132" height="60"/)
+  // The second digit starts past the first and the gap: four blocks of twelve pixels.
+  assert.match(bigNumberSvg(11), /<rect x="48" y="0"/)
+  assert.ok(!bigNumberSvg(3).includes('<text'))
 })
