@@ -1,12 +1,18 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import type { Lead } from '../hooks/lib/model.ts'
+import type { FeedbackEvent, Lead } from '../hooks/lib/model.ts'
 import {
+  bigDigits,
+  bigNumberSvg,
   columnTitle,
   defaultStage,
+  emptyFeedback,
+  ghostSilent,
+  GHOSTED_REASON,
   PIPELINE,
   previousColumn,
+  rejectionCount,
   scoreTone,
   sourceLabel,
   STAGE_ACTIONS,
@@ -104,4 +110,134 @@ test('a closed lead remembers the column it came from', () => {
   assert.equal(previousColumn({ column: 'passed', history: [moved(legacy, 'passed')] }), undefined)
   assert.equal(columnTitle(legacy), 'shortlisted')
   assert.equal(columnTitle('ready'), 'Ready to review')
+})
+
+const outcome = (leadId: string, reason?: string) => ({ leadId, kind: 'outcome', reason }) as const
+const moved = (leadId: string, from: Lead['column'], to: Lead['column']) =>
+  ({ leadId, kind: 'move', from, to }) as const
+
+test('rejections count every way one is recorded, and nothing else', () => {
+  const buttons = Object.values(STAGE_ACTIONS)
+    .flat()
+    .flatMap(one => (one.kind === 'outcome' ? [one.reason] : []))
+    .filter(reason => reason.startsWith('rejection:') && reason !== GHOSTED_REASON)
+  assert.deepEqual(buttons, ['rejection: marked on the board', 'rejection: after interviews'])
+  assert.equal(
+    rejectionCount([
+      outcome('sync', "rejection: Acme won't be progressing"),
+      ...buttons.map((reason, n) => outcome(`button-${n}`, reason)),
+      outcome('reply', 'interview: screen on Monday'),
+      outcome('offer', 'offer: accepted'),
+      outcome('blank'),
+      { leadId: 'a-pass', kind: 'pass', reason: 'rejection: not a company’s word' },
+      moved('moved', 'applied', 'archived'),
+    ]),
+    3,
+  )
+  assert.equal(rejectionCount([]), 0)
+})
+
+test('a ghosted lead sent no email, so it is no rejection unless one comes after all', () => {
+  assert.equal(rejectionCount([outcome('acme', GHOSTED_REASON)]), 0)
+  // Sync records a late rejection on a lead the board ghosted, and the lead stays in Archived.
+  assert.equal(
+    rejectionCount([outcome('acme', GHOSTED_REASON), outcome('acme', 'rejection: late reply')]),
+    1,
+  )
+  assert.equal(
+    rejectionCount([outcome('acme', 'rejection: reply'), outcome('acme', GHOSTED_REASON)]),
+    1,
+  )
+})
+
+test('the board ghosting a lead writes a row that is no rejection', () => {
+  const lead = {
+    id: 'acme',
+    column: 'applied',
+    source: 'ashby',
+    fitScore: 80,
+    history: [{ at: '2026-09-01T00:00:00.000Z', by: 'submit', action: 'moved', to: 'applied' }],
+  } as Lead
+  const { feedback, ghosted } = ghostSilent(
+    { version: 1, leads: [lead] },
+    { version: 1, applications: [] },
+    emptyFeedback(),
+    '2026-10-20T12:00:00.000Z',
+  )
+  assert.deepEqual(ghosted, ['acme'])
+  assert.equal(feedback.events[0]?.reason, GHOSTED_REASON)
+  assert.equal(rejectionCount(feedback.events), 0)
+})
+
+test('a lead counts once, however many rejections it has', () => {
+  assert.equal(
+    rejectionCount([outcome('acme', 'rejection: one'), outcome('acme', 'rejection: two')]),
+    1,
+  )
+})
+
+test('a rejection taken back no longer counts, and the row that stays does not revive it', () => {
+  const rejected: Pick<FeedbackEvent, 'leadId' | 'kind' | 'reason' | 'to'>[] = [
+    moved('acme', 'applied', 'archived'),
+    outcome('acme', 'rejection: marked on the board'),
+  ]
+  assert.equal(rejectionCount(rejected), 1)
+  const undone = [...rejected, moved('acme', 'archived', 'applied')]
+  assert.equal(rejectionCount(undone), 0)
+  // Back to New or a pass from Archived takes it back the same way.
+  assert.equal(rejectionCount([...rejected, moved('acme', 'archived', 'new')]), 0)
+  assert.equal(
+    rejectionCount([...rejected, { ...moved('acme', 'archived', 'passed'), kind: 'pass' }]),
+    0,
+  )
+  // Archiving it by hand afterwards is not the company saying no again.
+  assert.equal(rejectionCount([...undone, moved('acme', 'applied', 'archived')]), 0)
+  // Rejected for real this time.
+  assert.equal(
+    rejectionCount([
+      ...undone,
+      moved('acme', 'applied', 'archived'),
+      outcome('acme', 'rejection: an email'),
+    ]),
+    1,
+  )
+})
+
+test('a move out of Archived before the rejection does not take it back', () => {
+  // The lead was archived as stale and restored, then applied to and rejected.
+  assert.equal(
+    rejectionCount([
+      moved('acme', 'archived', 'new'),
+      moved('acme', 'ready', 'applied'),
+      moved('acme', 'applied', 'archived'),
+      outcome('acme', 'rejection: an email'),
+    ]),
+    1,
+  )
+})
+
+test('another lead’s move leaves a rejection alone', () => {
+  assert.equal(
+    rejectionCount([outcome('acme', 'rejection: an email'), moved('beta', 'archived', 'applied')]),
+    1,
+  )
+})
+
+test('a big number is five rows of block digits, or a drawing that says its value', () => {
+  assert.equal(bigDigits(3), ['███', '  █', ' ██', '  █', '███'].join('\n'))
+  assert.equal(bigDigits(0), ['███', '█ █', '█ █', '█ █', '███'].join('\n'))
+  const twelve = bigDigits(12).split('\n')
+  assert.deepEqual(twelve, [' █  ███', '██    █', ' █  ███', ' █  █  ', '███ ███'])
+  for (const digit of [1, 2, 4, 5, 6, 7, 8, 9]) {
+    const rows = bigDigits(digit).split('\n')
+    assert.equal(rows.length, 5, String(digit))
+    assert.ok(
+      rows.every(row => row.length === 3),
+      String(digit),
+    )
+  }
+  assert.equal(new Set([0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map(bigDigits)).size, 10)
+  assert.match(bigNumberSvg(3), /width="40" height="64"/)
+  assert.match(bigNumberSvg(3), />3<\/text><\/svg>$/)
+  assert.match(bigNumberSvg(120), /width="120"/)
 })
