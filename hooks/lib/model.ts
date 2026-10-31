@@ -1099,7 +1099,7 @@ export function bigNumberSvg(value: number): string {
       [...row].flatMap((cell, x) =>
         cell === '█'
           ? [
-              `<rect x="${(n * 4 + x) * BIG_BLOCK}" y="${y * BIG_BLOCK}" width="${BIG_BLOCK}" height="${BIG_BLOCK}"/>`,
+              `<rect x="${(n * 4 + x) * BIG_BLOCK}" y="${y * BIG_BLOCK}" width="${BIG_BLOCK}" height="${BIG_BLOCK}" fill="#d97757"/>`,
             ]
           : [],
       ),
@@ -1107,7 +1107,7 @@ export function bigNumberSvg(value: number): string {
   )
   const width = (digits.length * 4 - 1) * BIG_BLOCK
   const height = 5 * BIG_BLOCK
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" fill="#d97757" shape-rendering="crispEdges">${blocks.join('')}</svg>`
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" shape-rendering="crispEdges">${blocks.join('')}</svg>`
 }
 
 /** Best first by fit score. */

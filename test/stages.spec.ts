@@ -239,13 +239,25 @@ test('a big number is five rows of block digits', () => {
   assert.equal(new Set([0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map(bigDigits)).size, 10)
 })
 
-test('a big number draws as rectangles, one for each block of its digits', () => {
-  const blocks = (value: number) => [...bigDigits(value)].filter(cell => cell === '█').length
-  const rects = (value: number) => bigNumberSvg(value).match(/<rect /g)?.length
-  for (const value of [0, 3, 12, 120]) assert.equal(rects(value), blocks(value), String(value))
-  assert.match(bigNumberSvg(3), /width="36" height="60"/)
-  assert.match(bigNumberSvg(120), /width="132" height="60"/)
-  // The second digit starts four blocks in, past the first and the gap: 8 lights column 0 there.
-  assert.match(bigNumberSvg(88), /<rect x="48" y="0"/)
-  assert.ok(!bigNumberSvg(3).includes('<text'))
+test('a big number draws the same blocks as the terminal’s digits, as rectangles', () => {
+  /** The blocks of a drawing read back as `bigDigits` writes them. */
+  const blocks = (svg: string) => {
+    const columns = Number(/width="(\d+)"/.exec(svg)?.[1]) / 12
+    const rows = Array.from({ length: 5 }, () => Array<string>(columns).fill(' '))
+    const rect = /<rect x="(\d+)" y="(\d+)" width="12" height="12" fill="#d97757"\/>/g
+    for (const [, x, y] of svg.matchAll(rect)) {
+      const row = rows[Number(y) / 12]
+      assert.ok(row, `row of ${y}`)
+      row[Number(x) / 12] = '█'
+    }
+    return rows.map(row => row.join('')).join('\n')
+  }
+  for (const value of [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 12, 120, 3074]) {
+    const svg = bigNumberSvg(value)
+    assert.equal(blocks(svg), bigDigits(value), String(value))
+    // Nothing but those rectangles, so what is drawn is exactly what was read back.
+    assert.equal(svg.match(/<[a-z]/g)?.length, 1 + (svg.match(/<rect /g)?.length ?? 0))
+  }
+  assert.match(bigNumberSvg(3), /width="36" height="60" viewBox="0 0 36 60"/)
+  assert.match(bigNumberSvg(120), /width="132" height="60" viewBox="0 0 132 60"/)
 })
