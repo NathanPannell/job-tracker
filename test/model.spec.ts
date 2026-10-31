@@ -134,7 +134,8 @@ test('moveLead records history and a feedback event; passing needs a reason', ()
 test('neighbour walks the pipeline and brings closed cards back to New', () => {
   assert.equal(neighbour('new', -1), undefined)
   assert.equal(neighbour('new', 1), 'drafting')
-  assert.equal(neighbour('offer', 1), undefined)
+  assert.equal(neighbour('offer', 1), 'rejected')
+  assert.equal(neighbour('rejected', 1), undefined)
   assert.equal(neighbour('passed', -1), 'new')
   assert.equal(neighbour('passed', 1), undefined)
 })
@@ -253,11 +254,11 @@ test('missingSummaries lists open leads without a blurb, tagline or highlights',
   ])
   const ids = file.leads.map(one => one.id)
   const closed = moveLead(file, ids[3] as string, 'archived', AT, 'user').leads
-  const missing = missingSummaries(closed)
+  const rejected = moveLead(closed, ids[1] as string, 'rejected', AT, 'user').leads
+  const missing = missingSummaries(rejected)
   assert.deepEqual(
     missing.map(one => [one.id, one.missing]),
     [
-      [ids[1], ['roleHighlights']],
       [ids[2], ['companyBlurb', 'tagline', 'roleHighlights']],
       [ids[4], ['companyBlurb', 'tagline', 'roleHighlights']],
       [ids[5], ['tagline']],
@@ -272,7 +273,7 @@ test('missingSummaries lists open leads without a blurb, tagline or highlights',
     'missing',
   ])
   // A tagline can be written from the blurb, so it comes along.
-  assert.equal(missing[3]?.companyBlurb, 'Makes farm sensors.')
+  assert.equal(missing[2]?.companyBlurb, 'Makes farm sensors.')
 })
 
 test('a tagline is one short line; addLeads fills one a lead lacks and keeps one it has', () => {
@@ -529,6 +530,7 @@ test('age, isColumn and parseOr', () => {
   assert.equal(age(AT, NOW + 72 * HOUR), '3d')
   assert.equal(age(AT, NOW + 30 * 24 * HOUR), '4w')
   assert.ok(isColumn('ready'))
+  assert.ok(isColumn('rejected'))
   assert.ok(!isColumn('done'))
   assert.deepEqual(parseOr(undefined, emptyLeads), emptyLeads())
   assert.deepEqual(parseOr('  ', emptyLeads), emptyLeads())

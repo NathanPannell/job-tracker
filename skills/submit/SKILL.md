@@ -45,19 +45,25 @@ step here.
 
 ## Steps
 
-1. Load the Claude in Chrome tools in one ToolSearch call (tabs_context_mcp, tabs_create_mcp,
-   navigate, read_page, find, form_input, computer, file_upload, get_page_text), check the open
-   tabs, and open the posting's application page in a new tab.
+1. Load the Claude in Chrome tools and `mcp__job-tracker__deep_form` in one ToolSearch call
+   (tabs_context_mcp, tabs_create_mcp, navigate, read_page, find, form_input, computer,
+   file_upload, get_page_text, deep_form), check the open tabs, and open the posting's application
+   page in a new tab.
 2. Stop and hand off to the person, with everything ready, when the page needs any of: an account
    or sign-in (Workday, iCIMS, Taleo and similar), a password, a CAPTCHA or bot check, or an
-   agreement you would have to accept for them. Say which page, and list the package files and
+   agreement you would have to accept for them (terms of use, an arbitration clause, any other
+   legal agreement), whatever a saved answer says. Say which page, and list the package files and
    the answers to paste. Do not try to get around it.
 3. Read the whole form, every page of it, before asking anything. Fill every field the record
    answers: name, email, phone, location, links, work authorization (only as recorded), the cover
    letter, each question in `answers.md`, and each answer in `application-answers.md` whose
-   question matches and whose scope covers this application (the latest entry wins). Upload
+   question matches and whose scope covers this application (the latest entry wins). Tick each
+   data-processing and keep-in-contact box such an answer covers, with no need to ask: see
+   "Consent boxes" below. Upload
    `packages/<id>/resume.pdf` with file_upload. Leave optional demographic or self-identification
-   questions unanswered (or "prefer not to say") unless the person has said otherwise.
+   questions unanswered (or "prefer not to say") unless the person has said otherwise. Where find
+   and read_page give no ref for a field or file input the page shows, carry on with deep_form as
+   in "Forms refs cannot reach" below: that is not a reason to stop.
 4. Ask for everything still missing across the batch, in **one message**. The batch is every
    application approved in this conversation and not submitted yet: this one, the leads the
    prompt names, and any earlier one still waiting on the person. Each time you ask (on every
@@ -98,12 +104,69 @@ step here.
    (for several leads, one message with one checklist each, asking which to submit) and stop. Do
    not click submit, send, apply or confirm before the person answers.
 7. Only after the person replies yes, "submit" or "submit all" in this conversation, covering this
-   lead: click the final submit, wait for the confirmation page, save its text and the time to
+   lead: click the final submit (deep_form never presses it, so where it has no ref, click it with
+   computer at its place in a screenshot), wait for the confirmation page, save its text and the time to
    `packages/<id>/submission.md`, and run `jobs submitted <id>` (moves the card to Applied). Reply with the confirmation in one line per lead, then list
    anything the batch still needs as in step 4.
 8. If they say no or want changes: make the changes (saving any new answer as in step 5), show
    the checklist again, and ask again. If they stop, leave the tab as it is and change nothing on
    the board.
+
+## Consent boxes
+
+The person has agreed to two kinds of box in advance, in their own words, so these are ticked like
+any other field the record answers, never handed back: data-processing acknowledgments, and boxes
+letting a company keep in contact (talent pool, future roles). Tick one when
+`application-answers.md` holds an answer to that kind of box whose scope covers this application.
+Use form_input on a ref, or deep_form with `value` `true`.
+
+- Only these two kinds. A saved answer never makes any other box tickable: terms of use, an
+  arbitration clause or any other legal agreement is step 2's, even when an entry reads like a yes
+  to it.
+- Read the box's whole wording on the page first, with get_page_text or a screenshot: a label can
+  be one word with the terms beside it. deep_form's `near` gives the text around a box, and a
+  `label` or `near` ending in … is clipped. If the wording goes beyond these two kinds or bundles
+  anything else, it is an agreement: step 2 applies.
+- A limit written into the entry's Scope line holds, such as a box the person ticks themself.
+- Name each box you tick, with its wording, in the checklist and the report's "Filled" list.
+- This covers boxes on the application form. Accounts, passwords, CAPTCHAs and the final submit
+  stay as the Rules say.
+
+## Forms refs cannot reach
+
+find and read_page stop at shadow roots and iframes, so a form inside one (SmartRecruiters' `spl-`
+components, HubSpot's `hs-form-iframe-0`) shows on screen with no refs for its fields or file
+inputs. `mcp__job-tracker__deep_form` reaches open shadow roots and same-origin iframes. It runs the
+mod's own fixed script, in the background or in the conversation, and takes your tabId on every
+call:
+
+- `action: "read"` lists every control with an `id`, its kind, label and current value. Read again
+  after anything that redraws the form. A box or radio also has `near`, the text around it: match
+  a Yes or No radio to its question there before you fill it. A select with `moreOptions` lists
+  only its first options; fill still finds any of them by text.
+- `action: "fill"` with `id` and `value` sets a text field or a select (by the option's text), or
+  ticks a box (`value: "false"` unticks it). Fill a typed search box first, read again, then press
+  the option it offers.
+- `action: "press"` with `id` clicks a button such as Next, an option or a menu item. It refuses
+  anything that reads like a final submit, a bare Apply included, or a button with no label: leave
+  those for the conversation, as with any guard refusal.
+
+To attach the résumé where no ref reaches the real file input:
+
+1. `deep_form` with `action: "add_file_input"`, which adds a temporary plain file input to the page.
+2. `find` for "Job tracker temporary file input", then `file_upload` `packages/<id>/resume.pdf` to
+   its ref.
+3. `deep_form` with `action: "read"` to get the real input's `id`, then `action: "attach"` with that
+   `id`: it copies the file to the real input, fires `input` and `change`, and removes the temporary
+   input. On SmartRecruiters take the lower Resume zone (the later `spl-dropzone` file input), not
+   the top autofill one, which would overwrite the fields you filled. On HubSpot the input is
+   `resume_cv`.
+4. Take a screenshot and confirm the visible form shows the file. If it does not, the file is not
+   attached: list it under "Still needed" (or say so in the checklist).
+
+A read's `unreachableFrames` counts iframes from another origin, which it cannot enter; a closed
+shadow root is out of reach too. If the form is in one of those, try the frame's own address in your
+tab, and only then report it under "Still needed".
 
 ## In the background
 
@@ -117,19 +180,20 @@ When the prompt says you run in the background, nobody can answer you:
   call, and never touch another tab, even one that looks like yours.
 - Act only through element refs from find or read_page: form_input for fields, selects, radios
   and checkboxes; file_upload for the résumé; a computer click with `ref` for buttons such as
-  Next or Continue (double or triple clicks only to select text in a field). Never click by
-  screen coordinates, press Enter, Return or Space, type text
-  with line breaks, run JavaScript, run shortcuts or resize the window. Screenshots, scrolling
-  and hovering are fine. In a browser_batch, a click or navigate must be the last item: read the
-  new page before acting on it.
+  Next or Continue (double or triple clicks only to select text in a field). Where they give no
+  ref, use deep_form as in "Forms refs cannot reach": a form in a shadow root or iframe is filled
+  here, not reported as an error. Never click by screen coordinates, press Enter, Return or Space,
+  type text with line breaks, run JavaScript of your own, run shortcuts or resize the window.
+  Screenshots, scrolling and hovering are fine. In a browser_batch, a click or navigate must be
+  the last item: read the new page before acting on it. deep_form goes in a call of its own.
 - Use no tools beyond these, the skill and reading files (Read, Glob, Grep, Bash): no other
   browser or desktop control, agents, messages or schedules.
 - The job-tracker Chrome guard enforces all of this: it refuses any other call, and reads every
   element first. It refuses a click on one labelled like submit, send, confirm, finish or
   one-click apply, or on a submit-type button labelled as anything but a step (Next, Continue,
-  Review), and a form_input on a button or link. A refusal is not an error to work around: use a
-  ref and form_input instead, or leave that control for the conversation and list it under
-  "Still needed" in the report.
+  Review), and a form_input on a button or link. deep_form's press refuses the same controls and
+  a bare Apply. A refusal is not an error to work around: use a ref and form_input instead, or leave that control
+  for the conversation and list it under "Still needed" in the report.
 - Before the report, read your tab with get_page_text. If it reads as a sent application
   ("Thank you for applying", "Application submitted" and the like), start the report with
   `STRAY SUBMIT DETECTED` and one line on what the page says. The guard also checks your tabs when
@@ -201,7 +265,8 @@ earlier entry: a changed answer is a new entry with a later date.
   (by name, or "submit all" for the batch).
 - Never create accounts, enter passwords or sign in for the person; never solve a CAPTCHA or
   accept terms or agreements for them. On a sign-in or account page, stop and hand off with
-  everything ready.
+  everything ready. The one thing to tick for them is a data-processing or keep-in-contact box
+  their saved answer covers (see "Consent boxes"), without asking.
 - Never send email or messages. Only the facts in the record and the person's own answers go into
   the form.
 - Do not modify anything under `profile/` except appending the person's answers to

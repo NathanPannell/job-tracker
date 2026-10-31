@@ -2,7 +2,15 @@
 // the pane and band draw from. The hooks module, bin/jobs.mjs and the skills all follow it.
 
 export type Column =
-  'new' | 'drafting' | 'ready' | 'applied' | 'interviewing' | 'offer' | 'passed' | 'archived'
+  | 'new'
+  | 'drafting'
+  | 'ready'
+  | 'applied'
+  | 'interviewing'
+  | 'offer'
+  | 'rejected'
+  | 'passed'
+  | 'archived'
 
 /** Who changed a lead; `tracker` is the board itself, e.g. archiving a lead left too long in New, or ghosting. */
 export type Actor = 'user' | 'scout' | 'package' | 'submit' | 'sync' | 'learn' | 'model' | 'tracker'
@@ -166,6 +174,12 @@ export type JobBoard = {
   leads: Lead[]
   applications: Application[]
   proposals: Proposal[]
+  /**
+   * What each Ready lead's package still asks of the person, by lead id; empty means ready to
+   * submit, and a lead with no readable `answers.md` has no entry. Worked out on every refresh,
+   * never saved. Absent on a board kept across a hot reload from before this field.
+   */
+  openQuestions?: Record<string, string[]>
   loadedAt: number
   error: string | null
 }

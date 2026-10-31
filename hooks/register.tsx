@@ -19,6 +19,7 @@ import type {
   SentPrompt,
 } from '../types/index.d.ts'
 import {
+  CHROME_SERVER,
   chromeCall,
   createdTab,
   flatten,
@@ -33,6 +34,8 @@ import {
   tabOf,
 } from './lib/chrome.ts'
 import type { ChromeCall } from './lib/chrome.ts'
+import { FORM_ACTIONS, formResult, formScript, formStep } from './lib/deep-form.ts'
+import type { RunStep } from './lib/deep-form.ts'
 import { act, dataDir, EMPTY_BOARD, jobs, loadPackage, openFile, PANE, refresh } from './lib/io.ts'
 import {
   bandText,
@@ -457,7 +460,7 @@ async function strayFinding(
   if (isStraySubmit(answer)) return undefined
   for (const tabId of guard.tabs) {
     const page = await $.mcp
-      .call(guard.browser ?? 'claude-in-chrome', 'get_page_text', { tabId })
+      .call(guard.browser ?? CHROME_SERVER, 'get_page_text', { tabId })
       .catch(() => undefined)
     const line = page && !page.isError ? submittedLine(textOf(page)) : undefined
     if (line) {
@@ -685,7 +688,7 @@ export const register: Register = on => {
     await $.tool.register({
       name: 'list_leads',
       description:
-        "Lists job leads on the person's job board (job-tracker), best first. Each lead has fitScore, the scout's fit score the board shows. Filter by column (new, drafting, ready, applied, interviewing, offer, passed, archived) and minimum fit score.",
+        "Lists job leads on the person's job board (job-tracker), best first. Each lead has fitScore, the scout's fit score the board shows. Filter by column (new, drafting, ready, applied, interviewing, offer, rejected, passed, archived) and minimum fit score.",
       inputSchema: {
         type: 'object',
         properties: {
@@ -753,6 +756,21 @@ export const register: Register = on => {
         type: 'object',
         required: ['leadId'],
         properties: { leadId: { type: 'string' } },
+      },
+    })
+    await $.tool.register({
+      name: 'deep_form',
+      description:
+        "Reads and fills a job application form in a Claude in Chrome tab when find and read_page give no ref, because it sits inside a shadow root or a same-origin iframe. Runs the mod's own fixed script, no other JavaScript. read lists every control with an id. fill sets a text field or select to value, or ticks a box (value 'false' unticks). press clicks a button, option or menu item, and refuses anything that reads like a submit. add_file_input adds a temporary file input to the page; find it, file_upload to its ref, then attach copies the file to the file input named by id and removes the temporary one. Confirm with a screenshot.",
+      inputSchema: {
+        type: 'object',
+        required: ['tabId', 'action'],
+        properties: {
+          tabId: { type: 'number' },
+          action: { type: 'string', enum: [...FORM_ACTIONS] },
+          id: { type: 'string', description: 'A field id from read, for fill, press and attach' },
+          value: { type: 'string', description: 'For fill' },
+        },
       },
     })
     await $.tool.register({
@@ -842,6 +860,20 @@ export const register: Register = on => {
     const guards = await read($, prefills).catch(() => undefined)
     if (guards && !guards.some(one => one.agentId === e.agentId)) return next(e)
     return { deny: 'The Chrome guard could not check this call, so it was not made; try again.' }
+  })
+
+  // After the guard above, which holds it to the caller's own tab.
+  on('tool.call', { tool: 'mcp__job-tracker__deep_form' }, async ($, e) => {
+    const step = formStep(toolArgs(e))
+    if ('error' in step) return { result: step.error }
+    const run: RunStep = async one => {
+      const args = { action: 'javascript_exec', tabId: one.tabId, text: formScript(one) }
+      const page = await $.mcp.call(CHROME_SERVER, 'javascript_tool', args)
+      // Its first block is the script's result; the next is Claude in Chrome's note on the tabs.
+      const first = page.content.find(block => block.type === 'text')
+      return first?.text ?? ''
+    }
+    return { result: await formResult(step, run) }
   })
 
   on('tool.call', { tool: 'mcp__job-tracker__update_lead' }, async ($, e) => {

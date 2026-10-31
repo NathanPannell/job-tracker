@@ -44,6 +44,7 @@ export const COLUMNS = [
   'applied',
   'interviewing',
   'offer',
+  'rejected',
   'passed',
   'archived',
 ] as const satisfies readonly Column[]
@@ -56,6 +57,7 @@ export const PIPELINE: readonly Column[] = [
   'applied',
   'interviewing',
   'offer',
+  'rejected',
 ]
 
 export const COLUMN_TITLES: Record<Column, string> = {
@@ -65,6 +67,7 @@ export const COLUMN_TITLES: Record<Column, string> = {
   applied: 'Applied',
   interviewing: 'Interviewing',
   offer: 'Offer',
+  rejected: 'Rejected',
   passed: 'Passed',
   archived: 'Archived',
 }
@@ -117,7 +120,7 @@ export const STAGE_ACTIONS: Record<Column, readonly StageAction[]> = {
       key: 'rejected',
       label: 'Rejected',
       kind: 'outcome',
-      to: 'archived',
+      to: 'rejected',
       reason: 'rejection: marked on the board',
     },
     { key: 'ghosted', label: 'Ghosted', kind: 'outcome', to: 'archived', reason: GHOSTED_REASON },
@@ -135,7 +138,7 @@ export const STAGE_ACTIONS: Record<Column, readonly StageAction[]> = {
       key: 'rejected',
       label: 'Rejected',
       kind: 'outcome',
-      to: 'archived',
+      to: 'rejected',
       reason: 'rejection: after interviews',
     },
   ],
@@ -156,6 +159,7 @@ export const STAGE_ACTIONS: Record<Column, readonly StageAction[]> = {
       reason: 'offer: declined',
     },
   ],
+  rejected: [backTo('new')],
   passed: [backTo('new')],
   archived: [backTo('new')],
 }
@@ -266,7 +270,7 @@ export const GHOST_NOTE = `no reply ${GHOST_AFTER_MONTHS} month${GHOST_AFTER_MON
 export const GHOST_NOTICE_DAYS = 7
 
 /** Columns a lead reaches only after the company replied, or after the person settled it. */
-const SETTLED: readonly string[] = ['interviewing', 'offer', 'passed', 'archived']
+const SETTLED: readonly string[] = ['interviewing', 'offer', 'rejected', 'passed', 'archived']
 
 /**
  * When a lead was submitted: the later of the time `jobs submitted` recorded on its application
@@ -845,13 +849,13 @@ export const hasHighlights = (lead: Pick<Lead, 'roleHighlights'>) =>
 export type SummaryField = 'companyBlurb' | 'tagline' | 'roleHighlights'
 
 /**
- * Leads still in play (not passed or archived) that lack a company blurb, tagline or role
+ * Leads still in play (not rejected, passed or archived) that lack a company blurb, tagline or role
  * highlights: the fields each lacks, and its blurb when it has one, since a tagline can be
  * written from the blurb without reading the posting again.
  */
 export function missingSummaries(file: LeadsFile) {
   return file.leads
-    .filter(lead => lead.column !== 'passed' && lead.column !== 'archived')
+    .filter(lead => !['rejected', 'passed', 'archived'].includes(lead.column))
     .map(lead => {
       const missing: SummaryField[] = [
         ...(hasBlurb(lead) ? [] : ['companyBlurb' as const]),
@@ -1132,7 +1136,9 @@ export function submitTask(lead: Named): string {
     '"In the background" section. Nobody can answer you here, so ask nothing, and never click',
     'the final submit, send, apply or confirm. Other prefills share this browser: open your own',
     'tab with tabs_create_mcp, pass its tabId on every call, and act only through element refs',
-    '(no screen coordinates); the Chrome guard refuses anything else. If the Claude in Chrome',
+    '(no screen coordinates), or the deep_form tool where a form in a shadow root or iframe gives',
+    'no ref; the Chrome guard refuses anything else. Tick the data-processing and keep-in-contact',
+    'boxes a saved answer covers. If the Claude in Chrome',
     `tools cannot be loaded or reach a browser, finish at once with a report that starts with "${CHROME_UNAVAILABLE}".`,
   ].join(' ')
 }

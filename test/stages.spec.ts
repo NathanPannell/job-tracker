@@ -77,6 +77,25 @@ test('every stage offers one highlighted next step, and outcomes say what happen
     STAGE_ACTIONS.passed.map(one => one.key),
     ['back-new'],
   )
+  assert.deepEqual(
+    STAGE_ACTIONS.rejected.map(one => one.key),
+    ['back-new'],
+  )
+})
+
+test('a rejection goes to Rejected; a lead no company turned down goes to Archived', () => {
+  assert.deepEqual(PIPELINE.slice(-4), ['applied', 'interviewing', 'offer', 'rejected'])
+  const outcomes = Object.values(STAGE_ACTIONS)
+    .flat()
+    .flatMap(one => (one.kind === 'outcome' ? [[one.key, one.to, one.reason]] : []))
+    .filter(([, to]) => to === 'rejected' || to === 'archived')
+  assert.deepEqual(outcomes, [
+    ['rejected', 'rejected', 'rejection: marked on the board'],
+    ['ghosted', 'archived', 'rejection: no reply (ghosted)'],
+    ['rejected', 'rejected', 'rejection: after interviews'],
+    ['accepted', 'archived', 'offer: accepted'],
+    ['declined', 'archived', 'offer: declined'],
+  ])
 })
 
 test('a closed lead remembers the column it came from', () => {
@@ -93,6 +112,10 @@ test('a closed lead remembers the column it came from', () => {
       history: [moved('new', 'applied'), moved('applied', 'archived')],
     }),
     'applied',
+  )
+  assert.equal(
+    previousColumn({ column: 'rejected', history: [moved('interviewing', 'rejected')] }),
+    'interviewing',
   )
   assert.equal(previousColumn({ column: 'new', history: [] }), undefined)
   assert.equal(

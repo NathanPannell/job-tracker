@@ -66,17 +66,35 @@ The types of every file are in `types/index.d.ts`.
 ## Using it
 
 - `/jobs` opens the board on tabs, one stage at a time: New → Drafting → Ready to review →
-  Applied → Interviewing → Offer, with Passed and Archived behind "Passed & archived". New shows
+  Applied → Interviewing → Offer → Rejected, with Passed and Archived behind "Passed & archived". New shows
   the ten best first ("Show more" adds ten). Each card is three lines: a coloured fit badge (green
   90+, amber 75–89, grey below) with company and role; age (since added, and the posting's when known), source and location (remote or
   where); and a one-line tagline of about 40 characters saying what the company makes or what
-  the role is (the fit reason until scout has written one; a longer one ends in "…"). Under them
+  the role is (the fit reason until scout has written one; a longer one ends in "…"). A Ready to
+  review card with a package adds a note: amber `2 answers needed`, or green `Ready to submit` (see
+  "Ready notes"). Under them
   are its stage's next steps as labelled buttons: New: Draft package · Pass — Drafting: Back to
   New — Ready: Review · Approve and submit — Applied: Got interview · Rejected · Ghosted — Interviewing: Got offer ·
   Rejected — Offer: Accepted · Declined. Company decisions (Got interview, Got offer, Rejected,
   Ghosted, Accepted, Declined) move the card and record an outcome for the weekly review, never a
-  pass (an application silent for a month is marked Ghosted for you, see "Ghosting"); an archived or passed card offers "Back to <where it was>" to undo a mis-click. Click a card's name to open it: the same next steps, then
+  pass (an application silent for a month is marked Ghosted for you, see "Ghosting"). Rejected
+  goes to Rejected; Ghosted, Accepted and Declined go to Archived. A rejected, archived or passed card offers "Back to <where it was>" to undo a mis-click. Click a card's name to open it: the same next steps, then
   Pass… · Archive · Draft package, then feedback (Score too high / too low).
+- **Ready notes.** The note counts the distinct `NEEDS ANSWER` questions in the package's
+  `answers.md`, leaving out any that `profile/knowledge-base/application-answers.md` already
+  answers. So it clears when you reply, though `answers.md` stays as drafted. The lead's own page
+  names the questions. The note is worked out when the board refreshes and is never saved. It
+  leans towards asking, because a wrong "Ready to submit" costs more than a wrong count. A marker
+  counts unless the clause right before it reads as a denial ("nothing is NEEDS ANSWER"), it is
+  "NEEDS ANSWER items", it says only "NEEDS ANSWER: none", or it is a heading of its own over the
+  questions. These are judgements on wording, and a few unusual shapes can still slip past, so the
+  note is a guide and submit still asks what is missing. An optional question counts, since submit
+  asks it. A saved answer clears a question only when its wording or the form's matches (case and
+  punctuation aside, up to the `?`, and, on the question's own wording, no different after it) and
+  its scope covers the lead: any application, the lead it was asked for, or that exact company. So
+  a card can stay amber on a
+  question submit would not ask again, because submit judges the meaning. A lead with no
+  `answers.md` to read, or an empty one, shows no note.
 - **Posting age.** The badge shows the scout's fit score, which never changes with age. A card
   shows how long ago the lead was added and, when the source gives a posting date (Greenhouse,
   Lever and Ashby boards do), how long ago the posting went up, e.g. `added 3d · posted 9d`.
@@ -103,8 +121,8 @@ The types of every file are in `types/index.d.ts`.
   application and the card's last move into Applied. Only Applied is swept: a lead with any recorded outcome (a reply
   `sync` found, an interview), one that has been in Interviewing or Offer, and one you put back
   in Applied by hand are left alone, as is every other column. A reply that comes later still
-  moves the card on: `sync` also reads leads the board ghosted, and "Back to Applied" on the
-  archived card undoes it. Like the stale-lead archive it runs when the board refreshes, on every
+  moves the card on: `sync` also reads leads the board ghosted, and proposes Rejected for a late
+  rejection, and "Back to Applied" on the archived card undoes it. Like the stale-lead archive it runs when the board refreshes, on every
   `jobs add` and on `jobs archive`, never on a timer. The threshold is `GHOST_AFTER_MONTHS` in
   `hooks/lib/model.ts` (and `GHOST_NOTICE_DAYS` how long the board lists them).
 - **Draft package** moves the card to Drafting at once and builds the package in a background
@@ -131,10 +149,16 @@ The types of every file are in `types/index.d.ts`.
   it. Your conversation cannot touch a tab a prefill is still using. If a prefill's tab looks
   submitted when it ends, your conversation says so first and leaves that lead alone until you
   decide. Rules are in `hooks/lib/chrome.ts`.
+- **Forms inside shadow DOM or an iframe** (SmartRecruiters, HubSpot) give no element refs, so a
+  prefill uses the mod's `deep_form` tool. It runs one fixed script, never JavaScript the prefill
+  writes, reaches open shadow roots and same-origin iframes, attaches the résumé through a
+  temporary file input, and refuses to press what the guard would refuse to click.
 - Every answer you give is saved word for word, with the question and date, in
   `profile/knowledge-base/application-answers.md`; `package` and `submit` read it first, so a
-  question you have answered once is not asked again where that answer applies. Account creation, sign-ins, passwords,
-  CAPTCHAs and agreements are handed back to you with everything ready to paste.
+  question you have answered once is not asked again where that answer applies. A data-processing
+  acknowledgment or "keep in contact" box your saved answer covers is ticked for you and listed in
+  the checklist. Account creation, sign-ins, passwords, CAPTCHAs and
+  any other agreement are handed back to you with everything ready to paste.
 - The band above the prompt reads `● N new leads · M ready to review · /jobs`; click it to open the
   board. It is hidden when both are zero.
 - In an unrelated conversation, the first reply ends with one short line naming the top new leads,

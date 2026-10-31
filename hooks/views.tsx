@@ -9,6 +9,7 @@ import type {
   Proposal,
   ProposalChange,
 } from '../types/index.d.ts'
+import { readyNote } from './lib/answers.ts'
 import {
   ago,
   COLUMN_TITLES,
@@ -148,7 +149,7 @@ function stageButtons(ctx: ViewContext, lead: Lead, suffix: string): RenderEleme
   }
   // A closed lead can go straight back to where it was, undoing a mis-click.
   const from = previousColumn(lead)
-  if ((lead.column === 'passed' || lead.column === 'archived') && from && from !== 'new') {
+  if (['rejected', 'passed', 'archived'].includes(lead.column) && from && from !== 'new') {
     actions.unshift({
       key: 'restore',
       label: `Back to ${COLUMN_TITLES[from]}`,
@@ -202,6 +203,21 @@ function passReasons(ctx: ViewContext, lead: Lead, suffix: string): RenderElemen
 /** The card's third line: the tagline, or the fit reason until scout has written one. */
 const oneLiner = (lead: Lead) => (lead.tagline?.trim() || lead.fitReason || '').replace(/\s+/g, ' ')
 
+/**
+ * Whether a Ready lead's package can go or still needs answers: green or amber. Nothing for a lead
+ * with no answers file to read, since that says neither.
+ */
+function readiness(ctx: ViewContext, lead: Lead, key: string): RenderElement | null {
+  const { Text } = ctx.el
+  const open = ctx.board.openQuestions?.[lead.id]
+  if (!open) return null
+  return (
+    <Text key={key} color={open.length > 0 ? 'warning' : 'success'}>
+      {readyNote(open.length)}
+    </Text>
+  )
+}
+
 function card(ctx: ViewContext, lead: Lead): RenderElement {
   const { Box, Text, Button } = ctx.el
   const { added, posted } = leadAges(lead, ctx.now)
@@ -227,6 +243,7 @@ function card(ctx: ViewContext, lead: Lead): RenderElement {
         {clip(oneLiner(lead), TAGLINE_CHARS)}
       </Text>
       {lead.column === 'drafting' && <Text dimColor>Package being drafted…</Text>}
+      {readiness(ctx, lead, `ready-note:${lead.id}`)}
       {ctx.act && (
         <Box flexDirection="row" gap={1} flexWrap="wrap">
           {stageButtons(ctx, lead, `:${lead.id}`)}
@@ -363,6 +380,34 @@ export function leadSummary(lead: Pick<Lead, 'companyBlurb' | 'roleHighlights'>)
     .join('\n\n')
 }
 
+/** The questions a Ready lead's page names; a package with more points to its Answers tab. */
+const QUESTIONS_SHOWN = 12
+/** Each stays a line or two: the page shares the pane tree's 100,000 characters. */
+const QUESTION_CHARS = 200
+
+/** The note on a Ready lead's page, then what is being asked. */
+function readySection(ctx: ViewContext, lead: Lead): RenderElement | null {
+  const { Box, Text } = ctx.el
+  const note = readiness(ctx, lead, 'ready-note')
+  if (!note) return null
+  const open = ctx.board.openQuestions?.[lead.id] ?? []
+  return (
+    <Box key="ready" flexDirection="column">
+      {note}
+      {open.slice(0, QUESTIONS_SHOWN).map((question, n) => (
+        <Text key={`question:${n}`} wrap="wrap">
+          {`${n + 1}. ${clip(question, QUESTION_CHARS)}`}
+        </Text>
+      ))}
+      {open.length > QUESTIONS_SHOWN && (
+        <Text key="more-questions" dimColor>
+          {`${open.length - QUESTIONS_SHOWN} more in the package's Answers`}
+        </Text>
+      )}
+    </Box>
+  )
+}
+
 export function leadView(ctx: ViewContext, id: string): RenderElement {
   const { Box, Text, Button, Link, Markdown } = ctx.el
   const lead = ctx.board.leads.find(one => one.id === id)
@@ -419,6 +464,7 @@ export function leadView(ctx: ViewContext, id: string): RenderElement {
             : ''
         }`}
       />
+      {readySection(ctx, lead)}
       {act && (
         <Box flexDirection="column" gap={1}>
           <Box key="next" flexDirection="row" gap={1} flexWrap="wrap">

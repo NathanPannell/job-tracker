@@ -4,6 +4,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface } from 'claude-code'
 
 import type { JobBoard, JobPackage, PackageTab } from '../../types/index.d.ts'
+import { openQuestions, parseSaved, SAVED_ANSWERS } from './answers.ts'
 import {
   emptyApplications,
   emptyLeads,
@@ -49,6 +50,34 @@ async function readText($: EngineInterface, path: string): Promise<string | unde
   }
 }
 
+/** What each Ready lead with a package still needs from the person (`JobBoard.openQuestions`). */
+async function readyQuestions(
+  $: EngineInterface,
+  dir: string,
+  leads: JobBoard['leads'],
+  applications: JobBoard['applications'],
+): Promise<Record<string, string[]>> {
+  const ready = leads.flatMap(lead => {
+    const app = applications.find(one => one.leadId === lead.id)
+    return lead.column === 'ready' && app?.files?.answers
+      ? [{ lead, path: join(dir, app.dir, app.files.answers) }]
+      : []
+  })
+  if (ready.length === 0) return {}
+  const [saved, ...answers] = await Promise.all([
+    readText($, join(dir, SAVED_ANSWERS)),
+    ...ready.map(one => readText($, one.path)),
+  ])
+  const entries = parseSaved(saved ?? '')
+  return Object.fromEntries(
+    ready.flatMap(({ lead }, n) => {
+      // An empty file says as little as a missing one: neither is "nothing to answer".
+      const text = answers[n]
+      return text?.trim() ? [[lead.id, openQuestions(text, entries, lead)]] : []
+    }),
+  )
+}
+
 /**
  * Reads the data files into the board value the pane and band draw from. A New lead whose
  * posting went up over two weeks ago is archived first, and an Applied
@@ -68,14 +97,18 @@ export async function refresh($: EngineInterface, sweep = true): Promise<JobBoar
       readText($, join(dir, 'applications.json')),
       readText($, join(dir, 'proposals.json')),
     ])
+    // The CLI saves the same migration with its next write.
+    const migrated = migrateLeads(
+      { version: 1, leads: parseOr<LeadsFile>(leads, emptyLeads).leads ?? [] },
+      new Date(loadedAt).toISOString(),
+    ).leads
+    const packages = parseOr<ApplicationsFile>(applications, emptyApplications).applications ?? []
     next = {
       dataDir: dir,
-      // The CLI saves the same migration with its next write.
-      leads: migrateLeads(
-        { version: 1, leads: parseOr<LeadsFile>(leads, emptyLeads).leads ?? [] },
-        new Date(loadedAt).toISOString(),
-      ).leads,
-      applications: parseOr<ApplicationsFile>(applications, emptyApplications).applications ?? [],
+      leads: migrated,
+      applications: packages,
+      // The note is an extra: a damaged file costs the notes, never the board.
+      openQuestions: await readyQuestions($, dir, migrated, packages).catch(() => ({})),
       // A proposal saved before per-change decisions reads as one decision per change.
       proposals: (parseOr<ProposalsFile>(proposals, emptyProposals).proposals ?? []).map(
         normalizeProposal,

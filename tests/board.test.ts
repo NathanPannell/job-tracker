@@ -307,17 +307,78 @@ describe('kanban', () => {
     const ui = await $.ui.mount({ ...pane, surface: 'desktop' })
     await ui.press({ key: 'tab:applied' })
     await ui.press({ key: 'rejected:acme-api' })
-    expect(w.leads()[0]?.column).toBe('archived')
+    expect(w.leads()[0]?.column).toBe('rejected')
     expect(w.leads()[0]?.passReason).toBeUndefined()
     expect(w.feedback().map(event => [event.kind, event.reason])).toEqual([
       ['move', undefined],
       ['outcome', 'rejection: marked on the board'],
     ])
-    await ui.press({ key: 'closed' })
-    await ui.press({ key: 'tab:archived' })
+    await ui.press({ key: 'tab:rejected' })
     expect(await ui.find({ key: 'restore:acme-api', text: /Back to Applied/ })).toBeDefined()
     await ui.press({ key: 'restore:acme-api' })
     expect(w.leads()[0]?.column).toBe('applied')
+  })
+
+  test('Rejected is a stage of its own, after Offer, on every surface', async ($, on) => {
+    world(on, {
+      leads: [
+        lead('acme-api', { company: 'Acme', column: 'rejected' }),
+        lead('beta-api', { company: 'Beta', column: 'archived' }),
+      ],
+    })
+    await start($)
+    for (const surface of ['desktop', 'terminal', 'mobile'] as const) {
+      const ui = await $.ui.mount({ ...pane, surface })
+      const tabs = (await ui.findAll({ type: 'Button' }))
+        .filter(one => /^tab:/.test(String(one.key)))
+        .map(one => String(one.props.label))
+      expect(tabs.slice(-4)).toEqual(['Applied 0', 'Interviewing 0', 'Offer 0', 'Rejected 1'])
+      await ui.press({ key: 'tab:rejected' })
+      expect(await ui.find({ key: 'card:acme-api' })).toBeDefined()
+      expect(await ui.find({ key: 'card:beta-api' })).toBeUndefined()
+      await ui.unmount()
+    }
+  })
+
+  test('a rejection after interviews lands in Rejected; Ghosted stays in Archived', async ($, on) => {
+    const w = world(on, {
+      leads: [
+        lead('acme-api', { column: 'interviewing' }),
+        lead('beta-api', { column: 'applied' }),
+      ],
+    })
+    await start($)
+    const ui = await $.ui.mount({ ...pane, surface: 'desktop' })
+    await ui.press({ key: 'tab:interviewing' })
+    await ui.press({ key: 'rejected:acme-api' })
+    await ui.press({ key: 'tab:applied' })
+    await ui.press({ key: 'ghosted:beta-api' })
+    expect(w.leads().map(one => one.column)).toEqual(['rejected', 'archived'])
+  })
+
+  test('a rejection filed from Archived goes back to Archived, or to New', async ($, on) => {
+    const at = '2026-10-30T00:00:00.000Z'
+    const history: Lead['history'] = [
+      { at, by: 'user', action: 'moved', from: 'archived', to: 'rejected' },
+    ]
+    const w = world(on, { leads: [lead('acme-api', { column: 'rejected', history })] })
+    await start($)
+    const ui = await $.ui.mount({ ...pane, surface: 'desktop' })
+    await ui.press({ key: 'tab:rejected' })
+    expect(await ui.find({ key: 'restore:acme-api', text: /Back to Archived/ })).toBeDefined()
+    expect(await ui.find({ key: 'back-new:acme-api' })).toBeDefined()
+    await ui.press({ key: 'restore:acme-api' })
+    expect(w.leads()[0]?.column).toBe('archived')
+  })
+
+  test('a rejected card with no earlier column goes back to New', async ($, on) => {
+    const w = world(on, { leads: [lead('acme-api', { column: 'rejected' })] })
+    await start($)
+    const ui = await $.ui.mount({ ...pane, surface: 'desktop' })
+    await ui.press({ key: 'tab:rejected' })
+    expect(await ui.find({ key: 'restore:acme-api' })).toBeUndefined()
+    await ui.press({ key: 'back-new:acme-api' })
+    expect(w.leads()[0]?.column).toBe('new')
   })
 
   test('a Ready lead without a package offers to draft one', async ($, on) => {
@@ -797,7 +858,28 @@ describe('kanban', () => {
       101: 'Acme\nThank you for applying to Acme!',
       102: 'Beta — Backend Developer\nFirst name *\nSubmit application',
     }
+    // What the deep_form tool's script finds, by the action it was sent with.
+    const scripts: string[] = []
+    let shadowButton = 'button "Next"'
     on('mcp.call', (_, e) => {
+      if (e.tool === 'javascript_tool') {
+        const script = String(e.args.text)
+        scripts.push(/\{"action":"(\w+)"/.exec(script)?.[1] ?? '')
+        const text = script.includes('"action":"describe"')
+          ? JSON.stringify({ line: shadowButton })
+          : script.includes('"action":"read"')
+            ? JSON.stringify({ fields: [{ id: '4', kind: 'button' }], unreachableFrames: 0 })
+            : '{"pressed":"Next"}'
+        return {
+          value: {
+            content: [
+              { type: 'text', text },
+              { type: 'text', text: 'Tab Context:\n- Executed on tabId: 101' },
+            ],
+            isError: false,
+          },
+        }
+      }
       const tab = Number(e.args.tabId)
       const text =
         e.tool === 'read_page' ? elements[String(e.args.ref_id)] : (pages[tab] ?? undefined)
@@ -882,8 +964,37 @@ describe('kanban', () => {
       )
     }
     await call({ tool: 'Read', file_path: 'packages/beta-api/answers.md', agentId: 'agent-2' })
+    // Past the refs, a prefill uses the mod's fixed script in its own tab, never its own script.
+    const deep = (agentId: string | undefined, args: Record<string, unknown>) =>
+      $.tool
+        .call({
+          tool: 'mcp__job-tracker__deep_form',
+          ...args,
+          ...(agentId ? { agentId } : {}),
+        } as Parameters<Engine['tool']['call']>[0])
+        .then(result => String(result.deny ?? (result as { result?: unknown }).result))
+    expect(await deep('agent-1', { tabId: 102, action: 'read' })).toContain('Tab 102 is not yours')
+    expect(scripts).toEqual([])
+    expect(await deep('agent-1', { tabId: 101, action: 'read' })).toContain('"id":"4"')
+    expect(await deep('agent-1', { tabId: 101, action: 'press', id: '4' })).toBe(
+      '{"pressed":"Next"}',
+    )
+    expect(await deep('agent-1', { tabId: 101, action: 'press' })).toContain('needs the id')
+    expect(scripts).toEqual(['read', 'describe', 'press'])
+    // A shadow-DOM final button is looked at and never pressed, by anyone.
+    shadowButton = 'button "Submit application" type="submit"'
+    expect(await deep('agent-1', { tabId: 101, action: 'press', id: '5' })).toContain(
+      'deep_form never presses it',
+    )
+    expect(scripts.at(-1)).toBe('describe')
+    expect((await chrome('agent-1', 'javascript_tool', { tabId: 101, text: '1' })).text).toContain(
+      'javascript_tool is not available',
+    )
     // The conversation, too, keeps out of a running prefill's tab.
     expect((await chrome(undefined, 'read_page', { tabId: 102 })).text).toContain(
+      'belongs to a background prefill',
+    )
+    expect(await deep(undefined, { tabId: 102, action: 'read' })).toContain(
       'belongs to a background prefill',
     )
     expect((await chrome(undefined, 'navigate', { url: 'https://example.com' })).text).toContain(
@@ -1620,7 +1731,7 @@ describe('kanban', () => {
       ]
     }
     await ui.press({ key: 'closed' })
-    for (const column of ['new', 'drafting', 'ready', 'applied', 'passed']) {
+    for (const column of ['new', 'drafting', 'ready', 'applied', 'rejected', 'passed']) {
       await ui.press({ key: `tab:${column}` })
       const root = (await ui.findAll({}))[0] as unknown as Node
       expect(problems(root, column)).toEqual([])
