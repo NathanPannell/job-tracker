@@ -358,7 +358,9 @@ describe('kanban', () => {
 
   test('a rejection filed from Archived goes back to Archived, or to New', async ($, on) => {
     const at = '2026-10-30T00:00:00.000Z'
-    const history = [{ at, by: 'user' as const, action: 'moved', from: 'archived', to: 'rejected' }]
+    const history: Lead['history'] = [
+      { at, by: 'user', action: 'moved', from: 'archived', to: 'rejected' },
+    ]
     const w = world(on, { leads: [lead('acme-api', { column: 'rejected', history })] })
     await start($)
     const ui = await $.ui.mount({ ...pane, surface: 'desktop' })
