@@ -224,9 +224,11 @@ Then report what was installed, what was skipped, and anything still waiting on 
 - **Updating.** `git pull` in `job-tracker/`, then start a new session.
 - **Data.** Keep `data/` out of git and back it up: it is the only copy of the board and the
   profile.
-- **Safety.** Claude never sends an application without a yes in chat, and never signs in, solves a
-  CAPTCHA or accepts an agreement. Those come back to the person. Review each form before saying
-  yes: when several prefills share one Chrome window, stay alert for a submitted tab and check for
-  a confirmation email.
+- **Safety.** Claude never sends an application without a yes in chat, and never signs in or solves
+  a CAPTCHA. It accepts no agreement except a consent box the person's own saved answer in
+  `application-answers.md` covers, such as a data-processing acknowledgment or a box letting a
+  company keep in contact, and it lists each box it ticks. The rest come back to the person. Review
+  each form before saying yes: when several prefills share one Chrome window, stay alert for a
+  submitted tab and check for a confirmation email.
 - **Uninstalling.** Delete the scheduled tasks, remove the four `env` keys and delete the
   `job-tracker` folder. `data/` is the person's to keep or delete.

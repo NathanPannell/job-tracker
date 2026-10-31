@@ -2,17 +2,26 @@
 // Chrome tab group; on 2026-10-28 one agent's clicks landed in another's tab and submitted an
 // application nobody approved. So every Claude in Chrome call a prefill makes is checked here:
 // it may act only in tabs it opened itself, only through element refs (never screen
-// coordinates), and never on a control that submits, sends or confirms. The hook applies these
-// verdicts; this module decides them and reads the pages, with no engine calls of its own.
+// coordinates), and never on a control that submits, sends or confirms. A form those refs cannot
+// reach goes through the mod's own deep_form tool (lib/deep-form.ts), never through JavaScript the
+// prefill writes. The hook applies these verdicts; this module decides them and reads the pages,
+// with no engine calls of its own.
 
 /** The Claude in Chrome tools as the engine names them: `mcp__claude-in-chrome__<tool>`. */
 const PREFIX = /^mcp__(claude-in-chrome)__(.+)$/i
+
+/** The Claude in Chrome server's name. */
+export const CHROME_SERVER = 'claude-in-chrome'
+
+/** The mod's tool for forms refs cannot reach. It acts on a tab, so it is held to the same rules. */
+export const FORM_TOOL = 'mcp__job-tracker__deep_form'
 
 /** A Claude in Chrome call: its server, the tool's own name and its arguments. */
 export type ChromeCall = { server: string; tool: string; input: Record<string, unknown> }
 
 /** The Claude in Chrome call a tool call is, or undefined for any other tool. */
 export function chromeCall(tool: string, input: Record<string, unknown>): ChromeCall | undefined {
+  if (tool === FORM_TOOL) return { server: CHROME_SERVER, tool: 'deep_form', input }
   const match = PREFIX.exec(tool)
   return match?.[1] && match[2] ? { server: match[1], tool: match[2], input } : undefined
 }
@@ -42,6 +51,7 @@ const UNSCOPED = new Set(['tabs_context_mcp', 'tabs_create_mcp', 'list_connected
 
 /** Tools a prefill may use on its own tab. Anything else (scripts, shortcuts, resizing) is refused. */
 const SCOPED = new Set([
+  'deep_form',
   'navigate',
   'read_page',
   'find',
@@ -94,7 +104,7 @@ export type RefCheck = { tabId: number; ref: string; kind: 'click' | 'fill' | 's
 export type Verdict = { deny: string } | { checks: RefCheck[] }
 
 const REFS_ONLY =
-  'Background prefills act only through element refs: get one from find or read_page, then use form_input, file_upload or a computer click with `ref` (no coordinates).'
+  'Background prefills act only through element refs: get one from find or read_page, then use form_input, file_upload or a computer click with `ref` (no coordinates). Where they give no ref (a form inside a shadow root or iframe), use the deep_form tool.'
 
 /**
  * Judges one Claude in Chrome call a background prefill makes, given the tabs it opened. A
@@ -108,6 +118,9 @@ export function judgePrefill(call: ChromeCall, own: readonly number[]): Verdict 
   for (const [n, one] of items.entries()) {
     if (call.tool === 'browser_batch' && one.tool === 'tabs_create_mcp') {
       return { deny: 'Open your tab with tabs_create_mcp on its own, not inside a browser_batch.' }
+    }
+    if (call.tool === 'browser_batch' && one.tool === 'deep_form') {
+      return { deny: 'Call deep_form on its own: it is not a Claude in Chrome tool.' }
     }
     if (n < items.length - 1 && changesPage(one)) {
       return {
