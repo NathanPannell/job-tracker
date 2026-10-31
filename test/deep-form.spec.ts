@@ -121,6 +121,10 @@ test('a press looks first, and never reaches a control that reads like a submit'
     ['button "Confirm and continue"', 'its label'],
     ['button "Finish"', 'its label'],
     ['button "Apply now" type="submit"', 'a submit type not labelled as a step'],
+    ['button "Apply"', 'the final button of a form past the refs'],
+    ['button "Apply now"', 'the final button of a form past the refs'],
+    ['menuitem "Submit application"', 'its label, whatever its role'],
+    ['tab "Submit"', 'its label, whatever its role'],
     ['button "" type="submit"', 'an icon that submits'],
     ['button ""', 'nothing to read it by'],
   ] as const) {
@@ -158,7 +162,96 @@ test('a press goes ahead on a step button or a choice in a list', async () => {
       steps.map(one => one.action),
       ['describe', 'press'],
     )
+    assert.equal(steps[1]?.expect, line)
   }
+})
+
+/** One element as the page script reads it, tagged with a field id, and its clicks. */
+function element(tagName: string, attrs: Record<string, string>, text = '', own = {}) {
+  const shown = { nodeType: 3, textContent: text }
+  const tagged: Record<string, string> = { 'data-job-tracker-field': '5', ...attrs }
+  const seen = { clicks: 0, shown }
+  const el = {
+    nodeType: 1,
+    tagName,
+    childNodes: [shown],
+    getAttribute: (name: string) => tagged[name] ?? null,
+    hasAttribute: (name: string) => name in tagged,
+    getRootNode: () => ({}),
+    click: () => (seen.clicks += 1),
+    ...own,
+  }
+  return { el, seen }
+}
+
+/** Runs each step's real script on a page of these elements. */
+const scriptOn =
+  (...els: unknown[]): RunStep =>
+  one => {
+    const document = { querySelectorAll: () => els }
+    return Promise.resolve(runInNewContext(formScript(one), { document }) as string)
+  }
+
+test('on the page, a press reports the real role, so a menu item or tab cannot pass as a choice', async () => {
+  for (const role of ['menuitem', 'tab']) {
+    const { el, seen } = element('DIV', { role }, 'Submit application')
+    assert.match(
+      await formResult(step({ action: 'press', id: '5' }), scriptOn(el)),
+      /deep_form never presses it/,
+    )
+    assert.equal(seen.clicks, 0, role)
+  }
+  const { el, seen } = element('DIV', { role: 'option' }, 'Canada')
+  await formResult(step({ action: 'press', id: '5' }), scriptOn(el))
+  assert.equal(seen.clicks, 1)
+})
+
+test('on the page, a button that becomes something else between the look and the click is left', async () => {
+  const { el, seen } = element('BUTTON', {}, 'Next', { type: 'button' })
+  const page = scriptOn(el)
+  const run: RunStep = async one => {
+    const answer = await page(one)
+    seen.shown.textContent = 'Submit application'
+    return answer
+  }
+  assert.match(await formResult(step({ action: 'press', id: '5' }), run), /changed, so read it/)
+  assert.equal(seen.clicks, 0)
+})
+
+test('on the page, a box drawn as a button is ticked, unless a click would also submit', async () => {
+  const box = element('BUTTON', { role: 'checkbox', 'aria-checked': 'false' }, '', {
+    type: 'button',
+  })
+  await formResult(step({ action: 'fill', id: '5', value: 'true' }), scriptOn(box.el))
+  assert.equal(box.seen.clicks, 1)
+  const sends = element('BUTTON', { role: 'checkbox' }, 'Yes', { type: 'submit' })
+  assert.match(
+    await formResult(step({ action: 'fill', id: '5', value: 'true' }), scriptOn(sends.el)),
+    /which fill leaves alone/,
+  )
+  assert.equal(sends.seen.clicks, 0)
+})
+
+test('on the page, a box shows the wording beside its label', async () => {
+  const box = element('INPUT', { type: 'checkbox', 'aria-label': 'Consent' }, '', {
+    type: 'checkbox',
+    checked: false,
+    parentNode: {
+      nodeType: 1,
+      tagName: 'DIV',
+      childNodes: [
+        { nodeType: 3, textContent: 'I accept the Terms of Use and binding arbitration' },
+      ],
+      getAttribute: () => null,
+    },
+    matches: () => true,
+    getClientRects: () => [],
+  })
+  const answer = JSON.parse(await scriptOn(box.el)(step({ action: 'read' }))) as {
+    fields: { label: string; near: string }[]
+  }
+  assert.equal(answer.fields[0]?.label, 'Consent')
+  assert.match(answer.fields[0]?.near ?? '', /Terms of Use and binding arbitration/)
 })
 
 test('the other actions are one step each', async () => {

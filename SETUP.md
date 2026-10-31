@@ -154,9 +154,9 @@ The types of every file are in `types/index.d.ts`.
   temporary file input, and refuses to press what the guard would refuse to click.
 - Every answer you give is saved word for word, with the question and date, in
   `profile/knowledge-base/application-answers.md`; `package` and `submit` read it first, so a
-  question you have answered once is not asked again where that answer applies. A consent box
-  your saved answer covers, such as a data-processing acknowledgment or a "keep in contact" box, is
-  ticked for you and listed in the checklist. Account creation, sign-ins, passwords, CAPTCHAs and
+  question you have answered once is not asked again where that answer applies. A data-processing
+  acknowledgment or "keep in contact" box your saved answer covers is ticked for you and listed in
+  the checklist. Account creation, sign-ins, passwords, CAPTCHAs and
   any other agreement are handed back to you with everything ready to paste.
 - The band above the prompt reads `● N new leads · M ready to review · /jobs`; click it to open the
   board. It is hidden when both are zero.

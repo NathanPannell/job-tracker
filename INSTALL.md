@@ -225,9 +225,10 @@ Then report what was installed, what was skipped, and anything still waiting on 
 - **Data.** Keep `data/` out of git and back it up: it is the only copy of the board and the
   profile.
 - **Safety.** Claude never sends an application without a yes in chat, and never signs in or solves
-  a CAPTCHA. It accepts no agreement except a consent box the person's own saved answer in
-  `application-answers.md` covers, such as a data-processing acknowledgment or a box letting a
-  company keep in contact, and it lists each box it ticks. The rest come back to the person. Review
+  a CAPTCHA. It never accepts terms or another legal agreement. The one kind of consent it gives
+  for the person is a data-processing acknowledgment or a box letting a company keep in contact,
+  when their own saved answer in `application-answers.md` covers it, and it lists each box it
+  ticks. The rest come back to the person. Review
   each form before saying yes: when several prefills share one Chrome window, stay alert for a
   submitted tab and check for a confirmation email.
 - **Uninstalling.** Delete the scheduled tasks, remove the four `env` keys and delete the

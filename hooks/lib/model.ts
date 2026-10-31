@@ -1133,8 +1133,8 @@ export function submitTask(lead: Named): string {
     'the final submit, send, apply or confirm. Other prefills share this browser: open your own',
     'tab with tabs_create_mcp, pass its tabId on every call, and act only through element refs',
     '(no screen coordinates), or the deep_form tool where a form in a shadow root or iframe gives',
-    'no ref; the Chrome guard refuses anything else. Tick the consent boxes a saved answer covers.',
-    'If the Claude in Chrome',
+    'no ref; the Chrome guard refuses anything else. Tick the data-processing and keep-in-contact',
+    'boxes a saved answer covers. If the Claude in Chrome',
     `tools cannot be loaded or reach a browser, finish at once with a report that starts with "${CHROME_UNAVAILABLE}".`,
   ].join(' ')
 }

@@ -51,14 +51,15 @@ step here.
    page in a new tab.
 2. Stop and hand off to the person, with everything ready, when the page needs any of: an account
    or sign-in (Workday, iCIMS, Taleo and similar), a password, a CAPTCHA or bot check, or an
-   agreement you would have to accept for them that no saved answer covers (a consent box a saved
-   answer does cover is step 3's to tick). Say which page, and list the package files and the
-   answers to paste. Do not try to get around it.
+   agreement you would have to accept for them (terms of use, an arbitration clause, any other
+   legal agreement), whatever a saved answer says. Say which page, and list the package files and
+   the answers to paste. Do not try to get around it.
 3. Read the whole form, every page of it, before asking anything. Fill every field the record
    answers: name, email, phone, location, links, work authorization (only as recorded), the cover
    letter, each question in `answers.md`, and each answer in `application-answers.md` whose
    question matches and whose scope covers this application (the latest entry wins). Tick each
-   consent box such an answer covers, with no need to ask: see "Consent boxes" below. Upload
+   data-processing and keep-in-contact box such an answer covers, with no need to ask: see
+   "Consent boxes" below. Upload
    `packages/<id>/resume.pdf` with file_upload. Leave optional demographic or self-identification
    questions unanswered (or "prefer not to say") unless the person has said otherwise. Where find
    and read_page give no ref for a field or file input the page shows, carry on with deep_form as
@@ -113,15 +114,19 @@ step here.
 
 ## Consent boxes
 
-The person has agreed to some boxes in advance, in their own words, so a box a saved answer covers
-is ticked like any other field the record answers, never handed back. Tick a box when
-`application-answers.md` holds an answer that matches what the box says and whose scope covers this
-application. Today that means data-processing acknowledgment boxes and boxes letting a company keep
-in contact (talent pool, future roles). Use form_input on a ref, or deep_form with `value` `true`.
+The person has agreed to two kinds of box in advance, in their own words, so these are ticked like
+any other field the record answers, never handed back: data-processing acknowledgments, and boxes
+letting a company keep in contact (talent pool, future roles). Tick one when
+`application-answers.md` holds an answer to that kind of box whose scope covers this application.
+Use form_input on a ref, or deep_form with `value` `true`.
 
-- The whole of the box's wording must fall within that answer. A box that also accepts terms of
-  use, an arbitration clause or another legal agreement is an agreement: step 2 applies. A label
-  from deep_form that ends in … is clipped: read the rest with get_page_text before you tick it.
+- Only these two kinds. A saved answer never makes any other box tickable: terms of use, an
+  arbitration clause or any other legal agreement is step 2's, even when an entry reads like a yes
+  to it.
+- Read the box's whole wording on the page first, with get_page_text or a screenshot: a label can
+  be one word with the terms beside it. deep_form's `near` gives the text around a box, and a
+  `label` or `near` ending in … is clipped. If the wording goes beyond these two kinds or bundles
+  anything else, it is an agreement: step 2 applies.
 - A limit written into the entry's Scope line holds, such as a box the person ticks themself.
 - Name each box you tick, with its wording, in the checklist and the report's "Filled" list.
 - This covers boxes on the application form. Accounts, passwords, CAPTCHAs and the final submit
@@ -136,13 +141,15 @@ mod's own fixed script, in the background or in the conversation, and takes your
 call:
 
 - `action: "read"` lists every control with an `id`, its kind, label and current value. Read again
-  after anything that redraws the form.
+  after anything that redraws the form. A box or radio also has `near`, the text around it: match
+  a Yes or No radio to its question there before you fill it. A select with `moreOptions` lists
+  only its first options; fill still finds any of them by text.
 - `action: "fill"` with `id` and `value` sets a text field or a select (by the option's text), or
   ticks a box (`value: "false"` unticks it). Fill a typed search box first, read again, then press
   the option it offers.
 - `action: "press"` with `id` clicks a button such as Next, an option or a menu item. It refuses
-  anything that reads like a final submit, or a button with no label: leave those for the
-  conversation, as with any guard refusal.
+  anything that reads like a final submit, a bare Apply included, or a button with no label: leave
+  those for the conversation, as with any guard refusal.
 
 To attach the résumé where no ref reaches the real file input:
 
@@ -184,15 +191,15 @@ When the prompt says you run in the background, nobody can answer you:
 - The job-tracker Chrome guard enforces all of this: it refuses any other call, and reads every
   element first. It refuses a click on one labelled like submit, send, confirm, finish or
   one-click apply, or on a submit-type button labelled as anything but a step (Next, Continue,
-  Review), and a form_input on a button or link. deep_form's press refuses the same controls. A
-  refusal is not an error to work around: use a ref and form_input instead, or leave that control
+  Review), and a form_input on a button or link. deep_form's press refuses the same controls and
+  a bare Apply. A refusal is not an error to work around: use a ref and form_input instead, or leave that control
   for the conversation and list it under "Still needed" in the report.
 - Before the report, read your tab with get_page_text. If it reads as a sent application
   ("Thank you for applying", "Application submitted" and the like), start the report with
   `STRAY SUBMIT DETECTED` and one line on what the page says. The guard also checks your tabs when
   you finish, and puts any such finding at the top of the report itself.
-- If step 2 stops you (sign-in, account, password, CAPTCHA, an agreement no saved answer covers),
-  stop there too and say so in the report.
+- If step 2 stops you (sign-in, account, password, CAPTCHA, an agreement), stop there too and say
+  so in the report.
 - If the Claude in Chrome tools cannot be loaded or reach a browser, finish at once with a report
   that starts with `CHROME UNAVAILABLE` and one line on why.
 - Write nothing under `profile/` and do not change the board: no answers were given yet.
@@ -258,8 +265,8 @@ earlier entry: a changed answer is a new entry with a later date.
   (by name, or "submit all" for the batch).
 - Never create accounts, enter passwords or sign in for the person; never solve a CAPTCHA or
   accept terms or agreements for them. On a sign-in or account page, stop and hand off with
-  everything ready. The one thing to accept for them is a consent box their saved answer covers
-  (see "Consent boxes"): tick those without asking.
+  everything ready. The one thing to tick for them is a data-processing or keep-in-contact box
+  their saved answer covers (see "Consent boxes"), without asking.
 - Never send email or messages. Only the facts in the record and the person's own answers go into
   the form.
 - Do not modify anything under `profile/` except appending the person's answers to

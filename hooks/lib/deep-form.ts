@@ -18,6 +18,8 @@ export type FormStep = {
   value?: string
   /** Where a read carries on: Claude in Chrome cuts a script's result at about 1000 characters. */
   offset?: number
+  /** What a press looked at: it clicks only if the control still reads the same. */
+  expect?: string
 }
 
 /** A deep_form call's arguments as a step, or why they cannot be one. */
@@ -66,21 +68,23 @@ async function readAll(step: FormStep, run: RunStep): Promise<string> {
   return JSON.stringify({ fields, unreachableFrames })
 }
 
-async function press(step: FormStep, run: RunStep): Promise<string> {
-  const look = await run({ ...step, action: 'describe' })
-  return pressRefusal(look, step.id ?? '') ?? run(step)
-}
+/**
+ * Past the refs a control is on the form itself, where a bare Apply is the final button even when
+ * it is no submit type.
+ */
+const APPLY = /^\S+ "apply\b/i
 
 /**
- * Why a control may not be pressed, from what the describe step gave back, or undefined if it may.
- * A control with no label to read, or a result that is not the script's, counts as a submit.
+ * A press looks at the control first and clicks only what passes the guard's own check. A control
+ * with no label to read, or a result that is not the script's, counts as a submit.
  */
-function pressRefusal(look: string, id: string): string | undefined {
+async function press(step: FormStep, run: RunStep): Promise<string> {
+  const look = await run({ ...step, action: 'describe' })
   const line = parsed(look)?.line
-  if (typeof line !== 'string') return `Could not read field ${id}: ${look}`
-  return isSubmitControl(line) || /""/.test(line)
-    ? `Field ${id} (${line}) looks like it submits, sends or confirms, or has no label, so deep_form never presses it. A background prefill leaves it for the conversation, which asks the person first.`
-    : undefined
+  if (typeof line !== 'string') return `Could not read field ${step.id ?? ''}: ${look}`
+  return isSubmitControl(line) || APPLY.test(line) || /""/.test(line)
+    ? `Field ${step.id ?? ''} (${line}) looks like it submits, sends, applies or confirms, or has no label, so deep_form never presses it. A background prefill leaves it for the conversation, which asks the person first.`
+    : run({ ...step, expect: line })
 }
 
 function parsed(text: string): Record<string, unknown> | undefined {
@@ -92,11 +96,11 @@ function parsed(text: string): Record<string, unknown> | undefined {
 }
 
 /** The script for one step: the page's half of the tool, with its arguments as JSON data. */
-export const formScript = ({ action, id, value, offset }: FormStep) =>
-  `(${PAGE})(${JSON.stringify({ action, id, value, offset })})`
+export const formScript = ({ action, id, value, offset, expect }: FormStep) =>
+  `(${PAGE})(${JSON.stringify({ action, id, value, offset, expect })})`
 
 /** Runs in the page. It returns JSON text; nothing here but `press` and a box's tick clicks. */
-const PAGE = String.raw`({ action, id, value, offset = 0 }) => {
+const PAGE = String.raw`({ action, id, value, offset = 0, expect }) => {
   const ATTR = 'data-job-tracker-field'
   const TEMP = 'job-tracker-temp-file'
   const ROLES = 'button,checkbox,radio,switch,combobox,listbox,option,menuitem,menuitemradio,tab'
@@ -139,6 +143,10 @@ const PAGE = String.raw`({ action, id, value, offset = 0 }) => {
   const kindOf = el => {
     const tag = el.tagName
     const type = String(el.type ?? '').toLowerCase()
+    const role = el.getAttribute('role') ?? ''
+    // A box drawn as a button, unless a click on it would also submit its form.
+    if (tag === 'BUTTON' && type === 'button' && role === 'radio') return 'radio'
+    if (tag === 'BUTTON' && type === 'button' && ['checkbox', 'switch'].includes(role)) return 'checkbox'
     if (tag === 'BUTTON' || tag === 'A') return 'button'
     if (tag === 'SELECT') return 'select'
     if (tag === 'TEXTAREA') return 'text'
@@ -146,7 +154,6 @@ const PAGE = String.raw`({ action, id, value, offset = 0 }) => {
       if (['submit', 'button', 'image', 'reset'].includes(type)) return 'button'
       return ['checkbox', 'radio', 'file', 'password'].includes(type) ? type : 'text'
     }
-    const role = el.getAttribute('role') ?? ''
     if (role === 'button') return 'button'
     if (role === 'checkbox' || role === 'switch') return 'checkbox'
     if (role === 'radio') return 'radio'
@@ -178,6 +185,20 @@ const PAGE = String.raw`({ action, id, value, offset = 0 }) => {
     return clean(el.getAttribute('name'))
   }
 
+  // A box or radio's own label can be one word, with its terms or its question beside it.
+  const nearOf = el => {
+    const label = labelOf(el)
+    for (let node = el, up = 0; up < 5; up += 1) {
+      node = node.parentNode ?? node.host
+      if (!node || node.tagName === 'BODY') break
+      const near = clean(textOf(node))
+      if (near.length > label.length) return near
+    }
+    return ''
+  }
+
+  const isBox = el => ['checkbox', 'radio'].includes(kindOf(el))
+
   const stateOf = el => {
     const kind = kindOf(el)
     if (kind === 'checkbox' || kind === 'radio') {
@@ -190,7 +211,8 @@ const PAGE = String.raw`({ action, id, value, offset = 0 }) => {
       const options = [...el.options]
         .map(one => short(one.text))
         .filter(text => (room -= text.length + 3) > 0)
-      return { value: short(el.selectedOptions[0]?.text), options }
+      const more = options.length < el.options.length ? { moreOptions: true } : {}
+      return { value: short(el.selectedOptions[0]?.text), options, ...more }
     }
     return {}
   }
@@ -198,8 +220,8 @@ const PAGE = String.raw`({ action, id, value, offset = 0 }) => {
   const describe = (el, fieldId) => ({
     id: fieldId,
     kind: kindOf(el),
-    // A box's whole wording decides whether it may be ticked.
-    label: short(labelOf(el), kindOf(el) === 'checkbox' ? 500 : 160),
+    label: short(labelOf(el), isBox(el) ? 300 : 160),
+    ...(isBox(el) ? { near: short(nearOf(el), 300) } : {}),
     ...stateOf(el),
     ...(el.required || el.getAttribute('aria-required') === 'true' ? { required: true } : {}),
     ...(el.disabled || el.getAttribute('aria-disabled') === 'true' ? { disabled: true } : {}),
@@ -231,6 +253,14 @@ const PAGE = String.raw`({ action, id, value, offset = 0 }) => {
     return { fields: page, unreachableFrames: frames, ...(end < fields.length ? { next: end } : {}) }
   }
 
+  // Blur closes the list a typed search box offers, before it can be read.
+  const settled = el =>
+    el.getAttribute('role') === 'combobox' ||
+    el.hasAttribute('aria-autocomplete') ||
+    el.hasAttribute('list')
+      ? ['input', 'change']
+      : ['input', 'change', 'blur', 'focusout']
+
   const fire = (el, ...types) => {
     for (const type of types) {
       el.dispatchEvent(new Event(type, { bubbles: true, composed: true }))
@@ -251,11 +281,11 @@ const PAGE = String.raw`({ action, id, value, offset = 0 }) => {
       const option = [...el.options].find(one => clean(one.text) === value || one.value === value)
       if (!option) return { error: 'No option "' + value + '" in ' + labelOf(el) }
       setValue(el, option.value)
-      fire(el, 'input', 'change', 'blur', 'focusout')
+      fire(el, ...settled(el))
     } else if (kind === 'text') {
       if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') setValue(el, value)
       else el.textContent = value
-      fire(el, 'input', 'change', 'blur', 'focusout')
+      fire(el, ...settled(el))
     } else {
       return { error: labelOf(el) + ' is a ' + kind + ' control, which fill leaves alone' }
     }
@@ -297,12 +327,12 @@ const PAGE = String.raw`({ action, id, value, offset = 0 }) => {
     if (kind !== 'button' && kind !== 'choice') {
       return { error: labelOf(el) + ' is a ' + kind + ' control, which press leaves alone' }
     }
-    if (action === 'describe') {
-      const type = String(el.type ?? '').toLowerCase()
-      const sends = kind === 'button' && (type === 'submit' || type === 'image')
-      const role = kind === 'button' ? 'button' : 'option'
-      return { line: role + ' "' + labelOf(el) + '"' + (sends ? ' type="submit"' : '') }
-    }
+    const type = String(el.type ?? '').toLowerCase()
+    const sends = kind === 'button' && (type === 'submit' || type === 'image')
+    const role = kind === 'button' ? 'button' : el.getAttribute('role')
+    const line = role + ' "' + labelOf(el) + '"' + (sends ? ' type="submit"' : '')
+    if (action === 'describe') return { line }
+    if (line !== expect) return { error: 'Field ' + id + ' changed, so read it again' }
     el.click()
     return { pressed: short(labelOf(el)) }
   })()
