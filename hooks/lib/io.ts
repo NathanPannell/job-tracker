@@ -7,6 +7,7 @@ import type { JobBoard, JobPackage, PackageTab } from '../../types/index.d.ts'
 import { openQuestions, parseSaved, SAVED_ANSWERS } from './answers.ts'
 import {
   emptyApplications,
+  emptyFeedback,
   emptyLeads,
   emptyProposals,
   isArchivable,
@@ -14,8 +15,10 @@ import {
   migrateLeads,
   normalizeProposal,
   parseOr,
+  parseStrict,
+  rejectionCount,
 } from './model.ts'
-import type { ApplicationsFile, LeadsFile, ProposalsFile } from './model.ts'
+import type { ApplicationsFile, FeedbackFile, LeadsFile, ProposalsFile } from './model.ts'
 
 export const PANE = 'jobs'
 
@@ -78,6 +81,15 @@ async function readyQuestions(
   )
 }
 
+/** The rejections `feedback.json` records; undefined for a file too damaged to say, never 0. */
+function countRejections(text: string | undefined): number | undefined {
+  try {
+    return rejectionCount(parseStrict<FeedbackFile>(text, emptyFeedback).events)
+  } catch {
+    return undefined
+  }
+}
+
 /**
  * Reads the data files into the board value the pane and band draw from. A New lead whose
  * posting went up over two weeks ago is archived first, and an Applied
@@ -92,10 +104,11 @@ export async function refresh($: EngineInterface, sweep = true): Promise<JobBoar
   if (!dir) {
     next = { ...EMPTY_BOARD, loadedAt, error: null }
   } else {
-    const [leads, applications, proposals] = await Promise.all([
+    const [leads, applications, proposals, feedback] = await Promise.all([
       readText($, join(dir, 'leads.json')),
       readText($, join(dir, 'applications.json')),
       readText($, join(dir, 'proposals.json')),
+      readText($, join(dir, 'feedback.json')),
     ])
     // The CLI saves the same migration with its next write.
     const migrated = migrateLeads(
@@ -109,6 +122,7 @@ export async function refresh($: EngineInterface, sweep = true): Promise<JobBoar
       applications: packages,
       // The note is an extra: a damaged file costs the notes, never the board.
       openQuestions: await readyQuestions($, dir, migrated, packages).catch(() => ({})),
+      rejections: countRejections(feedback),
       // A proposal saved before per-change decisions reads as one decision per change.
       proposals: (parseOr<ProposalsFile>(proposals, emptyProposals).proposals ?? []).map(
         normalizeProposal,
