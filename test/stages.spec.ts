@@ -245,7 +245,7 @@ test('a big number draws as rectangles, one for each block of its digits', () =>
   for (const value of [0, 3, 12, 120]) assert.equal(rects(value), blocks(value), String(value))
   assert.match(bigNumberSvg(3), /width="36" height="60"/)
   assert.match(bigNumberSvg(120), /width="132" height="60"/)
-  // The second digit starts past the first and the gap: four blocks of twelve pixels.
-  assert.match(bigNumberSvg(11), /<rect x="48" y="0"/)
+  // The second digit starts four blocks in, past the first and the gap: 8 lights column 0 there.
+  assert.match(bigNumberSvg(88), /<rect x="48" y="0"/)
   assert.ok(!bigNumberSvg(3).includes('<text'))
 })
