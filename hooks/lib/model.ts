@@ -1042,6 +1042,60 @@ export function bandText(c: Counts): string | undefined {
   )
 }
 
+/** Whether this event records a company turning a lead down; a ghosted lead sent no word at all. */
+const isRejection = (event: Pick<FeedbackEvent, 'kind' | 'reason'>) =>
+  event.kind === 'outcome' &&
+  event.reason !== GHOSTED_REASON &&
+  (event.reason ?? '').startsWith('rejection:')
+
+/**
+ * How many leads a company rejected: each once, however many rejections it has. Going back through
+ * the log in order, since the events stay when a lead moves: a move anywhere but Archived after a
+ * rejection takes it back (a mis-click on Rejected), and a lead rejected again counts again.
+ */
+export function rejectionCount(
+  events: readonly Pick<FeedbackEvent, 'leadId' | 'kind' | 'reason' | 'to'>[],
+): number {
+  const rejected = new Set<string>()
+  for (const event of events) {
+    if (isRejection(event)) rejected.add(event.leadId)
+    else if (event.to !== undefined && event.to !== 'archived') rejected.delete(event.leadId)
+  }
+  return rejected.size
+}
+
+/** Each digit five rows tall in block characters, for the terminal, which has one text size. */
+const BIG_DIGITS: readonly (readonly string[])[] = [
+  ['███', '█ █', '█ █', '█ █', '███'],
+  [' █ ', '██ ', ' █ ', ' █ ', '███'],
+  ['███', '  █', '███', '█  ', '███'],
+  ['███', '  █', ' ██', '  █', '███'],
+  ['█ █', '█ █', '███', '  █', '  █'],
+  ['███', '█  ', '███', '  █', '███'],
+  ['███', '█  ', '███', '█ █', '███'],
+  ['███', '  █', '  █', '  █', '  █'],
+  ['███', '█ █', '███', '█ █', '███'],
+  ['███', '█ █', '███', '  █', '███'],
+]
+
+/** A whole number in block characters, five lines tall. */
+export function bigDigits(value: number): string {
+  const glyphs = [...String(value)].map(digit => BIG_DIGITS[Number(digit)] ?? [])
+  return [0, 1, 2, 3, 4].map(row => glyphs.map(glyph => glyph[row]).join(' ')).join('\n')
+}
+
+/** Room for one digit of `bigNumberSvg`, whose face is the viewer's own. */
+const BIG_DIGIT_WIDTH = 40
+
+/**
+ * A whole number as a drawing, larger than any Text size. An Svg draws isolated from the theme, so
+ * its colour is one that reads on a light or a dark pane.
+ */
+export function bigNumberSvg(value: number): string {
+  const width = String(value).length * BIG_DIGIT_WIDTH
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="64" viewBox="0 0 ${width} 64"><text x="0" y="54" font-family="system-ui, sans-serif" font-size="64" font-weight="700" fill="#d97757">${value}</text></svg>`
+}
+
 /** Best first by fit score. */
 export const byScore = (a: Lead, b: Lead) => b.fitScore - a.fitScore
 

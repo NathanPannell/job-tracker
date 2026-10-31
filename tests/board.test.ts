@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 
-import { draftTask } from '../hooks/lib/model.ts'
+import { bigDigits, draftTask, GHOSTED_REASON } from '../hooks/lib/model.ts'
 import type { Lead } from '../hooks/lib/model.ts'
 import { DATA, lead, PANE_PROPS, world } from './world.ts'
 
@@ -318,6 +318,115 @@ describe('kanban', () => {
     expect(await ui.find({ key: 'restore:acme-api', text: /Back to Applied/ })).toBeDefined()
     await ui.press({ key: 'restore:acme-api' })
     expect(w.leads()[0]?.column).toBe('applied')
+  })
+
+  /** A feedback file: one lead rejected twice, one ghosted, one undone by a move back. */
+  const REJECTIONS = {
+    [`${DATA}/feedback.json`]: JSON.stringify({
+      version: 1,
+      events: [
+        { id: '1', at: '', leadId: 'acme-api', kind: 'outcome', reason: 'rejection: an email' },
+        { id: '2', at: '', leadId: 'acme-api', kind: 'outcome', reason: 'rejection: another' },
+        { id: '3', at: '', leadId: 'beta-api', kind: 'outcome', reason: 'rejection: an email' },
+        { id: '4', at: '', leadId: 'ghost-api', kind: 'outcome', reason: GHOSTED_REASON },
+        { id: '5', at: '', leadId: 'undone-api', kind: 'outcome', reason: 'rejection: mis-click' },
+        { id: '6', at: '', leadId: 'undone-api', kind: 'move', from: 'archived', to: 'applied' },
+      ],
+    }),
+  }
+
+  test('the head of the board draws the rejections largest, on every stage', async ($, on) => {
+    world(
+      on,
+      {
+        leads: [
+          lead('new-api'),
+          lead('undone-api', { column: 'applied' }),
+          lead('acme-api', { column: 'archived' }),
+        ],
+      },
+      REJECTIONS,
+    )
+    await start($)
+    const ui = await $.ui.mount({ ...pane, surface: 'desktop' })
+    await ui.press({ key: 'closed' })
+    for (const column of ['new', 'drafting', 'ready', 'applied', 'offer', 'archived']) {
+      await ui.press({ key: `tab:${column}` })
+      const number = await ui.find({ type: 'Svg' })
+      expect(number?.props.alt).toBe('Rejections: 2')
+      expect(number?.props.source).toContain('>2</text>')
+      expect(await ui.find({ type: 'Text', text: /^Rejections$/ })).toBeDefined()
+    }
+    await ui.press({ key: 'open:acme-api' })
+    expect(await ui.find({ key: 'rejections' })).toBeUndefined()
+    await ui.unmount()
+  })
+
+  test('the terminal, which has one text size, draws the rejections in block digits', async ($, on) => {
+    world(on, { leads: [lead('acme-api', { column: 'archived' })] }, REJECTIONS)
+    await start($)
+    const ui = await $.ui.mount({ ...pane, surface: 'terminal' })
+    expect(await ui.find({ type: 'Svg' })).toBeUndefined()
+    expect(await ui.find({ type: 'Text', text: bigDigits(2) })).toBeDefined()
+    await ui.unmount()
+  })
+
+  test('mobile reads the rejections too', async ($, on) => {
+    world(on, { leads: [lead('acme-api')] }, REJECTIONS)
+    await start($)
+    const ui = await $.ui.mount({ ...pane, surface: 'mobile' })
+    expect(await ui.find({ type: 'Svg' })).toBeDefined()
+    await ui.unmount()
+  })
+
+  test('the rejections follow Rejected, Ghosted and undoing them', async ($, on) => {
+    world(on, {
+      leads: [
+        lead('acme-api', { company: 'Acme', column: 'applied' }),
+        lead('beta-api', { company: 'Beta', column: 'applied' }),
+      ],
+    })
+    await start($)
+    const ui = await $.ui.mount({ ...pane, surface: 'desktop' })
+    const shown = async () => (await ui.find({ type: 'Svg' }))?.props.alt
+    expect(await shown()).toBe('Rejections: 0')
+    await ui.press({ key: 'tab:applied' })
+    await ui.press({ key: 'ghosted:beta-api' })
+    expect(await shown()).toBe('Rejections: 0')
+    await ui.press({ key: 'rejected:acme-api' })
+    expect(await shown()).toBe('Rejections: 1')
+    await ui.press({ key: 'closed' })
+    await ui.press({ key: 'tab:archived' })
+    await ui.press({ key: 'restore:acme-api' })
+    expect(await shown()).toBe('Rejections: 0')
+    await ui.unmount()
+  })
+
+  test('a damaged feedback file costs the number, never the board', async ($, on) => {
+    world(on, { leads: [lead('acme-api')] }, { [`${DATA}/feedback.json`]: '{ not json' })
+    await start($)
+    const ui = await $.ui.mount({ ...pane, surface: 'desktop' })
+    expect(await ui.find({ key: 'rejections' })).toBeUndefined()
+    expect(await ui.find({ key: 'card:acme-api' })).toBeDefined()
+    await ui.unmount()
+  })
+
+  test('a feedback file that cannot be read shows no number rather than a wrong 0', async ($, on) => {
+    const w = world(on, { leads: [lead('acme-api')] })
+    w.files.delete(`${DATA}/feedback.json`)
+    await start($)
+    const ui = await $.ui.mount({ ...pane, surface: 'desktop' })
+    expect(await ui.find({ key: 'rejections' })).toBeUndefined()
+    expect(await ui.find({ key: 'card:acme-api' })).toBeDefined()
+    await ui.unmount()
+  })
+
+  test('an empty feedback file is no rejections yet', async ($, on) => {
+    world(on, { leads: [lead('acme-api')] }, { [`${DATA}/feedback.json`]: '' })
+    await start($)
+    const ui = await $.ui.mount({ ...pane, surface: 'desktop' })
+    expect((await ui.find({ type: 'Svg' }))?.props.alt).toBe('Rejections: 0')
+    await ui.unmount()
   })
 
   test('a Ready lead without a package offers to draft one', async ($, on) => {
