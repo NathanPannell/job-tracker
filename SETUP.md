@@ -78,7 +78,7 @@ The types of every file are in `types/index.d.ts`.
   Rejected — Offer: Accepted · Declined. Company decisions (Got interview, Got offer, Rejected,
   Ghosted, Accepted, Declined) move the card and record an outcome for the weekly review, never a
   pass (an application silent for a month is marked Ghosted for you, see "Ghosting"). Rejected
-  moves it to Rejected, the rest to Archived. A rejected, archived or passed card offers "Back to <where it was>" to undo a mis-click. Click a card's name to open it: the same next steps, then
+  goes to Rejected; Ghosted, Accepted and Declined go to Archived. A rejected, archived or passed card offers "Back to <where it was>" to undo a mis-click. Click a card's name to open it: the same next steps, then
   Pass… · Archive · Draft package, then feedback (Score too high / too low).
 - **Ready notes.** The note counts the distinct `NEEDS ANSWER` questions in the package's
   `answers.md`, leaving out any that `profile/knowledge-base/application-answers.md` already

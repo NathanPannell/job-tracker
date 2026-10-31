@@ -356,6 +356,19 @@ describe('kanban', () => {
     expect(w.leads().map(one => one.column)).toEqual(['rejected', 'archived'])
   })
 
+  test('a rejection filed from Archived goes back to Archived, or to New', async ($, on) => {
+    const at = '2026-10-30T00:00:00.000Z'
+    const history = [{ at, by: 'user' as const, action: 'moved', from: 'archived', to: 'rejected' }]
+    const w = world(on, { leads: [lead('acme-api', { column: 'rejected', history })] })
+    await start($)
+    const ui = await $.ui.mount({ ...pane, surface: 'desktop' })
+    await ui.press({ key: 'tab:rejected' })
+    expect(await ui.find({ key: 'restore:acme-api', text: /Back to Archived/ })).toBeDefined()
+    expect(await ui.find({ key: 'back-new:acme-api' })).toBeDefined()
+    await ui.press({ key: 'restore:acme-api' })
+    expect(w.leads()[0]?.column).toBe('archived')
+  })
+
   test('a rejected card with no earlier column goes back to New', async ($, on) => {
     const w = world(on, { leads: [lead('acme-api', { column: 'rejected' })] })
     await start($)
