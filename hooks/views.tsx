@@ -12,8 +12,6 @@ import type {
 import { readyNote } from './lib/answers.ts'
 import {
   ago,
-  bigDigits,
-  bigNumberSvg,
   COLUMN_TITLES,
   columnLeads,
   columnTitle,
@@ -151,7 +149,7 @@ function stageButtons(ctx: ViewContext, lead: Lead, suffix: string): RenderEleme
   }
   // A closed lead can go straight back to where it was, undoing a mis-click.
   const from = previousColumn(lead)
-  if ((lead.column === 'passed' || lead.column === 'archived') && from && from !== 'new') {
+  if (['rejected', 'passed', 'archived'].includes(lead.column) && from && from !== 'new') {
     actions.unshift({
       key: 'restore',
       label: `Back to ${COLUMN_TITLES[from]}`,
@@ -279,35 +277,6 @@ function ghostedNotice(ctx: ViewContext, file: { version: 1; leads: Lead[] }) {
   )
 }
 
-/** The number of rejections, the largest thing at the head of the board on every stage. */
-function rejectionStat(ctx: ViewContext): RenderElement | null {
-  const { Box, Text } = ctx.el
-  const count = ctx.board.rejections
-  if (count === undefined) return null
-  let number: RenderElement
-  // Every table names every element, so the surface, not the table, says whether Svg draws.
-  if (ctx.surface !== 'terminal' && 'Svg' in ctx.el) {
-    const { Svg } = ctx.el
-    number = (
-      <Svg key="rejections-number" source={bigNumberSvg(count)} alt={`Rejections: ${count}`} />
-    )
-  } else {
-    number = (
-      <Text key="rejections-number" bold color="claude">
-        {bigDigits(count)}
-      </Text>
-    )
-  }
-  return (
-    <Box key="rejections" flexDirection="row" gap={1} alignItems="center">
-      {number}
-      <Text key="rejections-label" bold>
-        Rejections
-      </Text>
-    </Box>
-  )
-}
-
 export function boardView(
   ctx: ViewContext,
   options: { showClosed: boolean; stage: Column | null; shown: number },
@@ -339,7 +308,6 @@ export function boardView(
       : []
   return (
     <Box flexDirection="column" gap={1}>
-      {rejectionStat(ctx)}
       <Box flexDirection="row" gap={1} flexWrap="wrap" alignItems="center">
         <Text bold>Jobs</Text>
         <Text dimColor>{`${ctx.board.leads.length} leads`}</Text>

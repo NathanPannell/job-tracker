@@ -66,7 +66,7 @@ The types of every file are in `types/index.d.ts`.
 ## Using it
 
 - `/jobs` opens the board on tabs, one stage at a time: New → Drafting → Ready to review →
-  Applied → Interviewing → Offer, with Passed and Archived behind "Passed & archived". New shows
+  Applied → Interviewing → Offer → Rejected, with Passed and Archived behind "Passed & archived". New shows
   the ten best first ("Show more" adds ten). Each card is three lines: a coloured fit badge (green
   90+, amber 75–89, grey below) with company and role; age (since added, and the posting's when known), source and location (remote or
   where); and a one-line tagline of about 40 characters saying what the company makes or what
@@ -77,7 +77,8 @@ The types of every file are in `types/index.d.ts`.
   New — Ready: Review · Approve and submit — Applied: Got interview · Rejected · Ghosted — Interviewing: Got offer ·
   Rejected — Offer: Accepted · Declined. Company decisions (Got interview, Got offer, Rejected,
   Ghosted, Accepted, Declined) move the card and record an outcome for the weekly review, never a
-  pass (an application silent for a month is marked Ghosted for you, see "Ghosting"); an archived or passed card offers "Back to <where it was>" to undo a mis-click. Click a card's name to open it: the same next steps, then
+  pass (an application silent for a month is marked Ghosted for you, see "Ghosting"). Rejected
+  moves it to Rejected, the rest to Archived. A rejected, archived or passed card offers "Back to <where it was>" to undo a mis-click. Click a card's name to open it: the same next steps, then
   Pass… · Archive · Draft package, then feedback (Score too high / too low).
 - **Ready notes.** The note counts the distinct `NEEDS ANSWER` questions in the package's
   `answers.md`, leaving out any that `profile/knowledge-base/application-answers.md` already
@@ -120,8 +121,8 @@ The types of every file are in `types/index.d.ts`.
   application and the card's last move into Applied. Only Applied is swept: a lead with any recorded outcome (a reply
   `sync` found, an interview), one that has been in Interviewing or Offer, and one you put back
   in Applied by hand are left alone, as is every other column. A reply that comes later still
-  moves the card on: `sync` also reads leads the board ghosted, and "Back to Applied" on the
-  archived card undoes it. Like the stale-lead archive it runs when the board refreshes, on every
+  moves the card on: `sync` also reads leads the board ghosted, and proposes Rejected for a late
+  rejection, and "Back to Applied" on the archived card undoes it. Like the stale-lead archive it runs when the board refreshes, on every
   `jobs add` and on `jobs archive`, never on a timer. The threshold is `GHOST_AFTER_MONTHS` in
   `hooks/lib/model.ts` (and `GHOST_NOTICE_DAYS` how long the board lists them).
 - **Draft package** moves the card to Drafting at once and builds the package in a background

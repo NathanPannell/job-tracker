@@ -688,7 +688,7 @@ export const register: Register = on => {
     await $.tool.register({
       name: 'list_leads',
       description:
-        "Lists job leads on the person's job board (job-tracker), best first. Each lead has fitScore, the scout's fit score the board shows. Filter by column (new, drafting, ready, applied, interviewing, offer, passed, archived) and minimum fit score.",
+        "Lists job leads on the person's job board (job-tracker), best first. Each lead has fitScore, the scout's fit score the board shows. Filter by column (new, drafting, ready, applied, interviewing, offer, rejected, passed, archived) and minimum fit score.",
       inputSchema: {
         type: 'object',
         properties: {

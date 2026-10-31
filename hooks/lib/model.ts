@@ -44,6 +44,7 @@ export const COLUMNS = [
   'applied',
   'interviewing',
   'offer',
+  'rejected',
   'passed',
   'archived',
 ] as const satisfies readonly Column[]
@@ -56,6 +57,7 @@ export const PIPELINE: readonly Column[] = [
   'applied',
   'interviewing',
   'offer',
+  'rejected',
 ]
 
 export const COLUMN_TITLES: Record<Column, string> = {
@@ -65,6 +67,7 @@ export const COLUMN_TITLES: Record<Column, string> = {
   applied: 'Applied',
   interviewing: 'Interviewing',
   offer: 'Offer',
+  rejected: 'Rejected',
   passed: 'Passed',
   archived: 'Archived',
 }
@@ -117,7 +120,7 @@ export const STAGE_ACTIONS: Record<Column, readonly StageAction[]> = {
       key: 'rejected',
       label: 'Rejected',
       kind: 'outcome',
-      to: 'archived',
+      to: 'rejected',
       reason: 'rejection: marked on the board',
     },
     { key: 'ghosted', label: 'Ghosted', kind: 'outcome', to: 'archived', reason: GHOSTED_REASON },
@@ -135,7 +138,7 @@ export const STAGE_ACTIONS: Record<Column, readonly StageAction[]> = {
       key: 'rejected',
       label: 'Rejected',
       kind: 'outcome',
-      to: 'archived',
+      to: 'rejected',
       reason: 'rejection: after interviews',
     },
   ],
@@ -156,6 +159,7 @@ export const STAGE_ACTIONS: Record<Column, readonly StageAction[]> = {
       reason: 'offer: declined',
     },
   ],
+  rejected: [backTo('new')],
   passed: [backTo('new')],
   archived: [backTo('new')],
 }
@@ -266,7 +270,7 @@ export const GHOST_NOTE = `no reply ${GHOST_AFTER_MONTHS} month${GHOST_AFTER_MON
 export const GHOST_NOTICE_DAYS = 7
 
 /** Columns a lead reaches only after the company replied, or after the person settled it. */
-const SETTLED: readonly string[] = ['interviewing', 'offer', 'passed', 'archived']
+const SETTLED: readonly string[] = ['interviewing', 'offer', 'rejected', 'passed', 'archived']
 
 /**
  * When a lead was submitted: the later of the time `jobs submitted` recorded on its application
@@ -845,13 +849,13 @@ export const hasHighlights = (lead: Pick<Lead, 'roleHighlights'>) =>
 export type SummaryField = 'companyBlurb' | 'tagline' | 'roleHighlights'
 
 /**
- * Leads still in play (not passed or archived) that lack a company blurb, tagline or role
+ * Leads still in play (not rejected, passed or archived) that lack a company blurb, tagline or role
  * highlights: the fields each lacks, and its blurb when it has one, since a tagline can be
  * written from the blurb without reading the posting again.
  */
 export function missingSummaries(file: LeadsFile) {
   return file.leads
-    .filter(lead => lead.column !== 'passed' && lead.column !== 'archived')
+    .filter(lead => !['rejected', 'passed', 'archived'].includes(lead.column))
     .map(lead => {
       const missing: SummaryField[] = [
         ...(hasBlurb(lead) ? [] : ['companyBlurb' as const]),
@@ -1040,74 +1044,6 @@ export function bandText(c: Counts): string | undefined {
   return [plural(c.newLeads, 'new lead', 'new leads'), `${c.readyToReview} ready to review`].join(
     ' · ',
   )
-}
-
-/** Whether this event records a company turning a lead down; a ghosted lead sent no word at all. */
-const isRejection = (event: Pick<FeedbackEvent, 'kind' | 'reason'>) =>
-  event.kind === 'outcome' &&
-  event.reason !== GHOSTED_REASON &&
-  (event.reason ?? '').startsWith('rejection:')
-
-/**
- * How many leads a company rejected: each once, however many rejections it has. Going back through
- * the log in order, since the events stay when a lead moves: a move anywhere but Archived after a
- * rejection takes it back (a mis-click on Rejected), and a lead rejected again counts again.
- */
-export function rejectionCount(
-  events: readonly Pick<FeedbackEvent, 'leadId' | 'kind' | 'reason' | 'to'>[],
-): number {
-  const rejected = new Set<string>()
-  for (const event of events) {
-    if (isRejection(event)) rejected.add(event.leadId)
-    else if (event.to !== undefined && event.to !== 'archived') rejected.delete(event.leadId)
-  }
-  return rejected.size
-}
-
-/** Each digit five rows tall in block characters, for the terminal, which has one text size. */
-const BIG_DIGITS: readonly (readonly string[])[] = [
-  ['███', '█ █', '█ █', '█ █', '███'],
-  [' █ ', '██ ', ' █ ', ' █ ', '███'],
-  ['███', '  █', '███', '█  ', '███'],
-  ['███', '  █', ' ██', '  █', '███'],
-  ['█ █', '█ █', '███', '  █', '  █'],
-  ['███', '█  ', '███', '  █', '███'],
-  ['███', '█  ', '███', '█ █', '███'],
-  ['███', '  █', '  █', '  █', '  █'],
-  ['███', '█ █', '███', '█ █', '███'],
-  ['███', '█ █', '███', '  █', '███'],
-]
-
-/** A whole number in block characters, five lines tall. */
-export function bigDigits(value: number): string {
-  const glyphs = [...String(value)].map(digit => BIG_DIGITS[Number(digit)] ?? [])
-  return [0, 1, 2, 3, 4].map(row => glyphs.map(glyph => glyph[row]).join(' ')).join('\n')
-}
-
-/** The side of one block of `bigNumberSvg`, in pixels. */
-const BIG_BLOCK = 12
-
-/**
- * A whole number as a drawing, larger than any Text size: the same blocks as `bigDigits`, as plain
- * rectangles, so it needs no font on the surface that draws it. An Svg draws isolated from the
- * theme, so its colour is one that reads on a light or a dark pane.
- */
-export function bigNumberSvg(value: number): string {
-  const digits = [...String(value)].map(digit => BIG_DIGITS[Number(digit)] ?? [])
-  const blocks = digits.flatMap((glyph, n) =>
-    glyph.flatMap((row, y) =>
-      [...row].flatMap((cell, x) =>
-        cell === '█'
-          ? [
-              `<rect x="${(n * 4 + x) * BIG_BLOCK}" y="${y * BIG_BLOCK}" width="${BIG_BLOCK}" height="${BIG_BLOCK}" fill="#d97757"/>`,
-            ]
-          : [],
-      ),
-    ),
-  )
-  const width = (digits.length * 4 - 1) * BIG_BLOCK
-  const height = 5 * BIG_BLOCK
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" shape-rendering="crispEdges">${blocks.join('')}</svg>`
 }
 
 /** Best first by fit score. */
