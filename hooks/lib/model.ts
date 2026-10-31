@@ -1084,16 +1084,30 @@ export function bigDigits(value: number): string {
   return [0, 1, 2, 3, 4].map(row => glyphs.map(glyph => glyph[row]).join(' ')).join('\n')
 }
 
-/** Room for one digit of `bigNumberSvg`, whose face is the viewer's own. */
-const BIG_DIGIT_WIDTH = 40
+/** The side of one block of `bigNumberSvg`, in pixels. */
+const BIG_BLOCK = 12
 
 /**
- * A whole number as a drawing, larger than any Text size. An Svg draws isolated from the theme, so
- * its colour is one that reads on a light or a dark pane.
+ * A whole number as a drawing, larger than any Text size: the same blocks as `bigDigits`, as plain
+ * rectangles, so it needs no font on the surface that draws it. An Svg draws isolated from the
+ * theme, so its colour is one that reads on a light or a dark pane.
  */
 export function bigNumberSvg(value: number): string {
-  const width = String(value).length * BIG_DIGIT_WIDTH
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="64" viewBox="0 0 ${width} 64"><text x="0" y="54" font-family="system-ui, sans-serif" font-size="64" font-weight="700" fill="#d97757">${value}</text></svg>`
+  const digits = [...String(value)].map(digit => BIG_DIGITS[Number(digit)] ?? [])
+  const blocks = digits.flatMap((glyph, n) =>
+    glyph.flatMap((row, y) =>
+      [...row].flatMap((cell, x) =>
+        cell === '█'
+          ? [
+              `<rect x="${(n * 4 + x) * BIG_BLOCK}" y="${y * BIG_BLOCK}" width="${BIG_BLOCK}" height="${BIG_BLOCK}" fill="#d97757"/>`,
+            ]
+          : [],
+      ),
+    ),
+  )
+  const width = (digits.length * 4 - 1) * BIG_BLOCK
+  const height = 5 * BIG_BLOCK
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" shape-rendering="crispEdges">${blocks.join('')}</svg>`
 }
 
 /** Best first by fit score. */
