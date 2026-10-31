@@ -148,10 +148,16 @@ The types of every file are in `types/index.d.ts`.
   it. Your conversation cannot touch a tab a prefill is still using. If a prefill's tab looks
   submitted when it ends, your conversation says so first and leaves that lead alone until you
   decide. Rules are in `hooks/lib/chrome.ts`.
+- **Forms inside shadow DOM or an iframe** (SmartRecruiters, HubSpot) give no element refs, so a
+  prefill uses the mod's `deep_form` tool. It runs one fixed script, never JavaScript the prefill
+  writes, reaches open shadow roots and same-origin iframes, attaches the résumé through a
+  temporary file input, and refuses to press what the guard would refuse to click.
 - Every answer you give is saved word for word, with the question and date, in
   `profile/knowledge-base/application-answers.md`; `package` and `submit` read it first, so a
-  question you have answered once is not asked again where that answer applies. Account creation, sign-ins, passwords,
-  CAPTCHAs and agreements are handed back to you with everything ready to paste.
+  question you have answered once is not asked again where that answer applies. A data-processing
+  acknowledgment or "keep in contact" box your saved answer covers is ticked for you and listed in
+  the checklist. Account creation, sign-ins, passwords, CAPTCHAs and
+  any other agreement are handed back to you with everything ready to paste.
 - The band above the prompt reads `● N new leads · M ready to review · /jobs`; click it to open the
   board. It is hidden when both are zero.
 - In an unrelated conversation, the first reply ends with one short line naming the top new leads,

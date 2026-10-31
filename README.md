@@ -92,7 +92,10 @@ flowchart LR
   tabs they opened, requires an element ref for every click, reads each element first, and refuses
   a click on anything labelled or typed like a final submit. It exists because one prefill's clicks
   once landed in another's tab and sent an application nobody approved. The mod now also looks for
-  a stray submit when a prefill ends, and raises it first in the conversation.
+  a stray submit when a prefill ends, and raises it first in the conversation. Forms inside shadow
+  DOM or an iframe give no refs, so the prefill uses the mod's `deep_form` tool, a fixed script with
+  only its data varying (`hooks/lib/deep-form.ts`), because any JavaScript a prefill could write
+  could also press the final submit.
 - **No invented résumé facts.** The package skill may shorten or reorder approved wording, but not
   broaden it, and every bullet is traced to its source. This rule is enforced by the skill's
   instructions and a source list the person can check, not by code.

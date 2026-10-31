@@ -2,9 +2,11 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import {
+  CHROME_SERVER,
   chromeCall,
   createdTab,
   flatten,
+  FORM_TOOL,
   isPressable,
   isStraySubmit,
   isSubmitControl,
@@ -101,6 +103,46 @@ test('a prefill may not run scripts, shortcuts or resize the shared window', () 
       new RegExp(`^${tool} is not available`),
     )
   }
+})
+
+test("a form refs cannot reach goes through deep_form, held to the prefill's own tab", () => {
+  const call = chromeCall(FORM_TOOL, { tabId: 11, action: 'fill', id: '3', value: 'x' })
+  assert.equal(call?.server, CHROME_SERVER)
+  assert.equal(call?.tool, 'deep_form')
+  assert.deepEqual(judgePrefill(call as ChromeCall, OWN), { checks: [] })
+  assert.match(
+    denied(judgePrefill(chrome('deep_form', { tabId: 12, action: 'read' }), OWN)) ?? '',
+    /Tab 12 is not yours/,
+  )
+  assert.match(denied(judgePrefill(chrome('deep_form', { action: 'read' }), OWN)) ?? '', /tabId/)
+  assert.match(
+    denied(
+      judgePrefill(
+        chrome('browser_batch', {
+          actions: [{ name: 'deep_form', input: { tabId: 11, action: 'read' } }],
+        }),
+        OWN,
+      ),
+    ) ?? '',
+    /on its own/,
+  )
+  // Its fixed script is the only way in: a prefill's own JavaScript and coordinates stay refused,
+  // and the refusal says what to use instead.
+  assert.match(
+    denied(judgePrefill(chrome('javascript_tool', { tabId: 11, text: '1' }), OWN)) ?? '',
+    /deep_form/,
+  )
+  assert.match(
+    denied(
+      judgePrefill(
+        chrome('computer', { tabId: 11, action: 'left_click', coordinate: [10, 20] }),
+        OWN,
+      ),
+    ) ?? '',
+    /deep_form/,
+  )
+  // Neither does it open the guard to anything else.
+  assert.equal(judgeOther('mcp__job-tracker__update_lead')?.includes('not available'), true)
 })
 
 test('a prefill clicks only by ref, and each ref is read before the click', () => {

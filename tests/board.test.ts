@@ -797,7 +797,28 @@ describe('kanban', () => {
       101: 'Acme\nThank you for applying to Acme!',
       102: 'Beta — Backend Developer\nFirst name *\nSubmit application',
     }
+    // What the deep_form tool's script finds, by the action it was sent with.
+    const scripts: string[] = []
+    let shadowButton = 'button "Next"'
     on('mcp.call', (_, e) => {
+      if (e.tool === 'javascript_tool') {
+        const script = String(e.args.text)
+        scripts.push(/\{"action":"(\w+)"/.exec(script)?.[1] ?? '')
+        const text = script.includes('"action":"describe"')
+          ? JSON.stringify({ line: shadowButton })
+          : script.includes('"action":"read"')
+            ? JSON.stringify({ fields: [{ id: '4', kind: 'button' }], unreachableFrames: 0 })
+            : '{"pressed":"Next"}'
+        return {
+          value: {
+            content: [
+              { type: 'text', text },
+              { type: 'text', text: 'Tab Context:\n- Executed on tabId: 101' },
+            ],
+            isError: false,
+          },
+        }
+      }
       const tab = Number(e.args.tabId)
       const text =
         e.tool === 'read_page' ? elements[String(e.args.ref_id)] : (pages[tab] ?? undefined)
@@ -882,8 +903,37 @@ describe('kanban', () => {
       )
     }
     await call({ tool: 'Read', file_path: 'packages/beta-api/answers.md', agentId: 'agent-2' })
+    // Past the refs, a prefill uses the mod's fixed script in its own tab, never its own script.
+    const deep = (agentId: string | undefined, args: Record<string, unknown>) =>
+      $.tool
+        .call({
+          tool: 'mcp__job-tracker__deep_form',
+          ...args,
+          ...(agentId ? { agentId } : {}),
+        } as Parameters<Engine['tool']['call']>[0])
+        .then(result => String(result.deny ?? (result as { result?: unknown }).result))
+    expect(await deep('agent-1', { tabId: 102, action: 'read' })).toContain('Tab 102 is not yours')
+    expect(scripts).toEqual([])
+    expect(await deep('agent-1', { tabId: 101, action: 'read' })).toContain('"id":"4"')
+    expect(await deep('agent-1', { tabId: 101, action: 'press', id: '4' })).toBe(
+      '{"pressed":"Next"}',
+    )
+    expect(await deep('agent-1', { tabId: 101, action: 'press' })).toContain('needs the id')
+    expect(scripts).toEqual(['read', 'describe', 'press'])
+    // A shadow-DOM final button is looked at and never pressed, by anyone.
+    shadowButton = 'button "Submit application" type="submit"'
+    expect(await deep('agent-1', { tabId: 101, action: 'press', id: '5' })).toContain(
+      'deep_form never presses it',
+    )
+    expect(scripts.at(-1)).toBe('describe')
+    expect((await chrome('agent-1', 'javascript_tool', { tabId: 101, text: '1' })).text).toContain(
+      'javascript_tool is not available',
+    )
     // The conversation, too, keeps out of a running prefill's tab.
     expect((await chrome(undefined, 'read_page', { tabId: 102 })).text).toContain(
+      'belongs to a background prefill',
+    )
+    expect(await deep(undefined, { tabId: 102, action: 'read' })).toContain(
       'belongs to a background prefill',
     )
     expect((await chrome(undefined, 'navigate', { url: 'https://example.com' })).text).toContain(
