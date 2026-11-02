@@ -93,8 +93,8 @@ export function list(dir: string, { column, min, limit }: ListOptions = {}): Lea
     .slice(0, limit !== undefined ? Number(limit) : undefined)
 }
 
-export function summary(dir: string): Counts {
-  return counts(readData(dir, 'leads'))
+export function summary(dir: string, now = Date.now()): Counts {
+  return counts(readData(dir, 'leads'), now)
 }
 
 /** Everything scout should skip: what is already on the board, in any column. */

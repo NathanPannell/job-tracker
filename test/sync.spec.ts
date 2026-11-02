@@ -39,21 +39,29 @@ const board = (...histories: HistoryEntry[][]): LeadsFile => ({
 
 const ids = (leads: readonly Lead[]) => leads.map(one => one.id)
 
-test('the board names what email moved this week, most recent first', () => {
+test('the board names the interviews and offers email brought this week, most recent first', () => {
   const file = board(
-    [moved(daysAgo(3), 'sync', 'rejected')],
+    [moved(daysAgo(3), 'sync', 'interviewing')],
     [moved(daysAgo(1), 'sync', 'interviewing')],
     [moved(daysAgo(SYNC_NOTICE_DAYS), 'sync', 'offer')],
     [moved(daysAgo(SYNC_NOTICE_DAYS, 1), 'sync', 'offer')],
-    [moved(daysAgo(1), 'user', 'rejected')],
+    [moved(daysAgo(1), 'user', 'offer')],
     [],
   )
-  assert.deepEqual(ids(syncNotices(file, NOW).moved), ['lead-1', 'lead-0', 'lead-2'])
+  assert.deepEqual(ids(syncNotices(file, NOW).news), ['lead-1', 'lead-0', 'lead-2'])
+})
+
+test('a rejection email filed goes unnamed', () => {
+  const file = board([moved(daysAgo(1), 'sync', 'rejected')])
+  assert.deepEqual(syncNotices(file, NOW).news, [])
 })
 
 test('a card moved since is out of the notice: the last move is not email', () => {
-  const file = board([moved(daysAgo(2), 'sync', 'rejected'), moved(daysAgo(1), 'user', 'applied')])
-  assert.deepEqual(syncNotices(file, NOW).moved, [])
+  const file = board([
+    moved(daysAgo(2), 'sync', 'interviewing'),
+    moved(daysAgo(1), 'user', 'applied'),
+  ])
+  assert.deepEqual(syncNotices(file, NOW).news, [])
 })
 
 test('what email left unclear shows for a week, until the card moves on', () => {
@@ -66,7 +74,7 @@ test('what email left unclear shows for a week, until the card moves on', () => 
   )
   const notices = syncNotices(file, NOW)
   assert.deepEqual(ids(notices.unclear), ['lead-1', 'lead-4', 'lead-0'])
-  assert.deepEqual(ids(notices.moved), ['lead-4'])
+  assert.deepEqual(ids(notices.news), ['lead-4'])
 })
 
 test('a lead keeps its latest unclear note until the card moves', () => {

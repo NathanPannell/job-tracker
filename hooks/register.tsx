@@ -926,7 +926,7 @@ export const register: Register = on => {
     await resetBoard($)
     await show($, { kind: 'board' })
     const opened = await openPane($)
-    const c = counts({ version: 1, leads: (await read($, board)).leads })
+    const c = counts({ version: 1, leads: (await read($, board)).leads }, await $.clock.now())
     return {
       text: opened.isPlaced
         ? `Opened the job board: ${bandText(c) ?? 'nothing new'}.`
@@ -1094,7 +1094,7 @@ export const register: Register = on => {
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     if (e.props.hasSurvey) return next(e)
     const current = await read($, board)
-    const text = bandText(counts({ version: 1, leads: current.leads }))
+    const text = bandText(counts({ version: 1, leads: current.leads }, await $.clock.now()))
     if (!text) return next(e)
     const { Box, Button, Text } = $.ui.resolve(e)
     const isReadOnly = e.surface === 'mobile'

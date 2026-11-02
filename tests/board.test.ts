@@ -548,31 +548,39 @@ describe('kanban', () => {
     expect(await ui.find({ key: 'card:beta-api' })).toBeDefined()
   })
 
-  test('what email moved and what it left unclear show above the tabs, each opening its lead', async ($, on) => {
+  test('interviews and offers from email and what it left unclear show above the tabs, each opening its lead', async ($, on) => {
     const week = '2026-10-15T12:00:00.000Z'
     const stale = '2026-10-10T12:00:00.000Z'
-    const moved = (at: string): Lead['history'] => [
-      { at, by: 'sync', action: 'moved', from: 'applied', to: 'rejected', note: 'Oct 15, a: no' },
+    const moved = (at: string, to: Lead['column']): Lead['history'] => [
+      { at, by: 'sync', action: 'moved', from: 'applied', to, note: 'Oct 15, a: news' },
     ]
     const unclear = (at: string): Lead['history'] => [
       { at, by: 'sync', action: 'unclear', note: 'Oct 15, Recruiter: asks for references' },
     ]
     world(on, {
       leads: [
-        lead('gone-1', { company: 'Gone', column: 'rejected', history: moved(week) }),
-        lead('old-2', { company: 'Old', column: 'rejected', history: moved(stale) }),
+        lead('chat-1', {
+          company: 'Chat',
+          column: 'interviewing',
+          history: moved(week, 'interviewing'),
+        }),
+        lead('old-2', { company: 'Old', column: 'offer', history: moved(stale, 'offer') }),
         lead('what-3', { company: 'What', column: 'applied', history: unclear(week) }),
         lead('past-4', { company: 'Past', column: 'applied', history: unclear(stale) }),
+        lead('gone-5', { company: 'Gone', column: 'rejected', history: moved(week, 'rejected') }),
       ],
     })
     await start($)
     for (const surface of ['desktop', 'terminal', 'mobile'] as const) {
       const ui = await $.ui.mount({ ...pane, surface })
-      expect(await ui.find({ type: 'Text', text: /^Moved by email this week:$/ })).toBeDefined()
-      expect((await ui.find({ key: 'sync-moved-notice:gone-1' }))?.props.label).toBe(
-        'Gone · Backend Developer',
+      expect(
+        await ui.find({ type: 'Text', text: /^Interview or offer by email this week:$/ }),
+      ).toBeDefined()
+      expect((await ui.find({ key: 'sync-news-notice:chat-1' }))?.props.label).toBe(
+        'Chat · Backend Developer',
       )
-      expect(await ui.find({ key: 'sync-moved-notice:old-2' })).toBeUndefined()
+      expect(await ui.find({ key: 'sync-news-notice:old-2' })).toBeUndefined()
+      expect(await ui.find({ key: 'sync-news-notice:gone-5' })).toBeUndefined()
       expect(await ui.find({ type: 'Text', text: /^Unclear from email/ })).toBeDefined()
       expect(await ui.find({ key: 'sync-unclear-notice:what-3' })).toBeDefined()
       expect(await ui.find({ key: 'sync-unclear-notice:past-4' })).toBeUndefined()
@@ -644,17 +652,17 @@ describe('kanban', () => {
     const at = '2026-10-19T12:00:00.000Z'
     world(on, {
       leads: [
-        lead('gone-1', {
-          column: 'rejected',
-          history: [{ at, by: 'sync', action: 'moved', from: 'applied', to: 'rejected' }],
+        lead('chat-1', {
+          column: 'interviewing',
+          history: [{ at, by: 'sync', action: 'moved', from: 'applied', to: 'interviewing' }],
         }),
       ],
     })
     await start($)
     const ui = await $.ui.mount({ ...pane, surface: 'desktop' })
-    await ui.press({ key: 'sync-moved-notice:gone-1' })
+    await ui.press({ key: 'sync-news-notice:chat-1' })
     await ui.press({ key: 'restore' })
-    expect(await ui.find({ key: 'sync-moved-notice:gone-1' })).toBeUndefined()
+    expect(await ui.find({ key: 'sync-news-notice:chat-1' })).toBeUndefined()
   })
 
   test('a full page under full notices stays well under the pane tree cap', async ($, on) => {
@@ -672,8 +680,8 @@ describe('kanban', () => {
     world(on, {
       leads: [
         ...many('moved', {
-          column: 'rejected',
-          history: [{ at, by: 'sync', action: 'moved', from: 'applied', to: 'rejected' }],
+          column: 'interviewing',
+          history: [{ at, by: 'sync', action: 'moved', from: 'applied', to: 'interviewing' }],
         }),
         ...many('open', {
           column: 'applied',
@@ -2465,6 +2473,37 @@ describe('band', () => {
     })
     expect(await band.find({ text: /1 new lead/ })).toBeDefined()
     expect(await band.find({ key: 'engine' })).toBeDefined()
+  })
+
+  test('leads with an interview email brought, never a rejection', async ($, on) => {
+    const at = '2026-10-15T12:00:00.000Z'
+    const moved = (to: Lead['column']): Lead['history'] => [
+      { at, by: 'sync', action: 'moved', from: 'applied', to, note: 'Oct 15, a: news' },
+    ]
+    world(on, {
+      leads: [
+        lead('chat-1', { company: 'Chat', column: 'interviewing', history: moved('interviewing') }),
+        lead('gone-2', { company: 'Gone', column: 'rejected', history: moved('rejected') }),
+      ],
+    })
+    on('ui.render', { component: 'AbovePrompt' }, ($, e) => $.ui.resolve(e).Box({ key: 'engine' }))
+    await start($)
+    const band = await $.ui.mount({
+      plugin: 'job-tracker',
+      surface: 'desktop',
+      component: 'AbovePrompt',
+      props: {
+        hasSurvey: false,
+        isWorking: false,
+        maxRows: 10,
+        bodyColumns: 100,
+        scroll: { offset: 0, bodyRows: 10 },
+        view: {},
+      },
+    })
+    expect(await band.find({ text: /Interview: Chat/ })).toBeDefined()
+    expect(await band.find({ text: /Gone/ })).toBeUndefined()
+    expect(await band.find({ text: /new lead/ })).toBeUndefined()
   })
 
   test('draws nothing of its own with nothing to say', async ($, on) => {
