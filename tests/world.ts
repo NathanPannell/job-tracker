@@ -8,6 +8,7 @@ import {
   appendEvent,
   archiveStale,
   approvedText,
+  clarifyChange,
   correctScore,
   decideChanges,
   emptyFeedback,
@@ -16,6 +17,7 @@ import {
   markMentioned,
   moveLead,
   patchLead,
+  reviseChange,
 } from '../hooks/lib/model.ts'
 import type {
   Application,
@@ -188,6 +190,18 @@ export function world(
           }
           put('proposals.json', decided.file)
           return { exitCode: 0, stdout: JSON.stringify({ id }), stderr: '' }
+        } catch (error) {
+          return { exitCode: 1, stdout: '', stderr: (error as Error).message }
+        }
+      }
+      case 'clarify':
+      case 'revise': {
+        const proposals: ProposalsFile = JSON.parse(files.get(`${DATA}/proposals.json`) ?? '{}')
+        try {
+          const input = JSON.parse(id)
+          const write = command === 'clarify' ? clarifyChange : reviseChange
+          put('proposals.json', write(proposals, input, at).file)
+          return { exitCode: 0, stdout: '{}', stderr: '' }
         } catch (error) {
           return { exitCode: 1, stdout: '', stderr: (error as Error).message }
         }

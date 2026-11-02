@@ -8,6 +8,7 @@ import type {
   Application,
   ApplicationsFile,
   ChangeStatus,
+  Clarification,
   Column,
   FeedbackEvent,
   FeedbackFile,
@@ -23,6 +24,7 @@ export type {
   Actor,
   Application,
   ApplicationsFile,
+  Clarification,
   Column,
   FeedbackEvent,
   FeedbackFile,
@@ -466,6 +468,8 @@ export const MIN_CHANGES = 3
 export const MAX_CHANGES = 10
 /** Each change is short: these bounds keep a page of proposals well under the pane's cap. */
 export const CHANGE_LIMITS = { title: 120, rationale: 300, text: 1200 } as const
+/** A clarification is a few sentences; the pane draws it in full on its change. */
+export const CLARIFICATION_LIMIT = 1000
 
 /** A proposal as `proposals.json` may hold it: changes saved before per-change decisions. */
 export type StoredProposal = Omit<Proposal, 'changes'> & {
@@ -506,6 +510,26 @@ export type ProposalInput = Pick<Proposal, 'summary' | 'funnel' | 'fewerReason'>
   changes: Pick<ProposalChange, 'file' | 'title' | 'rationale' | 'text'>[]
 }
 
+type ChangeFields = Pick<ProposalChange, 'file' | 'title' | 'rationale' | 'text'>
+
+/** Why one change cannot be saved, in words starting with `name`; null when it can. */
+function checkChange(change: ChangeFields | undefined, name: string): string | null {
+  if (change?.file !== 'learnings.md' && change?.file !== 'preferences.md') {
+    return `${name} needs file learnings.md or preferences.md`
+  }
+  if (typeof change.title !== 'string' || !change.title.trim()) return `${name} needs a title`
+  if (typeof change.text !== 'string' || !change.text.trim()) {
+    return `${name} needs the text to append`
+  }
+  for (const field of ['title', 'rationale', 'text'] as const) {
+    const length = (change[field] ?? '').length
+    if (length > CHANGE_LIMITS[field]) {
+      return `${name}'s ${field} is ${length} characters; keep it under ${CHANGE_LIMITS[field]}`
+    }
+  }
+  return null
+}
+
 /** Why a proposal from the learn skill cannot be saved; null when it can. */
 export function checkProposal(input: ProposalInput): string | null {
   if (!Array.isArray(input.changes)) return 'A proposal needs a changes array'
@@ -517,21 +541,8 @@ export function checkProposal(input: ProposalInput): string | null {
     return `A proposal with fewer than ${MIN_CHANGES} changes needs a fewerReason saying why`
   }
   for (const [n, change] of input.changes.entries()) {
-    if (change?.file !== 'learnings.md' && change?.file !== 'preferences.md') {
-      return `Change ${n + 1} needs file learnings.md or preferences.md`
-    }
-    if (typeof change.title !== 'string' || !change.title.trim()) {
-      return `Change ${n + 1} needs a title`
-    }
-    if (typeof change.text !== 'string' || !change.text.trim()) {
-      return `Change ${n + 1} needs the text to append`
-    }
-    for (const field of ['title', 'rationale', 'text'] as const) {
-      const length = (change[field] ?? '').length
-      if (length > CHANGE_LIMITS[field]) {
-        return `Change ${n + 1}'s ${field} is ${length} characters; keep it under ${CHANGE_LIMITS[field]}`
-      }
-    }
+    const problem = checkChange(change, `Change ${n + 1}`)
+    if (problem) return problem
   }
   return null
 }
@@ -561,6 +572,94 @@ export function newProposal(input: ProposalInput, id: string, at: string): Propo
 
 export type Decision = 'approve' | 'reject'
 
+/** A proposal's change as the pane's field and background runs name it. */
+export const clarifyKey = (proposalId: string, changeId: string) => `${proposalId}:${changeId}`
+
+/** The clarification still waiting for its revision, if the change has one. */
+export const openClarification = (change: Pick<ProposalChange, 'clarifications'>) =>
+  change.clarifications?.find(one => !one.revisedAt)
+
+/** The stored proposal and its change a target (`c3`, or `3`) names, read as the pane reads it. */
+function findChange(file: ProposalsFile, id: string, target: string) {
+  const stored = file.proposals.find(one => one.id === id)
+  if (!stored) throw new Error(`No proposal ${id}`)
+  const proposal = normalizeProposal(stored)
+  const changeId = /^\d+$/.test(target) ? `c${target}` : target
+  const change = proposal.changes.find(one => one.id === changeId)
+  if (!change) throw new Error(`Proposal ${id} has no change ${target}`)
+  return { proposal, change }
+}
+
+/** Refuses work on a change the person has already decided. */
+function needPending(proposal: Proposal, change: ProposalChange) {
+  if (change.status !== 'pending') {
+    throw new Error(`Change ${change.id} of ${proposal.id} is already ${change.status}`)
+  }
+}
+
+/** `file` with one change of a proposal replaced; every decision stays as it was. */
+function withChange(file: ProposalsFile, proposal: Proposal, change: ProposalChange) {
+  const changes = proposal.changes.map(one => (one.id === change.id ? change : one))
+  const next: Proposal = { ...proposal, changes }
+  return {
+    file: { ...file, proposals: file.proposals.map(one => (one.id === next.id ? next : one)) },
+    change,
+  }
+}
+
+export type ClarifyInput = { proposal: string; change: string; text: string }
+
+/**
+ * Keeps the person's words on a pending change, which stays pending until it is revised. The same
+ * words again are a no-op, so a double press saves them once; other words wait for that revision,
+ * which they can then correct in turn.
+ */
+export function clarifyChange(file: ProposalsFile, input: ClarifyInput, at: string) {
+  const text = typeof input.text === 'string' ? input.text.trim() : ''
+  if (!text) throw new Error('A clarification needs some text')
+  if (text.length > CLARIFICATION_LIMIT) {
+    throw new Error(
+      `A clarification is ${text.length} characters; keep it under ${CLARIFICATION_LIMIT}`,
+    )
+  }
+  const { proposal, change } = findChange(file, input.proposal, input.change)
+  needPending(proposal, change)
+  const open = openClarification(change)
+  if (open?.text === text) return { file, change }
+  if (open) throw new Error(`Change ${change.id} of ${proposal.id} is waiting for its revision`)
+  const clarification: Clarification = { at, text, was: change.text }
+  const clarifications = [...(change.clarifications ?? []), clarification]
+  return withChange(file, proposal, { ...change, clarifications })
+}
+
+export type ReviseInput = { proposal: string; change: string } & Pick<ProposalChange, 'text'> &
+  Partial<Pick<ProposalChange, 'file' | 'title' | 'rationale'>>
+
+/**
+ * Replaces the text of a change waiting for its revision (and its title, rationale or file, when
+ * given) and marks the clarification answered. Writes no profile file: the change stays pending,
+ * for the person to approve, reject or clarify again.
+ */
+export function reviseChange(file: ProposalsFile, input: ReviseInput, at: string) {
+  const { proposal, change } = findChange(file, input.proposal, input.change)
+  needPending(proposal, change)
+  const open = openClarification(change)
+  if (!open) throw new Error(`Change ${change.id} of ${proposal.id} has no clarification to answer`)
+  const revised = {
+    ...change,
+    file: input.file ?? change.file,
+    title: input.title?.trim() || change.title,
+    rationale: input.rationale ?? change.rationale,
+    text: input.text,
+    clarifications: change.clarifications?.map(one =>
+      one === open ? { ...one, revisedAt: at } : one,
+    ),
+  }
+  const problem = checkChange(revised, `Change ${change.id}`)
+  if (problem) throw new Error(problem)
+  return withChange(file, proposal, revised)
+}
+
 export type DecideResult = {
   file: ProposalsFile
   proposal: Proposal
@@ -568,10 +667,17 @@ export type DecideResult = {
   decided: ProposalChange[]
 }
 
+const isPending = (change: Pick<ProposalChange, 'status'>) => change.status === 'pending'
+
+/** Whether Approve takes this change: pending, and not waiting for its revision. */
+export const isApprovable = (change: Pick<ProposalChange, 'status' | 'clarifications'>) =>
+  isPending(change) && !openClarification(change)
+
 /**
  * Decides one change of a proposal (`c3`, or `3`), or `all` its pending ones. Repeating a
  * change's decision is a no-op, so a double press appends nothing twice; the opposite decision
- * on a decided change is refused.
+ * on a decided change is refused. A change waiting for its revision is never approved, since its
+ * text is the one the person corrected: `all` leaves it open.
  */
 export function decideChanges(
   file: ProposalsFile,
@@ -584,17 +690,19 @@ export function decideChanges(
   if (!stored) throw new Error(`No proposal ${id}`)
   const proposal = normalizeProposal(stored)
   const status: ChangeStatus = decision === 'approve' ? 'approved' : 'rejected'
-  const changeId = /^\d+$/.test(target) ? `c${target}` : target
   let ids: string[]
-  if (changeId === 'all') {
-    ids = proposal.changes.filter(one => one.status === 'pending').map(one => one.id)
+  if (target === 'all') {
+    const takes = decision === 'approve' ? isApprovable : isPending
+    ids = proposal.changes.filter(takes).map(one => one.id)
   } else {
-    const change = proposal.changes.find(one => one.id === changeId)
-    if (!change) throw new Error(`Proposal ${id} has no change ${target}`)
+    const { change } = findChange(file, id, target)
     if (change.status !== 'pending' && change.status !== status) {
       throw new Error(`Change ${change.id} of ${id} is already ${change.status}`)
     }
-    ids = change.status === 'pending' ? [change.id] : []
+    if (decision === 'approve' && isPending(change) && !isApprovable(change)) {
+      throw new Error(`Change ${change.id} of ${id} is waiting for its revision`)
+    }
+    ids = isPending(change) ? [change.id] : []
   }
   const changes = proposal.changes.map(one =>
     ids.includes(one.id) ? { ...one, status, decidedAt: at } : one,
@@ -1116,6 +1224,31 @@ export function draftRelay(lead: Named, task: string): string {
     'text after "PROMPT:" below. Then reply in one line that the package is being drafted in',
     "the background, and when the agent reports back, give its result in one line. Don't build",
     `any of the package yourself.\n\nPROMPT: ${task}`,
+  ].join(' ')
+}
+
+/**
+ * The task a background subagent gets to revise one change with the person's clarification: off
+ * their conversation, like a package build, and the board shows the result for review again.
+ */
+export function reviseTask(proposalId: string, change: Pick<ProposalChange, 'id' | 'title'>) {
+  return [
+    `Use the job-tracker:learn skill to revise change ${change.id} of proposal ${proposalId}`,
+    `("${change.title}") with the clarification the person wrote on the job board; follow only`,
+    'its "Revise a clarified change" section, in $JOB_TRACKER_HOME/skills/learn/SKILL.md.',
+    'You run in the background and nobody can answer a question here. Finish with one line',
+    'saying what changed.',
+  ].join(' ')
+}
+
+/** What the person's conversation is asked when the pane could not start the revision itself. */
+export function reviseRelay(title: string, task: string): string {
+  return [
+    `Revise the learning "${title}" in a background subagent, not in this thread: call the Agent`,
+    'tool once with subagent_type "general-purpose", run_in_background: true and, as its prompt,',
+    'exactly the text after "PROMPT:" below. Then reply in one line that it is being revised in',
+    'the background, and when the agent reports back, give its result in one line.',
+    `\n\nPROMPT: ${task}`,
   ].join(' ')
 }
 

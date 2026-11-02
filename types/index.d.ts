@@ -133,7 +133,20 @@ export type FeedbackFile = { version: 1; events: FeedbackEvent[] }
 
 export type ChangeStatus = 'pending' | 'approved' | 'rejected'
 
-/** One learning in a proposal, approved or rejected on its own. */
+/**
+ * What the person wrote on a pending change: neither a decision nor a learning. The learn skill
+ * revises the change with it (`jobs revise`) and reads it on later runs.
+ */
+export type Clarification = {
+  at: string
+  text: string
+  /** The change's text when they wrote it: what the clarification corrected. */
+  was: string
+  /** When the revision landed; until then the change cannot be approved. */
+  revisedAt?: string
+}
+
+/** One learning in a proposal, approved, rejected or clarified on its own. */
 export type ProposalChange = {
   /** `c1`, `c2`, ... in proposal order; a change saved before ids existed takes its place's. */
   id: string
@@ -145,6 +158,8 @@ export type ProposalChange = {
   /** A change saved before per-change decisions takes its proposal's status. */
   status: ChangeStatus
   decidedAt?: string
+  /** Oldest first; at most the last one is still waiting for its revision. */
+  clarifications?: Clarification[]
 }
 
 /**
@@ -212,11 +227,12 @@ export type SentPrompt = {
 
 /**
  * A package build the pane started as a background subagent. `agentId` is known once the engine
- * names the agent, at the latest when its run starts with `task`.
+ * names the agent, at the latest when its run starts with `task`. A revision's `leadId` is the
+ * change it revises (`clarifyKey`) and its `company` that change's title.
  */
 export type DraftRun = {
-  /** A package build (absent, from before prefills) or an application's background prefill. */
-  kind?: 'draft' | 'submit'
+  /** A package build (absent, from before prefills), a background prefill, or a revision. */
+  kind?: 'draft' | 'submit' | 'revise'
   /** A prefill whose report went to the conversation, which is asking and submitting now. */
   isHandedOn?: true
   agentId?: string
@@ -265,6 +281,8 @@ declare module 'claude-code' {
       busy: string | null
       /** The lead whose pass reasons are open, on its card or its own page; null when none. */
       passing: string | null
+      /** The change whose clarification field is open (`clarifyKey`); null when none. */
+      clarifying: string | null
       /** True while a main-loop turn runs: a prompt sent now waits for it to end. */
       turning: boolean
       /** Prompts the pane sent whose turn has not started yet. */

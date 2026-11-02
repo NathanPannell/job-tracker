@@ -39,12 +39,17 @@ import type { RunStep } from './lib/deep-form.ts'
 import { act, dataDir, EMPTY_BOARD, jobs, loadPackage, openFile, PANE, refresh } from './lib/io.ts'
 import {
   bandText,
+  clarifyKey,
   counts,
   draftRelay,
   draftTask,
+  isApprovable,
   isColumn,
   leadsToMention,
   nudgeContext,
+  openClarification,
+  reviseRelay,
+  reviseTask,
   submitBatchRelay,
   submitFollowUp,
   submitRelay,
@@ -69,6 +74,10 @@ const pendingTurn = atom(
 const nudged = atom({ plugin: 'job-tracker', key: 'nudged' } as const, false)
 const busy = atom({ plugin: 'job-tracker', key: 'busy' } as const, null as string | null)
 const passing = atom({ plugin: 'job-tracker', key: 'passing' } as const, null as string | null)
+const clarifying = atom(
+  { plugin: 'job-tracker', key: 'clarifying' } as const,
+  null as string | null,
+)
 const turning = atom({ plugin: 'job-tracker', key: 'turning' } as const, false)
 const sent = atom({ plugin: 'job-tracker', key: 'sent' } as const, [] as SentPrompt[])
 const drafts = atom({ plugin: 'job-tracker', key: 'drafts' } as const, [] as DraftRun[])
@@ -93,6 +102,7 @@ const openPane = ($: EngineInterface) => $.ui.open({ id: PANE, title: 'Jobs' })
 async function show($: EngineInterface, next: JobView) {
   // Reasons opened on a card stay with that card, not with the page the person goes to.
   await update($, passing, () => null)
+  await update($, clarifying, () => null)
   await update($, view, () => next)
   if (next.kind === 'package') await loadPackage($, next.id)
 }
@@ -232,6 +242,47 @@ async function draftPackage(
 }
 
 /**
+ * Revises a clarified change off the person's conversation: a background subagent follows the
+ * learn skill and the revision shows on the board for review again. Where the engine refuses the
+ * spawn, the conversation is asked to start the subagent instead.
+ */
+async function reviseClarified($: EngineInterface, proposalId: string, changeId: string) {
+  const proposal = (await read($, board)).proposals.find(one => one.id === proposalId)
+  const change = proposal?.changes.find(one => one.id === changeId)
+  if (!change || !openClarification(change)) return
+  const task = reviseTask(proposalId, change)
+  const running = await claimRun($, {
+    kind: 'revise',
+    leadId: clarifyKey(proposalId, changeId),
+    company: change.title,
+    task,
+    at: await $.clock.now(),
+  })
+  if (running) {
+    $.ui.toast(busyNote(running))
+    return
+  }
+  const label = `Revising "${change.title}"`
+  try {
+    const spawned = await $.agent.spawn({
+      prompt: task,
+      description: `Revise ${changeId} of ${proposalId}`,
+      subagentType: 'general-purpose',
+    })
+    if (spawned.deny === undefined) {
+      if (spawned.agentId) await startDraft($, spawned.agentId, task)
+      $.ui.toast(`${label} in the background; it comes back here for review.`)
+      return
+    }
+  } catch {
+    // the conversation starts it instead
+  }
+  if (!(await sendPrompt($, reviseRelay(change.title, task), label))) {
+    await update($, drafts, list => list.filter(one => one.task !== task))
+  }
+}
+
+/**
  * Claims a lead for one background run, before anything slow, so a second press or tool call
  * meanwhile starts nothing: answers the run already going for that lead, if there is one.
  */
@@ -249,9 +300,11 @@ async function claimRun($: EngineInterface, run: DraftRun): Promise<DraftRun | u
 const busyNote = (run: DraftRun) =>
   run.isHandedOn
     ? `The ${run.company} application is prefilled; Claude asks about it in the conversation.`
-    : run.kind === 'submit'
-      ? `The ${run.company} application is already being prefilled.`
-      : `The ${run.company} package is already being drafted.`
+    : run.kind === 'revise'
+      ? `"${run.company}" is already being revised.`
+      : run.kind === 'submit'
+        ? `The ${run.company} application is already being prefilled.`
+        : `The ${run.company} package is already being drafted.`
 
 /**
  * Prefills an approved package's application in Chrome off the person's conversation: a
@@ -404,6 +457,22 @@ async function finishDraft($: EngineInterface, agentId: string, answer: string, 
     ...(run.kind === 'submit' ? [handedOn] : []),
   ])
   await refresh($)
+  if (run.kind === 'revise') {
+    const proposals = (await read($, board)).proposals
+    const change = proposals
+      .flatMap(proposal => proposal.changes.map(one => ({ proposal, one })))
+      .find(({ proposal, one }) => clarifyKey(proposal.id, one.id) === run.leadId)?.one
+    const why = reason === 'answer' ? '' : ` (${reason})`
+    // Decided while it ran, the change has nothing left to come back for.
+    if (change?.status === 'pending') {
+      $.ui.toast(
+        openClarification(change)
+          ? `"${run.company}" was not revised${why}; Revise now starts it again.`
+          : `"${run.company}" is revised and back for review under Learning proposals.`,
+      )
+    }
+    return
+  }
   if (run.kind === 'submit') {
     const release = () => update($, drafts, list => list.filter(one => one.task !== handedOn.task))
     const lead = (await read($, board)).leads.find(one => one.id === run.leadId)
@@ -653,7 +722,10 @@ function actions($: EngineInterface): Actions {
         // change's text is appended once.
         const proposal = (await read($, board)).proposals.find(one => one.id === id)
         const open = proposal?.changes.filter(
-          one => one.status === 'pending' && (changeId === 'all' || one.id === changeId),
+          one =>
+            one.status === 'pending' &&
+            (changeId === 'all' || one.id === changeId) &&
+            (decision === 'reject' || isApprovable(one)),
         )
         if (!open?.length) return
         const what = changeId === 'all' ? `${open.length} learnings` : `"${open[0]?.title}"`
@@ -664,6 +736,24 @@ function actions($: EngineInterface): Actions {
           decision,
         ])
       })(),
+    // Opens the field on the change; a second press closes it. It writes nothing.
+    askClarify: (id, changeId) => {
+      const key = clarifyKey(id, changeId)
+      void update($, clarifying, open => (open === key ? null : key))
+    },
+    clarify: (id, changeId, text) =>
+      void (async () => {
+        // JSON, so words that start with a dash or hold a newline reach the CLI as they are.
+        const saved = await act($, 'Saving the clarification', [
+          'clarify',
+          JSON.stringify({ proposal: id, change: changeId, text }),
+        ])
+        if (!saved.ok) return
+        const key = clarifyKey(id, changeId)
+        await update($, clarifying, open => (open === key ? null : open))
+        await reviseClarified($, id, changeId)
+      })(),
+    revise: (id, changeId) => void reviseClarified($, id, changeId),
   }
 }
 
@@ -1072,6 +1162,9 @@ async function drawPane($: EngineInterface, e: RenderInput<'Pane'>) {
   const isReadOnly = e.surface === 'mobile'
   const now = await $.clock.now()
   const all = actions($)
+  const revising = (await read($, drafts)).filter(
+    one => one.kind === 'revise' && now - one.at < DRAFT_FOR_MS,
+  )
   const ctx: ViewContext = {
     el,
     surface: e.surface,
@@ -1080,6 +1173,8 @@ async function drawPane($: EngineInterface, e: RenderInput<'Pane'>) {
     columns: e.props.bodyColumns,
     busy: await read($, busy),
     passing: await read($, passing),
+    clarifying: await read($, clarifying),
+    revising: revising.map(one => one.leadId),
     queued: (await read($, sent)).filter(one => isLive(one, now)).map(one => one.label),
     act: isReadOnly ? undefined : all,
     nav: {

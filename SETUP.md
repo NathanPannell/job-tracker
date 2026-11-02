@@ -176,8 +176,15 @@ Ask in any session:
 - "Use the job-tracker:submit skill for lead `<id>`" — or press Approve and submit.
 - "Use the job-tracker:sync skill" — check Gmail and Calendar for replies; it proposes moves and
   waits for your confirmation.
-- "Use the job-tracker:learn skill" — write this week's learning proposal now; approve it under
-  "Learning proposals" in `/jobs`.
+- "Use the job-tracker:learn skill" — write this week's learning proposal now; review it under
+  "Learning proposals" in `/jobs`. Each change has Approve, Reject and Clarify. Clarify opens a
+  field on that change: type what should change and press Enter. It is neither approved nor
+  rejected: a background subagent revises it with your words and it comes back for review, with
+  nothing written to `learnings.md` or `preferences.md` until you approve it. Your words stay in
+  `proposals.json`, so later reviews do not propose the same thing again. While a change waits for
+  its revision it offers Reject and, if nothing is revising it (the run stopped, or a new session
+  started), Revise now; Approve all remaining leaves it out, and a weekly run revises any still
+  waiting. The field is on desktop and in the terminal; the mobile app only shows the note.
 
 ## Editing preferences
 
