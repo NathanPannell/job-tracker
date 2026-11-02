@@ -54,7 +54,8 @@ first, before step 1. For each pending change with a clarification that has no `
 2. Rewrite the change so it says what the person meant, keeping it one small learning that stands
    alone, in the same short, imperative, testable style. Their words outrank your evidence: never
    argue with them or restate the old rule. Ask nothing: the person reviews the result. Keep their
-   meaning, in the change's own voice, rather than pasting their sentence in.
+   meaning, in the change's own voice, rather than pasting their sentence in. Approving only
+   appends, so where their words override a rule already in a profile file, say so in the text.
 3. Save it with `jobs revise '<json>'`, or `jobs revise @<file>`:
    `{ "proposal": "<id>", "change": "c2", "text": "<new Markdown>" }`, adding `title`, `rationale`
    or `file` when those change too (a clarification that states a preference may move a change
