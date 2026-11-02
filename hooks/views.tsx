@@ -12,24 +12,34 @@ import type {
 import { readyNote } from './lib/answers.ts'
 import {
   ago,
+  BOARD_TABS,
   clarifyKey,
   COLUMN_TITLES,
-  columnLeads,
   columnTitle,
   defaultStage,
   isApprovable,
+  isGhosted,
+  isMovedByEmail,
   leadAges,
   openClarification,
+  openUnclear,
   previousColumn,
   PASS_REASONS,
-  PIPELINE,
   recentlyGhosted,
+  restoreNote,
   scoreTone,
   sourceLabel,
   STAGE_ACTIONS,
+  STAGE_TITLES,
+  stageCount,
+  stageLeads,
+  syncNotices,
+  TAB_TITLES,
+  tabCount,
+  tabStages,
   TAGLINE_CHARS,
 } from './lib/model.ts'
-import type { Column, Lead, StageAction } from './lib/model.ts'
+import type { BoardTab, Column, Lead, Stage, StageAction } from './lib/model.ts'
 
 export type Table = Elements[RenderSurface]
 
@@ -39,10 +49,10 @@ export type Actions = {
   board: () => void
   proposals: () => void
   refresh: () => void
-  toggleClosed: () => void
-  tab: (column: Column) => void
+  tab: (tab: BoardTab) => void
+  stage: (stage: Stage) => void
   more: () => void
-  move: (lead: Lead, to: Column) => void
+  move: (lead: Lead, to: Column, note?: string) => void
   outcome: (lead: Lead, to: Column, reason: string) => void
   askPass: (lead: Lead) => void
   cancelPass: () => void
@@ -82,7 +92,7 @@ export type ViewContext = {
   /** Undefined on a surface that only reads. */
   act: Actions | undefined
   /** Navigation stays available where acting is not. */
-  nav: Pick<Actions, 'open' | 'board' | 'proposals' | 'review' | 'tab' | 'more'>
+  nav: Pick<Actions, 'open' | 'board' | 'proposals' | 'review' | 'tab' | 'stage' | 'more'>
 }
 
 /** Cards a stage shows at first, and how many more each "Show more" adds. */
@@ -140,7 +150,7 @@ function run(ctx: ViewContext, lead: Lead, action: StageAction): void {
   }
   // While an earlier press is still being written, a second one would record it twice.
   if (ctx.busy) return
-  if (action.kind === 'move') act.move(lead, action.to)
+  if (action.kind === 'move') act.move(lead, action.to, action.note)
   else if (action.kind === 'outcome') act.outcome(lead, action.to, action.reason)
   else if (action.kind === 'draft') act.draft(lead)
   else if (action.kind === 'review') act.review(lead)
@@ -160,14 +170,18 @@ function stageButtons(ctx: ViewContext, lead: Lead, suffix: string): RenderEleme
   if (actions.length === 0 && lead.column === 'ready') {
     actions.push({ key: 'draft', label: 'Draft package', kind: 'draft', primary: true })
   }
-  // A closed lead can go straight back to where it was, undoing a mis-click.
+  // A closed lead can go straight back to where it was, undoing a mis-click, and so can a card
+  // email moved: nobody saw that move before it was made.
   const from = previousColumn(lead)
-  if (['rejected', 'passed', 'archived'].includes(lead.column) && from && from !== 'new') {
+  const isClosed = ['rejected', 'passed', 'archived'].includes(lead.column)
+  if ((isClosed || isMovedByEmail(lead)) && from && from !== 'new') {
+    const note = restoreNote(lead)
     actions.unshift({
       key: 'restore',
       label: `Back to ${COLUMN_TITLES[from]}`,
       kind: 'move',
       to: from,
+      ...(note ? { note } : {}),
     })
   }
   return actions.map(action => (
@@ -267,21 +281,16 @@ function card(ctx: ViewContext, lead: Lead): RenderElement {
   )
 }
 
-/**
- * The applications the board marked ghosted this week, each a button to its page, where "Back to
- * Applied" undoes it: the toast is seen only by the session that ghosted them, often a scheduled
- * run.
- */
-function ghostedNotice(ctx: ViewContext, file: { version: 1; leads: Lead[] }) {
+/** A line above the tabs naming leads, each a button to its page; nothing with none to name. */
+function noticeRow(ctx: ViewContext, name: string, title: string, leads: Lead[]) {
   const { Box, Text, Button } = ctx.el
-  const ghosted = recentlyGhosted(file, ctx.now)
-  if (ghosted.length === 0) return null
+  if (leads.length === 0) return null
   return (
-    <Box key="ghosted" flexDirection="row" gap={1} flexWrap="wrap" alignItems="center">
-      <Text color="warning">Marked ghosted, no reply a month after applying:</Text>
-      {ghosted.slice(0, PAGE).map(lead => (
+    <Box key={name} flexDirection="row" gap={1} flexWrap="wrap" alignItems="center">
+      <Text color="warning">{title}</Text>
+      {leads.slice(0, PAGE).map(lead => (
         <Button
-          key={`ghost-notice:${lead.id}`}
+          key={`${name}-notice:${lead.id}`}
           label={`${clip(lead.company, 30)} · ${clip(lead.role, 40)}`}
           onPress={() => ctx.nav.open(lead.id)}
         />
@@ -290,9 +299,30 @@ function ghostedNotice(ctx: ViewContext, file: { version: 1; leads: Lead[] }) {
   )
 }
 
+/**
+ * The applications the board marked ghosted this week; a card's page has "Back to Applied", which
+ * undoes it. The toast is seen only by the session that ghosted them, often a scheduled run.
+ */
+const ghostedNotice = (ctx: ViewContext, file: { version: 1; leads: Lead[] }) =>
+  noticeRow(
+    ctx,
+    'ghost',
+    'Marked ghosted, no reply a month after applying:',
+    recentlyGhosted(file, ctx.now),
+  )
+
+/** What email moved this week and what it left unclear: a scheduled sync has nobody watching. */
+function syncNotice(ctx: ViewContext, file: { version: 1; leads: Lead[] }) {
+  const { moved, unclear } = syncNotices(file, ctx.now)
+  return [
+    noticeRow(ctx, 'sync-moved', 'Moved by email this week:', moved),
+    noticeRow(ctx, 'sync-unclear', 'Unclear from email, still where it was:', unclear),
+  ]
+}
+
 export function boardView(
   ctx: ViewContext,
-  options: { showClosed: boolean; stage: Column | null; shown: number },
+  options: { tab: BoardTab; stage: Stage | null; shown: number },
 ): RenderElement {
   const { Box, Text, Button, Markdown } = ctx.el
   if (!ctx.board.dataDir) {
@@ -308,13 +338,16 @@ export function boardView(
   const pendingChanges = ctx.board.proposals
     .flatMap(one => one.changes)
     .filter(one => one.status === 'pending').length
-  const closed: Column[] = ['passed', 'archived']
-  const closedCount = ctx.board.leads.filter(lead => closed.includes(lead.column)).length
-  const tabs = options.showClosed ? [...PIPELINE, ...closed] : PIPELINE
-  const stage = options.stage && tabs.includes(options.stage) ? options.stage : defaultStage(file)
-  const leads = columnLeads(file, stage)
+  const stages = tabStages(file, options.tab)
+  // A stage emptied or hidden meanwhile falls back within the tab, never to another tab.
+  const stage =
+    options.stage && stages.includes(options.stage)
+      ? options.stage
+      : defaultStage(file, options.tab)
+  const leads = stageLeads(file, stage, ctx.board.applications)
   const visible = leads.slice(0, Math.max(options.shown, PAGE))
-  // Ready to review's header approves every lead there with a package at once.
+  const isIdle = options.tab === 'active' && tabCount(file, 'active') === 0
+  // Ready to apply's header approves every lead there with a package at once.
   const approvable =
     stage === 'ready'
       ? leads.filter(lead => ctx.board.applications.some(one => one.leadId === lead.id))
@@ -335,29 +368,31 @@ export function boardView(
             onPress={() => ctx.nav.proposals()}
           />
         )}
-        {ctx.act && (
-          <Button
-            key="closed"
-            label={
-              options.showClosed ? 'Hide passed & archived' : `Passed & archived (${closedCount})`
-            }
-            onPress={() => ctx.act?.toggleClosed()}
-          />
-        )}
       </Box>
       {ctx.board.error && <Text color="warning">{ctx.board.error}</Text>}
       {ghostedNotice(ctx, file)}
+      {syncNotice(ctx, file)}
       <Box key="tabs" flexDirection="row" gap={1} flexWrap="wrap">
-        {tabs.map(column => (
+        {BOARD_TABS.map(tab => (
           <Button
-            key={`tab:${column}`}
-            label={`${COLUMN_TITLES[column]} ${columnLeads(file, column).length}`}
-            variant={column === stage ? 'primary' : undefined}
-            onPress={() => ctx.nav.tab(column)}
+            key={`tab:${tab}`}
+            label={`${TAB_TITLES[tab]} ${tabCount(file, tab)}`}
+            variant={tab === options.tab ? 'primary' : undefined}
+            onPress={() => ctx.nav.tab(tab)}
           />
         ))}
       </Box>
-      <Box key={`stage:${stage}`} flexDirection="column" gap={0}>
+      <Box key="stages" flexDirection="row" gap={1} flexWrap="wrap">
+        {stages.map(one => (
+          <Button
+            key={`stage:${one}`}
+            label={`${STAGE_TITLES[one]} ${stageCount(file, one)}`}
+            variant={one === stage ? 'primary' : undefined}
+            onPress={() => ctx.nav.stage(one)}
+          />
+        ))}
+      </Box>
+      <Box key={`cards:${stage}`} flexDirection="column" gap={0}>
         {ctx.act && approvable.length > 0 && (
           <Box key="stage-header" flexDirection="row" gap={1}>
             <Button
@@ -368,7 +403,11 @@ export function boardView(
             />
           </Box>
         )}
-        {leads.length === 0 && <Text dimColor>{`Nothing in ${COLUMN_TITLES[stage]} yet.`}</Text>}
+        {leads.length === 0 && (
+          <Text dimColor>
+            {isIdle ? 'Nothing to do.' : `Nothing in ${STAGE_TITLES[stage]} yet.`}
+          </Text>
+        )}
         {visible.map(lead => card(ctx, lead))}
         {leads.length > visible.length && (
           <Button
@@ -397,6 +436,9 @@ export function leadSummary(lead: Pick<Lead, 'companyBlurb' | 'roleHighlights'>)
 const QUESTIONS_SHOWN = 12
 /** Each stays a line or two: the page shares the pane tree's 100,000 characters. */
 const QUESTION_CHARS = 200
+
+/** What sync found stays a line or two on the page; the lead's history keeps it whole. */
+const UNCLEAR_CHARS = 300
 
 /** The note on a Ready lead's page, then what is being asked. */
 function readySection(ctx: ViewContext, lead: Lead): RenderElement | null {
@@ -434,7 +476,7 @@ export function leadView(ctx: ViewContext, id: string): RenderElement {
   const app = ctx.board.applications.find(one => one.leadId === id)
   const ages = leadAges(lead, ctx.now)
   const facts = [
-    COLUMN_TITLES[lead.column],
+    isGhosted(lead) ? STAGE_TITLES.ghosted : COLUMN_TITLES[lead.column],
     sourceLabel(lead.source),
     `added ${ago(ages.added)}`,
     ages.posted && `posted ${ago(ages.posted)}`,
@@ -442,6 +484,7 @@ export function leadView(ctx: ViewContext, id: string): RenderElement {
     lead.comp,
   ].filter(Boolean)
   const summary = leadSummary(lead)
+  const unclear = openUnclear(lead)
   const act = ctx.act
   const passing = ctx.passing === lead.id
   // The reasons open under the row that holds the lead's Pass button.
@@ -477,6 +520,11 @@ export function leadView(ctx: ViewContext, id: string): RenderElement {
             : ''
         }`}
       />
+      {unclear && (
+        <Text key="unclear" color="warning" wrap="wrap">
+          {`Unclear from email: ${clip(unclear.note ?? '', UNCLEAR_CHARS)}`}
+        </Text>
+      )}
       {readySection(ctx, lead)}
       {act && (
         <Box flexDirection="column" gap={1}>

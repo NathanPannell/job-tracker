@@ -43,20 +43,24 @@ import {
   counts,
   draftRelay,
   draftTask,
+  GHOSTED_REASON,
   isApprovable,
   isColumn,
+  isGhosted,
   leadsToMention,
   nudgeContext,
   openClarification,
   reviseRelay,
   reviseTask,
+  stageOf,
+  stageTab,
   submitBatchLeft,
   submitBatchRelay,
   submitFollowUp,
   submitRelay,
   submitTask,
 } from './lib/model.ts'
-import type { BatchLead, Column, Lead } from './lib/model.ts'
+import type { BatchLead, BoardTab, Column, Lead, Stage } from './lib/model.ts'
 import { boardView, leadView, packageView, PAGE, proposalsView } from './views.tsx'
 import type { Actions, ViewContext } from './views.tsx'
 
@@ -64,8 +68,8 @@ import type { Actions, ViewContext } from './views.tsx'
 const board = atom({ plugin: 'job-tracker', key: 'board' } as const, EMPTY_BOARD)
 const view = atom({ plugin: 'job-tracker', key: 'view' } as const, { kind: 'board' } as JobView)
 const pkg = atom({ plugin: 'job-tracker', key: 'pkg' } as const, null as JobPackage | null)
-const showClosed = atom({ plugin: 'job-tracker', key: 'showClosed' } as const, false)
-const stage = atom({ plugin: 'job-tracker', key: 'stage' } as const, null as Column | null)
+const boardTab = atom({ plugin: 'job-tracker', key: 'boardTab' } as const, 'active' as BoardTab)
+const stage = atom({ plugin: 'job-tracker', key: 'stage' } as const, null as Stage | null)
 const shown = atom({ plugin: 'job-tracker', key: 'shown' } as const, PAGE)
 const pending = atom({ plugin: 'job-tracker', key: 'pending' } as const, [] as string[])
 const pendingTurn = atom(
@@ -99,6 +103,13 @@ const isPersonOrigin = (origin: PromptOrigin) =>
 const isJobPrompt = (text: string) => /job-tracker|\/jobs\b/i.test(text)
 
 const openPane = ($: EngineInterface) => $.ui.open({ id: PANE, title: 'Jobs' })
+
+/** Puts the board back on Active: every opening starts there, wherever the last visit ended. */
+async function resetBoard($: EngineInterface) {
+  await update($, boardTab, () => 'active' as const)
+  await update($, stage, () => null)
+  await update($, shown, () => PAGE)
+}
 
 async function show($: EngineInterface, next: JobView) {
   // Reasons opened on a card stay with that card, not with the page the person goes to.
@@ -211,7 +222,8 @@ async function draftPackage(
     await release()
     if (lead.column === 'drafting') return
     const reason = lead.column === 'passed' ? ['--reason', lead.passReason ?? 'Not interested'] : []
-    await act($, 'Undoing the move', ['move', lead.id, lead.column, ...reason])
+    const note = isGhosted(lead) ? ['--note', GHOSTED_REASON] : []
+    await act($, 'Undoing the move', ['move', lead.id, lead.column, ...reason, ...note])
   }
   const label = `Drafting the ${lead.company} package`
   let refused: string
@@ -415,7 +427,7 @@ async function startDraft($: EngineInterface, agentId: string, text: string) {
 
 /**
  * The other applications approved alongside a lead and not submitted yet: prefills still running
- * and prefilled ones waiting in the conversation, whose cards are still in Ready to review.
+ * and prefilled ones waiting in the conversation, whose cards are still in Ready to apply.
  */
 async function batchOf($: EngineInterface, leadId: string, at: number): Promise<BatchLead[]> {
   const leads = (await read($, board)).leads
@@ -514,7 +526,7 @@ async function finishDraft($: EngineInterface, agentId: string, answer: string, 
     } else if (lead?.column !== 'ready') {
       await release()
       $.ui.toast(
-        `The ${run.company} application was prefilled, but its card left Ready to review meanwhile; nothing was sent.`,
+        `The ${run.company} application was prefilled, but its card left Ready to apply meanwhile; nothing was sent.`,
       )
       await settle()
     } else {
@@ -671,29 +683,34 @@ async function keepTab($: EngineInterface, agentId: string, call: ChromeCall, te
 async function leave($: EngineInterface, lead: Lead) {
   const at = await read($, view)
   if ((at.kind !== 'lead' && at.kind !== 'package') || at.id !== lead.id) return
-  if ((await read($, stage)) !== lead.column) {
-    await update($, stage, () => lead.column)
+  const from = stageOf(lead)
+  if ((await read($, stage)) !== from) {
+    await update($, boardTab, () => stageTab(from))
+    await update($, stage, () => from)
     await update($, shown, () => PAGE)
   }
   await show($, { kind: 'board' })
 }
 
 function actions($: EngineInterface): Actions {
-  const move = (lead: Lead, to: Column) =>
-    void act($, `Moving ${lead.company}`, ['move', lead.id, to]).then(result =>
-      result.ok ? leave($, lead) : undefined,
-    )
+  const move = (lead: Lead, to: Column, note?: string) =>
+    void act($, `Moving ${lead.company}`, [
+      'move',
+      lead.id,
+      to,
+      ...(note ? ['--note', note] : []),
+    ]).then(result => (result.ok ? leave($, lead) : undefined))
   return {
     open: id => void show($, { kind: 'lead', id }),
     board: () => void show($, { kind: 'board' }),
     // Refreshed on opening: a revision lands whenever its run saves it, in any session.
     proposals: () => void show($, { kind: 'proposals' }).then(() => refresh($, false)),
     refresh: () => void refresh($),
-    toggleClosed: () =>
-      void update($, showClosed, value => !value)
+    tab: next =>
+      void update($, boardTab, () => next)
         .then(() => update($, stage, () => null))
         .then(() => update($, shown, () => PAGE)),
-    tab: column => void update($, stage, () => column).then(() => update($, shown, () => PAGE)),
+    stage: next => void update($, stage, () => next).then(() => update($, shown, () => PAGE)),
     more: () => void update($, shown, count => count + PAGE),
     move,
     outcome: (lead, to, reason) =>
@@ -866,7 +883,7 @@ export const register: Register = on => {
     await $.tool.register({
       name: 'draft_package',
       description:
-        "Starts building the application package for one lead on the person's job board in a background subagent and moves its card to Drafting; returns at once, and the card moves to Ready to review when the build ends. Use it whenever the person asks in this conversation to draft, build or redraft a package, instead of running the job-tracker:package skill here: a build takes several minutes and would hold the conversation.",
+        "Starts building the application package for one lead on the person's job board in a background subagent and moves its card to Drafting; returns at once, and the card moves to Ready to apply when the build ends. Use it whenever the person asks in this conversation to draft, build or redraft a package, instead of running the job-tracker:package skill here: a build takes several minutes and would hold the conversation.",
       inputSchema: {
         type: 'object',
         required: ['leadId'],
@@ -906,6 +923,7 @@ export const register: Register = on => {
 
   on('command.run', { command: 'jobs' }, async $ => {
     await refresh($)
+    await resetBoard($)
     await show($, { kind: 'board' })
     const opened = await openPane($)
     const c = counts({ version: 1, leads: (await read($, board)).leads })
@@ -930,6 +948,7 @@ export const register: Register = on => {
             ? { kind: 'proposals' }
             : { kind: 'board' }
     await refresh($)
+    await resetBoard($)
     await show($, target)
     const opened = await openPane($)
     // A pane whose tree the surface refused is closed again; give the first draw a moment.
@@ -1088,7 +1107,15 @@ export const register: Register = on => {
           {isReadOnly ? (
             <Text>{`● ${text}`}</Text>
           ) : (
-            <Button key="open-jobs" plain onPress={() => void openPane($)}>
+            <Button
+              key="open-jobs"
+              plain
+              onPress={() =>
+                void resetBoard($)
+                  .then(() => show($, { kind: 'board' }))
+                  .then(() => openPane($))
+              }
+            >
               <Text color="claude">●</Text> {text} <Text dimColor>· /jobs</Text>
             </Button>
           )}
@@ -1169,8 +1196,7 @@ function paneFailure($: EngineInterface, e: RenderInput<'Pane'>, why: string) {
           label="Back to the board"
           onPress={() =>
             void show($, { kind: 'board' })
-              .then(() => update($, stage, () => null))
-              .then(() => update($, shown, () => PAGE))
+              .then(() => resetBoard($))
               .then(() => refresh($))
           }
         />
@@ -1208,6 +1234,7 @@ async function drawPane($: EngineInterface, e: RenderInput<'Pane'>) {
       proposals: all.proposals,
       review: all.review,
       tab: all.tab,
+      stage: all.stage,
       more: all.more,
     },
   }
@@ -1215,7 +1242,7 @@ async function drawPane($: EngineInterface, e: RenderInput<'Pane'>) {
   if (at.kind === 'package') return packageView(ctx, at.id, at.tab, await read($, pkg))
   if (at.kind === 'proposals') return proposalsView(ctx)
   return boardView(ctx, {
-    showClosed: await read($, showClosed),
+    tab: await read($, boardTab),
     stage: await read($, stage),
     shown: await read($, shown),
   })

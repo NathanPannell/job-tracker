@@ -6,7 +6,7 @@ import {
   age,
   appendEvent,
   bandText,
-  columnLeads,
+  stageLeads,
   correctScore,
   counts,
   draftRelay,
@@ -21,7 +21,6 @@ import {
   markMentioned,
   migrateLeads,
   moveLead,
-  neighbour,
   normalizeUrl,
   nudgeContext,
   parseOr,
@@ -130,15 +129,6 @@ test('moveLead records history and a feedback event; passing needs a reason', ()
   const moved = moveLead(file, id, 'drafting', AT, 'package')
   assert.equal(moved.event?.kind, 'move')
   assert.equal(moved.event?.from, 'new')
-})
-
-test('neighbour walks the pipeline and brings closed cards back to New', () => {
-  assert.equal(neighbour('new', -1), undefined)
-  assert.equal(neighbour('new', 1), 'drafting')
-  assert.equal(neighbour('offer', 1), 'rejected')
-  assert.equal(neighbour('rejected', 1), undefined)
-  assert.equal(neighbour('passed', -1), 'new')
-  assert.equal(neighbour('passed', 1), undefined)
 })
 
 test('score corrections are events', () => {
@@ -495,17 +485,17 @@ test('counts and the band line', () => {
   let next = moveLead(file, b, 'ready', AT, 'package').leads
   next = moveLead(next, c, 'applied', AT, 'submit').leads
   const c1 = counts(next)
-  assert.deepEqual(c1, { newLeads: 1, readyToReview: 1 })
-  assert.equal(bandText(c1), '1 new lead · 1 ready to review')
-  assert.equal(bandText({ newLeads: 2, readyToReview: 0 }), '2 new leads · 0 ready to review')
-  assert.equal(bandText({ newLeads: 0, readyToReview: 0 }), undefined)
-  assert.equal(columnLeads(next, 'new')[0]?.id, a)
+  assert.deepEqual(c1, { newLeads: 1, readyToApply: 1 })
+  assert.equal(bandText(c1), '1 new lead · 1 ready to apply')
+  assert.equal(bandText({ newLeads: 2, readyToApply: 0 }), '2 new leads · 0 ready to apply')
+  assert.equal(bandText({ newLeads: 0, readyToApply: 0 }), undefined)
+  assert.equal(stageLeads(next, 'new')[0]?.id, a)
 })
 
-test('columnLeads sorts best first', () => {
+test('stageLeads sorts best first', () => {
   const file = seeded([{ fitScore: 70 }, { fitScore: 90 }, { fitScore: 95 }])
   assert.deepEqual(
-    columnLeads(file, 'new').map(lead => lead.fitScore),
+    stageLeads(file, 'new').map(lead => lead.fitScore),
     [95, 90, 70],
   )
 })

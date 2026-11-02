@@ -12,7 +12,7 @@ that moves the cards.
 ## Before you start
 
 - CLI: `node "$JOB_TRACKER_HOME/bin/jobs.ts" <command>`; data folder `$JOB_TRACKER_DATA`.
-- The lead must be in Ready to review with a package (`jobs list --column ready`). If it is not,
+- The lead must be in Ready to apply with a package (`jobs list --column ready`). If it is not,
   say so and stop.
 - Read first `profile/knowledge-base/application-answers.md` (see "Saved answers" below; it may
   not exist yet), then `profile/learnings.md`, `profile/preferences.md`, `profile/voice.md`,
@@ -36,7 +36,7 @@ the person's conversation:
   do.
 
 Several presses close together are **one batch**, and so is one press of "Approve and submit
-all" on the Ready to review column, which approves every lead there at once. Each lead gets its
+all" on the Ready to apply column, which approves every lead there at once. Each lead gets its
 own subagent at once, side by side; none waits for another or for the conversation. Their reports arrive as separate
 prompts, in the order the prefills end, and each names the batch's other leads: still being
 prefilled, or prefilled with its report earlier in the conversation. The person hears each question

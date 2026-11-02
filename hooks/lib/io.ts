@@ -150,7 +150,7 @@ function ghostedToast($: EngineInterface, before: JobBoard, value: unknown) {
   })
   $.ui.toast(
     `Marked ghosted (no reply a month after applying): ${names.join(', ')}. ` +
-      'Now in Archived; "Back to Applied" on the card undoes it.',
+      'Now under Settled, in Ghosted; "Back to Applied" on the card undoes it.',
     { timeoutMs: 15_000 },
   )
 }
