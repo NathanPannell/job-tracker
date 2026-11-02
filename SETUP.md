@@ -7,8 +7,8 @@ and daily use.
 
 - **Skills** (in `skills/`) do the work: `onboard` builds the profile from a résumé, writing
   samples and an interview, `scout` finds and scores roles, `package` drafts an
-  application, `submit` prefills it in Chrome and waits for your yes, `sync` reads Gmail and
-  Calendar for replies, `learn` turns a week of feedback into a proposal.
+  application, `submit` prefills it in Chrome and leaves the final click to you, `sync` reads
+  Gmail and Calendar for replies, `learn` turns a week of feedback into a proposal.
 - **The mod** (`hooks/register.tsx`) is the interface: the `/jobs` kanban pane, the band above
   the prompt, one short mention of new leads per conversation, a guard on background Chrome calls,
   and the tools the model uses: `list_leads`, `update_lead`, `record_feedback`, `draft_package`
@@ -88,8 +88,8 @@ The types of every file are in `types/index.d.ts`.
   counts unless the clause right before it reads as a denial ("nothing is NEEDS ANSWER"), it is
   "NEEDS ANSWER items", it says only "NEEDS ANSWER: none", or it is a heading of its own over the
   questions. These are judgements on wording, and a few unusual shapes can still slip past, so the
-  note is a guide and submit still asks what is missing. An optional question counts, since submit
-  asks it. A saved answer clears a question only when its wording or the form's matches (case and
+  note is a guide, and submit works out what it can from the record and asks the rest. An optional
+  question counts, though submit leaves it blank rather than ask. A saved answer clears a question only when its wording or the form's matches (case and
   punctuation aside, up to the `?`, and, on the question's own wording, no different after it) and
   its scope covers the lead: any application, the lead it was asked for, or that exact company. So
   a card can stay amber on a
@@ -136,12 +136,16 @@ The types of every file are in `types/index.d.ts`.
   diff against the master résumé), the cover letter, answers, company brief and warm-intro note.
   "Open PDF" opens the file in your PDF viewer.
 - **Approve and submit** starts a background subagent that fills in the form in Chrome and
-  attaches the PDF, so the slow work never holds your conversation. When it ends, `submit` carries
-  on in your conversation: it asks you in one message for anything the package and your saved
-  answers do not cover, then shows what was entered and asks "Submit it now?". It clicks submit
-  only after your yes. "Approve and submit all" on Ready to review does this for every lead there
-  at once, side by side, and their questions arrive together. If Claude in Chrome is not available
-  to the subagent, the conversation does the whole job.
+  attaches the PDF, so the slow work never holds your conversation. It fills in everything the
+  record answers or implies, drafted answers included, with no need for your word on each. When it
+  ends, `submit` carries on in your conversation: it asks a short numbered list of only what the
+  record cannot answer, asks each question once and never repeats what is in the form. Once every
+  application needs only your click (a CAPTCHA, a consent box, submit) it says so, once. You look
+  over each tab and submit it yourself, then say they are submitted, and that message moves the
+  cards to Applied. Claude never clicks the final submit. Chrome can unload a prefilled background
+  tab about 30 minutes after it is filled, which wipes the form and the résumé, so submit soon.
+  "Approve and submit all" on Ready to review does this for every lead there at once, side by
+  side. If Claude in Chrome is not available to the subagent, the conversation does the whole job.
 - **The Chrome guard** holds every background prefill to tabs it opened itself and to an element
   ref for every click, and reads each element first. It refuses a click on a control labelled like
   submit, send, confirm, finish or one-click apply, or on a submit-type button not labelled as a
@@ -156,9 +160,8 @@ The types of every file are in `types/index.d.ts`.
 - Every answer you give is saved word for word, with the question and date, in
   `profile/knowledge-base/application-answers.md`; `package` and `submit` read it first, so a
   question you have answered once is not asked again where that answer applies. A data-processing
-  acknowledgment or "keep in contact" box your saved answer covers is ticked for you and listed in
-  the checklist. Account creation, sign-ins, passwords, CAPTCHAs and
-  any other agreement are handed back to you with everything ready to paste.
+  acknowledgment or "keep in contact" box your saved answer covers is ticked for you. Account
+  creation, sign-ins, passwords, CAPTCHAs and any other agreement are left to you.
 - The band above the prompt reads `● N new leads · M ready to review · /jobs`; click it to open the
   board. It is hidden when both are zero.
 - In an unrelated conversation, the first reply ends with one short line naming the top new leads,

@@ -91,9 +91,9 @@ below: nobody can answer you, so never stop to ask a question.
    among the answers. The board counts these lines to tell the person what a package still needs,
    and matches them word for word against `application-answers.md`, so never repeat a question
    inline, in a table or in a summary, and never use the literal marker anywhere else in the file:
-   with nothing open, leave the heading out and say nothing about it. submit asks the person each
-   one and saves the answer. A free-text answer you draft is 2–3 sentences in that same voice,
-   never several paragraphs.
+   with nothing open, leave the heading out and say nothing about it. submit fills in what the
+   record implies, asks the person the rest and saves their answers. A free-text answer you draft
+   is 2–3 sentences in that same voice, never several paragraphs.
 7. Company brief (`company-brief.md`): what they build and for whom, stage and funding, team size,
    stack, recent news, why it fits, risks and red flags (reviews, runway), and three sharp questions
    to ask. Link every claim's source.
