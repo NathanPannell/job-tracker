@@ -50,6 +50,7 @@ import {
   openClarification,
   reviseRelay,
   reviseTask,
+  submitBatchLeft,
   submitBatchRelay,
   submitFollowUp,
   submitRelay,
@@ -300,7 +301,7 @@ async function claimRun($: EngineInterface, run: DraftRun): Promise<DraftRun | u
 /** What a press says when the lead already has a background run going. */
 const busyNote = (run: DraftRun) =>
   run.isHandedOn
-    ? `The ${run.company} application is prefilled; Claude asks about it in the conversation.`
+    ? `The ${run.company} application is prefilled; Claude picks it up in the conversation.`
     : run.kind === 'revise'
       ? `"${run.company}" is already being revised.`
       : run.kind === 'submit'
@@ -310,14 +311,17 @@ const busyNote = (run: DraftRun) =>
 /**
  * Prefills an approved package's application in Chrome off the person's conversation: a
  * background subagent runs the submit skill's slow part and never submits. Its report goes to
- * the conversation when it ends (`finishDraft`), where the person answers what is missing and
- * says yes. Where the engine refuses the spawn, the conversation is asked to do all of it.
+ * the conversation when it ends (`finishDraft`), where the person answers what the record cannot
+ * and clicks submit themself. Where the engine refuses the spawn, the conversation is asked to do
+ * all of it.
  */
 async function submitApplication($: EngineInterface, lead: Lead) {
   const started = await startPrefill($, lead)
   const label = `Prefilling the ${lead.company} application`
   if (started === 'spawned') {
-    $.ui.toast(`${label} in Chrome in the background; Claude asks here before submitting.`)
+    $.ui.toast(
+      `${label} in Chrome in the background; Claude says here when it needs only your click.`,
+    )
   } else if (started === 'refused') {
     await sendPrompt($, submitRelay(lead), label)
   } else {
@@ -375,7 +379,7 @@ async function submitAll($: EngineInterface, leads: readonly Lead[]) {
   const refused = leads.filter((_, n) => started[n] === 'refused')
   const notes = [
     spawned > 0 &&
-      `Prefilling ${plural(spawned, 'application')} in Chrome in the background; Claude asks here once for the batch before submitting.`,
+      `Prefilling ${plural(spawned, 'application')} in Chrome in the background; Claude says here once they need only your click.`,
     running > 0 && `${plural(running, 'application')} already underway.`,
   ].filter(Boolean)
   if (notes.length > 0) $.ui.toast(notes.join(' '))
@@ -411,7 +415,7 @@ async function startDraft($: EngineInterface, agentId: string, text: string) {
 
 /**
  * The other applications approved alongside a lead and not submitted yet: prefills still running
- * and prefilled ones the conversation is asking about, whose cards are still in Ready to review.
+ * and prefilled ones waiting in the conversation, whose cards are still in Ready to review.
  */
 async function batchOf($: EngineInterface, leadId: string, at: number): Promise<BatchLead[]> {
   const leads = (await read($, board)).leads
@@ -426,7 +430,7 @@ async function batchOf($: EngineInterface, leadId: string, at: number): Promise<
 
 /**
  * A background run's subagent ended. A package build: the board shows where its card went, a
- * toast says how. A prefill: its report goes to the conversation, which asks before submitting.
+ * toast says how. A prefill: its report goes to the conversation, which asks what is left.
  */
 async function finishDraft($: EngineInterface, agentId: string, answer: string, reason: string) {
   const run = (await read($, drafts)).find(one => one.agentId === agentId)
@@ -481,10 +485,17 @@ async function finishDraft($: EngineInterface, agentId: string, answer: string, 
   if (run.kind === 'submit') {
     const release = () => update($, drafts, list => list.filter(one => one.task !== handedOn.task))
     const lead = (await read($, board)).leads.find(one => one.id === run.leadId)
+    const named = lead ?? { id: run.leadId, company: run.company, role: 'the approved role' }
+    // Only a report brings the batch's ready message, so a prefill that ends without one, last of
+    // its batch, tells the conversation itself.
+    const settle = async () => {
+      const others = await batchOf($, run.leadId, await $.clock.now())
+      if (others.length === 0 || others.some(one => !one.isPrefilled)) return
+      await sendPrompt($, submitBatchLeft(named, others), 'Finishing the prefilled applications')
+    }
     if (stray !== undefined || isStraySubmit(answer)) {
       // Said first, whatever else happened. The lead stays claimed, even when the conversation
       // cannot be told, so nothing starts on it again before the person has looked.
-      const named = lead ?? { id: run.leadId, company: run.company, role: 'the approved role' }
       const others = await batchOf($, run.leadId, await $.clock.now())
       const label = `Reporting the ${run.company} application`
       const isTold = await sendPrompt($, submitFollowUp(named, report, others), label)
@@ -498,14 +509,16 @@ async function finishDraft($: EngineInterface, agentId: string, answer: string, 
       $.ui.toast(
         `The ${run.company} application prefill stopped (${reason}); Approve and submit starts it again.`,
       )
+      await settle()
     } else if (lead?.column !== 'ready') {
       await release()
       $.ui.toast(
         `The ${run.company} application was prefilled, but its card left Ready to review meanwhile; nothing was sent.`,
       )
+      await settle()
     } else {
-      // The lead stays claimed while the conversation asks and submits, so neither a second
-      // prefill nor a redraft (a new résumé under the uploaded one) starts meanwhile.
+      // The lead stays claimed while the conversation asks and the person submits, so neither a
+      // second prefill nor a redraft (a new résumé under the uploaded one) starts meanwhile.
       const others = await batchOf($, run.leadId, await $.clock.now())
       const label = `Finishing the ${run.company} application`
       // It never reached the conversation, so nothing is asking: the lead is free again.
@@ -594,7 +607,7 @@ async function guardChrome(
       .catch(() => undefined)
     const shown = element && !element.isError ? textOf(element) : ''
     if (kind === 'click' && isSubmitControl(shown)) {
-      return `${ref} looks like it submits, sends or confirms, or could not be read; a background prefill never clicks it. Leave it for the conversation, which asks the person first.`
+      return `${ref} looks like it submits, sends or confirms, or could not be read; a background prefill never clicks it. Leave it for the conversation.`
     }
     if (kind === 'select' && !isTextField(shown)) {
       return `${ref} is not a text field; a background prefill double- or triple-clicks only to select text in one (a button could change between the clicks).`

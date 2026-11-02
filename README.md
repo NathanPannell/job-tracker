@@ -2,9 +2,8 @@
 
 A job search that runs inside [Claude Code](https://code.claude.com). Scheduled agents find
 postings and score them against written preferences. One click builds a tailored application
-package. The final submit is held for the person's yes in chat. The person's passes, edits and
-outcomes then feed a weekly review that proposes changes to how the next postings are scored and
-written.
+package. The final submit is always the person's own click. Their passes, edits and outcomes then
+feed a weekly review that proposes changes to how the next postings are scored and written.
 
 It is a working personal tool, not a product. It is public as a worked example of agents carrying
 a messy, real workflow: they do the reading and the drafting, one small CLI owns the state, and a
@@ -31,11 +30,12 @@ Built on Claude Code. Not affiliated with or endorsed by Anthropic.
   source line for every bullet, then a cover letter, answers to the posting's questions, a company
   brief and a warm-intro search. A warm intro can become a Gmail draft, never a sent email. The
   person reviews each file on the board.
-- **Submit** starts with a background subagent that fills in the form in Chrome and uploads the
-  PDF. The conversation then asks, in one message, for anything the record does not answer, shows
-  what was entered and asks whether to submit. Each answer is saved word for word, so a question
-  answered once is not asked again where that answer applies. Sign-ins, passwords, CAPTCHAs and
-  agreements go back to the person.
+- **Submit** starts with a background subagent that fills in the form in Chrome from the record,
+  drafted answers included, and uploads the PDF. The conversation then asks a short numbered list
+  of only what the record cannot answer, and says once when every application needs only the
+  person's click. They submit in Chrome and say so, which moves the cards to Applied. Each answer
+  is saved word for word, so a question answered once is not asked again where that answer applies.
+  Sign-ins, passwords, CAPTCHAs and agreements go back to the person.
 - **Sync** reads Gmail and Calendar for replies, rejections, interviews and offers, and proposes
   moves in a table. No card moves until the person confirms.
 - **Learn** runs weekly. It reads passes, score corrections, edits to drafted packages and outcomes

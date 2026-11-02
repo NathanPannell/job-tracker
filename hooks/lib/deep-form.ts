@@ -83,7 +83,7 @@ async function press(step: FormStep, run: RunStep): Promise<string> {
   const line = parsed(look)?.line
   if (typeof line !== 'string') return `Could not read field ${step.id ?? ''}: ${look}`
   return isSubmitControl(line) || APPLY.test(line) || /""/.test(line)
-    ? `Field ${step.id ?? ''} (${line}) looks like it submits, sends, applies or confirms, or has no label, so deep_form never presses it. A background prefill leaves it for the conversation, which asks the person first.`
+    ? `Field ${step.id ?? ''} (${line}) looks like it submits, sends, applies or confirms, or has no label, so deep_form never presses it. A background prefill leaves it for the conversation.`
     : run({ ...step, expect: line })
 }
 

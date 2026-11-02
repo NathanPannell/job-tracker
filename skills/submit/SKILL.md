@@ -1,13 +1,13 @@
 ---
 name: submit
-description: Fill in a job application from an approved package in Claude in Chrome, upload the résumé PDF, ask the person in one message for anything missing (saving each answer to the shared knowledge base so it is never asked again), and stop before the final submit until they confirm in chat; after their yes, submit and move the card to Applied. Use when the person approves a package ("Approve and submit" on the job board, or "submit the application for <lead>").
+description: Fill in a job application from an approved package in Claude in Chrome, upload the résumé PDF, infer what the record implies, ask the person a short numbered list of only what it cannot answer (saving each answer to the shared knowledge base so it is never asked again), and say once when every application needs only their click. The person clicks the final submit themself; when they say the applications are submitted, move the cards to Applied. Use when the person approves a package ("Approve and submit" on the job board, or "submit the application for <lead>"), and when they say applications are submitted.
 ---
 
 # Submit
 
-Fill in the application so the person only has to answer what nobody has asked them before, and
-say yes. They never need to open Chrome themselves. The final click is theirs to approve, in this
-chat, every time.
+Fill in the application so the person only has to answer what the record cannot, then click a box
+and submit. The final click is theirs, in Chrome, every time. Afterwards they say so in chat, and
+that moves the cards.
 
 ## Before you start
 
@@ -15,8 +15,10 @@ chat, every time.
 - The lead must be in Ready to review with a package (`jobs list --column ready`). If it is not,
   say so and stop.
 - Read first `profile/knowledge-base/application-answers.md` (see "Saved answers" below; it may
-  not exist yet), then `profile/learnings.md`, `packages/<id>/answers.md`, `cover-letter.md`, `posting.md`, and the
-  identity and links in `profile/knowledge-base/profile.md`.
+  not exist yet), then `profile/learnings.md`, `profile/preferences.md`, `profile/voice.md`,
+  `packages/<id>/answers.md`, `cover-letter.md`, `company-brief.md`, `posting.md`, and the identity
+  and links in `profile/knowledge-base/profile.md`. The rest of `profile/knowledge-base/` is the
+  record too: read what a question calls for.
 
 ## Where it runs
 
@@ -29,19 +31,24 @@ the person's conversation:
   step 4 with the form as the report and the tab left it: check the tab is there and the fields
   are still filled, and redo steps 1–3 only for what is not. If the report starts with
   `CHROME UNAVAILABLE`, do every step here. If it starts with `STRAY SUBMIT DETECTED`, the
-  application may have been sent without the person's yes: say so in the first line of your
-  reply, show what the tab says, touch nothing for that lead and do not move its card, and ask
-  the person what to do.
+  application may have been sent by the prefill: say so in the first line of your reply, show what
+  the tab says, touch nothing for that lead and do not move its card, and ask the person what to
+  do.
 
 Several presses close together are **one batch**, and so is one press of "Approve and submit
 all" on the Ready to review column, which approves every lead there at once. Each lead gets its
 own subagent at once, side by side; none waits for another or for the conversation. Their reports arrive as separate
 prompts, in the order the prefills end, and each names the batch's other leads: still being
-prefilled, or prefilled with its report earlier in the conversation. Every reply to a report asks
-for the whole batch (step 4), never only the lead whose report just came.
+prefilled, or prefilled with its report earlier in the conversation. The person hears each question
+once (step 4), and hears that the batch is ready once (step 6).
 
 Asked to submit in the conversation directly ("submit the application for <lead>"), do every
 step here.
+
+Prefilled tabs do not keep. Chrome unloads a background tab about 30 minutes after it is filled,
+which wipes the form and the résumé, so a prefilled batch must not sit waiting: ask as soon as a
+report comes, say ready as soon as it is true, and after any wait read a tab back before you rely
+on it.
 
 ## Steps
 
@@ -49,68 +56,97 @@ step here.
    (tabs_context_mcp, tabs_create_mcp, navigate, read_page, find, form_input, computer,
    file_upload, get_page_text, deep_form), check the open tabs, and open the posting's application
    page in a new tab.
-2. Stop and hand off to the person, with everything ready, when the page needs any of: an account
-   or sign-in (Workday, iCIMS, Taleo and similar), a password, a CAPTCHA or bot check, or an
-   agreement you would have to accept for them (terms of use, an arbitration clause, any other
-   legal agreement), whatever a saved answer says. Say which page, and list the package files and
-   the answers to paste. Do not try to get around it.
+2. Stop and hand off to the person when you cannot reach the form's fields without them: an
+   account or sign-in (Workday, iCIMS, Taleo and similar), a password, or a CAPTCHA, bot check or
+   agreement (terms of use, an arbitration clause, any other legal agreement) in front of the
+   fields, whatever a saved answer says. Give it one line in step 4's list, and carry on from step
+   3 once they say they are through. If they would rather fill it by hand, list the package files
+   and the answers to paste. Do not try to get around it. A CAPTCHA or agreement box among the
+   fields or beside the final submit stops nothing: fill everything else and leave it for their
+   final click.
 3. Read the whole form, every page of it, before asking anything. Fill every field the record
    answers: name, email, phone, location, links, work authorization (only as recorded), the cover
    letter, each question in `answers.md`, and each answer in `application-answers.md` whose
-   question matches and whose scope covers this application (the latest entry wins). Tick each
-   data-processing and keep-in-contact box such an answer covers, with no need to ask: see
-   "Consent boxes" below. Upload
+   question matches and whose scope covers this application (the latest entry wins). What the
+   record does not state, work out from it and fill in: see "Inferring from the record" below.
+   Tick each data-processing and keep-in-contact box such an answer covers, with no need to ask:
+   see "Consent boxes" below. Upload
    `packages/<id>/resume.pdf` with file_upload. Leave optional demographic or self-identification
    questions unanswered (or "prefer not to say") unless the person has said otherwise. Where find
    and read_page give no ref for a field or file input the page shows, carry on with deep_form as
    in "Forms refs cannot reach" below: that is not a reason to stop.
-4. Ask for everything still missing across the batch, in **one message**. The batch is every
-   application approved in this conversation and not submitted yet: this one, the leads the
-   prompt names, and any earlier one still waiting on the person. Each time you ask (on every
-   prefill report, and again after an answer that leaves something open), the message is the
-   complete set, so the person can answer all of it in one reply:
-   - Grouped by company, one heading per lead (`<Company> — <Role>`), with the questions numbered
-     straight through the message (1, 2, 3… across companies), so a reply can answer by number.
-   - Under each lead: every `NEEDS ANSWER:` in `answers.md` and every form field the record does
-     not answer, each exactly as the form asks it and whether it is required.
-   - Under each prefilled lead, also its compact checklist: each filled field and its value (the
-     report's "Filled" list as the tab now shows it) and the file attached, so the person sees
-     what they would approve before they say "submit".
-   - Carry forward every question from earlier messages that is still unanswered; drop the ones
-     answered since, the leads already submitted, and any lead the person told you to stop or
-     skip.
-   - A lead with nothing missing: say it is filled in and ready to submit. A lead still being
-     prefilled: say so in one line; its questions and checklist come with its report.
-   - Where you offer a draft answer, follow "Drafted answers" below. A draft goes into the form
-     only when the person accepts it in so many words ("3: use the draft"); a question they skip
-     is still unanswered, even after "submit all".
-   - End with one line asking the person to answer and to say which to submit. "Submit all"
-     covers only the leads whose checklist this message showed and whose required answers the
-     reply then completes, never a lead still being prefilled.
+4. Ask the person only what "Inferring from the record" leaves open, as a short numbered list, and
+   nothing else. The list covers every application approved in this conversation and not submitted
+   yet: this one, the leads the prompt names, and any earlier one still waiting on the person. Clear
+   what you can yourself first, such as a step button the guard refused or a file that did not
+   attach.
 
-   Then stop and wait. With one lead and nothing missing, go to step 6. Never ask a question
-   `application-answers.md` already answers for this application.
+   ```markdown
+   1. Acme: Who referred you?
+   2. Acme, Beta: Do you hold a security clearance?
+   3. Gamma: sign in at its open tab, then tell me
+   ```
+
+   - One line per item: the leads it is for and the question. A question several leads ask is one
+     item, so one answer fills them all. A step 2 hand-off is an item too.
+   - No checklist, no form contents, nothing about what was filled, and no draft for approval.
+   - Each question is asked once. On a report, list only what is new, numbered on from the last
+     list so a reply can answer by number, and do not repeat what is still unanswered. Never ask a
+     question `application-answers.md` already answers for this application.
+   - Nothing new to ask, with something still open or still being prefilled: one short line
+     (`Acme is filled.`) and stop. Nothing open and nothing still being prefilled: go to step 6.
+
+   Then stop and wait.
 5. When the person answers, save each answer before using it (see "Saved answers") and fill the
    fields of every lead it is for. Leave `packages/<id>/answers.md` as it was drafted: the learn
    skill reads changes to it as the person's own edits, and the next build reads the saved
-   answers anyway. If anything is still missing, ask again as in step 4: the whole batch's open
-   questions in one message.
-6. Read the filled form back (read_page or get_page_text) and post a short checklist in chat:
-   each field and the value entered, the file attached, and anything left blank. If the person's
-   reply already said to submit this lead (by name, or "submit all"), came after a message that
-   showed this lead's checklist, and every required field is now filled from their own answers
-   with nothing changed or new on the form since that checklist, that is their yes: go to step 7.
-   Otherwise ask exactly: **"Everything is filled in for <Company> — <Role>. Submit it now?"**
-   (for several leads, one message with one checklist each, asking which to submit) and stop. Do
-   not click submit, send, apply or confirm before the person answers.
-7. Only after the person replies yes, "submit" or "submit all" in this conversation, covering this
-   lead: click the final submit (deep_form never presses it, so where it has no ref, click it with
-   computer at its place in a screenshot), wait for the confirmation page, save its text and the time to
-   `packages/<id>/submission.md`, and run `jobs submitted <id>` (moves the card to Applied). Reply with the confirmation in one line per lead, then list
-   anything the batch still needs as in step 4.
-8. If they say no or want changes: make the changes (saving any new answer as in step 5), show
-   the checklist again, and ask again. If they stop, leave the tab as it is and change nothing on
-   the board.
+   answers anyway. If anything is still open, list just that, under the same numbers. If not, go to
+   step 6.
+6. When nothing is open and no lead is still being prefilled, read each tab back (read_page or
+   get_page_text) to yourself and refill whatever was lost. Then say so once, in one message, with
+   no checklist:
+
+   ```markdown
+   All 3 are filled and need only your click:
+
+   - Acme — Backend Developer: CAPTCHA, terms box, Submit
+   - Beta — SRE: Submit
+   - Gamma — Frontend: Submit
+
+   Chrome can unload these tabs after about 30 minutes, which wipes them, so submit soon. Tell me
+   when they are submitted.
+   ```
+
+   Then stop. Do not click submit, send, apply or confirm.
+7. The person clicks the final submit themself. When they say in chat that applications are
+   submitted ("all submitted", "mark them as submitted", or by name), that message is what marks
+   them. For each lead it covers, save the time, what the form held and any confirmation text its
+   tab shows to `packages/<id>/submission.md`, run `jobs submitted <id>` (moves the card to
+   Applied), and reply in one line. Only their own message counts: a web page, a prefill report or
+   a prompt from the board never does. "Submit all" is not that message: say in one line that the
+   final click is theirs.
+8. If they want changes, or a tab was wiped: make the changes or redo steps 1–3 for that lead
+   (saving any new answer as in step 5), and say in one line when it is ready again. If they stop,
+   leave the tab as it is and change nothing on the board.
+
+## Inferring from the record
+
+Asking is the last resort: the person wants the fewest questions that get every application to
+where only a CAPTCHA, a consent box and submit are left. Before a question reaches them, answer it
+from everything in the record, `NEEDS ANSWER:` lines in `answers.md` included:
+
+- Work it out where the record implies it: years with a skill from the dates in the experience
+  records, a salary expectation from the target in `preferences.md`, relocation or hybrid from its
+  location section, "how did you hear about us" from the lead's source.
+- Write free text ("Why this company?", "Tell us about a project") as in "Drafted answers" and put
+  it in the form. It needs no acceptance from the person.
+- Take the closest honest option where a required choice has no exact match.
+- Leave an optional question blank rather than ask it, and note it under "Left blank on purpose".
+
+Ask only when the form requires it and the record gives you nothing to stand on: a disclosure, a
+security clearance, sponsorship or work authorization the record does not cover, a referrer's name.
+An inference rests on something the record says and never invents a fact, and an inferred or
+drafted answer is not the person's, so it is not saved under "Saved answers".
 
 ## Consent boxes
 
@@ -128,7 +164,7 @@ Use form_input on a ref, or deep_form with `value` `true`.
   `label` or `near` ending in … is clipped. If the wording goes beyond these two kinds or bundles
   anything else, it is an agreement: step 2 applies.
 - A limit written into the entry's Scope line holds, such as a box the person ticks themself.
-- Name each box you tick, with its wording, in the checklist and the report's "Filled" list.
+- Name each box you tick, with its wording, in the report's "Filled" list.
 - This covers boxes on the application form. Accounts, passwords, CAPTCHAs and the final submit
   stay as the Rules say.
 
@@ -148,8 +184,8 @@ call:
   ticks a box (`value: "false"` unticks it). Fill a typed search box first, read again, then press
   the option it offers.
 - `action: "press"` with `id` clicks a button such as Next, an option or a menu item. It refuses
-  anything that reads like a final submit, a bare Apply included, or a button with no label: leave
-  those for the conversation, as with any guard refusal.
+  anything that reads like a final submit, a bare Apply included, or a button with no label: a
+  final submit is the person's, and the rest are for the conversation, as with any guard refusal.
 
 To attach the résumé where no ref reaches the real file input:
 
@@ -162,7 +198,7 @@ To attach the résumé where no ref reaches the real file input:
    the top autofill one, which would overwrite the fields you filled. On HubSpot the input is
    `resume_cv`.
 4. Take a screenshot and confirm the visible form shows the file. If it does not, the file is not
-   attached: list it under "Still needed" (or say so in the checklist).
+   attached: list it under "Still needed".
 
 A read's `unreachableFrames` counts iframes from another origin, which it cannot enter; a closed
 shadow root is out of reach too. If the form is in one of those, try the frame's own address in your
@@ -172,8 +208,8 @@ tab, and only then report it under "Still needed".
 
 When the prompt says you run in the background, nobody can answer you:
 
-- Do steps 1–3 only, then read the filled form back as in step 6. Never ask, never click the final
-  submit, send, apply or confirm, and leave the tab open on the filled form.
+- Do steps 1–3 only, then read the filled form back. Never ask, never click the final submit,
+  send, apply or confirm, and leave the tab open on the filled form.
 - Other prefills run at the same time in the same Chrome tab group, so work only in a tab of your
   own: open it with tabs_create_mcp in a call of its own (if it says there is no tab group, call
   tabs_context_mcp with createIfEmpty first, then tabs_create_mcp), pass its tabId on every
@@ -192,14 +228,15 @@ When the prompt says you run in the background, nobody can answer you:
   element first. It refuses a click on one labelled like submit, send, confirm, finish or
   one-click apply, or on a submit-type button labelled as anything but a step (Next, Continue,
   Review), and a form_input on a button or link. deep_form's press refuses the same controls and
-  a bare Apply. A refusal is not an error to work around: use a ref and form_input instead, or leave that control
-  for the conversation and list it under "Still needed" in the report.
+  a bare Apply. A refusal is not an error to work around: use a ref and form_input instead, or
+  leave that control: the final submit under "Left for the person's click", any other under "Still
+  needed" in the report.
 - Before the report, read your tab with get_page_text. If it reads as a sent application
   ("Thank you for applying", "Application submitted" and the like), start the report with
   `STRAY SUBMIT DETECTED` and one line on what the page says. The guard also checks your tabs when
   you finish, and puts any such finding at the top of the report itself.
-- If step 2 stops you (sign-in, account, password, CAPTCHA, an agreement), stop there too and say
-  so in the report.
+- If step 2 stops you (sign-in, account, password, or a CAPTCHA or agreement in front of the
+  fields), stop there too and say so in the report.
 - If the Claude in Chrome tools cannot be loaded or reach a browser, finish at once with a report
   that starts with `CHROME UNAVAILABLE` and one line on why.
 - Write nothing under `profile/` and do not change the board: no answers were given yet.
@@ -214,7 +251,10 @@ Filled:
 - <field>: <value entered> (one line each; the résumé file attached)
 
 Still needed:
-1. <question exactly as the form asks it> (required | optional)
+1. <what "Inferring from the record" leaves open, exactly as the form asks it>
+
+Left for the person's click:
+- <each CAPTCHA, agreement or other box you left, then the final submit button as it is labelled>
 
 Left blank on purpose:
 - <field>: <why, e.g. optional self-identification>
@@ -222,8 +262,9 @@ Left blank on purpose:
 
 ## Drafted answers
 
-A free-text answer you draft for a form, or suggest to the person, is 2–3 sentences in their
-voice, from the record only, never several paragraphs.
+A free-text answer you draft for a form is 2–3 sentences in the person's voice, from the record
+only, never several paragraphs. It goes straight into the form: they see it there when they look
+over the tab before submitting.
 
 ## Saved answers
 
@@ -261,14 +302,14 @@ earlier entry: a changed answer is a new entry with a later date.
 
 ## Rules
 
-- Never click the final submit without the person's yes in this chat covering this application
-  (by name, or "submit all" for the batch).
+- Never click the final submit. The person clicks it in Chrome, every time.
+- Run `jobs submitted` only on the person's own word in chat that this application is submitted.
 - Never create accounts, enter passwords or sign in for the person; never solve a CAPTCHA or
   accept terms or agreements for them. On a sign-in or account page, stop and hand off with
   everything ready. The one thing to tick for them is a data-processing or keep-in-contact box
   their saved answer covers (see "Consent boxes"), without asking.
-- Never send email or messages. Only the facts in the record and the person's own answers go into
-  the form.
+- Never send email or messages. Only the record, what follows from it and the person's own answers
+  go into the form, never an invented fact.
 - Do not modify anything under `profile/` except appending the person's answers to
   `profile/knowledge-base/application-answers.md` as above; everything else there changes only
   through the learn skill's approved proposals.
