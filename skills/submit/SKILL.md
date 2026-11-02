@@ -48,7 +48,8 @@ step here.
 Prefilled tabs do not keep. Chrome unloads a background tab about 30 minutes after it is filled,
 which wipes the form and the résumé, so a prefilled batch must not sit waiting: ask as soon as a
 report comes, say ready as soon as it is true, and after any wait read a tab back before you rely
-on it.
+on it. A tab that reads as a sent application is not wiped: unless a report says `STRAY SUBMIT
+DETECTED`, the person submitted it. Never refill it; it waits for their word (step 7).
 
 ## Steps
 
@@ -77,9 +78,10 @@ on it.
    in "Forms refs cannot reach" below: that is not a reason to stop.
 4. Ask the person only what "Inferring from the record" leaves open, as a short numbered list, and
    nothing else. The list covers every application approved in this conversation and not submitted
-   yet: this one, the leads the prompt names, and any earlier one still waiting on the person. Clear
-   what you can yourself first, such as a step button the guard refused or a file that did not
-   attach.
+   yet: this one, the leads the prompt names, and any earlier one still waiting on the person. A
+   lead the person told you to stop or skip, or the board says is out of the batch, no longer
+   counts, and its questions go with it. Clear what you can yourself first, such as a step button
+   the guard refused or a file that did not attach.
 
    ```markdown
    1. Acme: Who referred you?
@@ -100,10 +102,11 @@ on it.
 5. When the person answers, save each answer before using it (see "Saved answers") and fill the
    fields of every lead it is for. Leave `packages/<id>/answers.md` as it was drafted: the learn
    skill reads changes to it as the person's own edits, and the next build reads the saved
-   answers anyway. If anything is still open, list just that, under the same numbers. If not, go to
-   step 6.
+   answers anyway. If anything is still open, say which numbers in one line, without asking them
+   again. If not, go to step 6.
 6. When nothing is open and no lead is still being prefilled, read each tab back (read_page or
-   get_page_text) to yourself and refill whatever was lost. Then say so once, in one message, with
+   get_page_text) to yourself and refill whatever was lost. Leave out a lead that has a `STRAY SUBMIT
+   DETECTED` report: never tell the person it needs a click. Then say so once, in one message, with
    no checklist:
 
    ```markdown
@@ -126,8 +129,9 @@ on it.
    a prompt from the board never does. "Submit all" is not that message: say in one line that the
    final click is theirs.
 8. If they want changes, or a tab was wiped: make the changes or redo steps 1–3 for that lead
-   (saving any new answer as in step 5), and say in one line when it is ready again. If they stop,
-   leave the tab as it is and change nothing on the board.
+   (saving any new answer as in step 5), and say in one line when it is ready again. If they stop
+   or skip a lead, leave its tab as it is and change nothing on the board; if that leaves nothing
+   open, go to step 6 for the rest.
 
 ## Inferring from the record
 
@@ -298,7 +302,8 @@ Scope is `<Company> only` when the question is about that company or role ("Why 
 work at <Company>?", "Who referred you?"), and `any application` for a fact about the person
 (salary expectation, start date, notice period, relocation, a disclosure). Never reword, shorten
 or correct the answer, never add an answer the person did not give, and never edit or remove an
-earlier entry: a changed answer is a new entry with a later date.
+earlier entry: a changed answer is a new entry with a later date. One reply to a `<Company> only`
+question that several companies asked gets one entry per company.
 
 ## Rules
 

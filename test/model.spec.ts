@@ -410,12 +410,14 @@ test('a prefill report asks each open question once and says once that the batch
   assert.match(here, /do all of it here\. I approved these with it/)
 })
 
-test('a prefill that ended with no report hands the rest of its batch back to the conversation', () => {
+test('a lead dropping out of its batch claims nothing about the others', () => {
   const lead = { id: 'acme-api', company: 'Acme', role: 'Backend Developer' }
-  const left = submitBatchLeft(lead, [{ id: 'beta-api', company: 'Beta', role: 'SRE' }])
-  assert.match(left, /lead acme-api \(Acme — Backend Developer\) ended with no report/)
-  assert.match(left, /The rest are prefilled: Beta — SRE \(lead beta-api\)\./)
-  assert.match(left, /say once that they need only my click/)
+  const left = submitBatchLeft(lead)
+  assert.match(left, /lead acme-api \(Acme — Backend Developer\) is out of this batch/)
+  assert.match(left, /stop waiting for one and tell me so in one line/)
+  // The ready message goes out at most once, and only if this was all it waited for.
+  assert.match(left, /If you have sent it already, do not send it again/)
+  assert.doesNotMatch(left, /prefilled/)
 })
 
 test('a move to the column a lead is already in records nothing', () => {

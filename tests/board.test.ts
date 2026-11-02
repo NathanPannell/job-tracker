@@ -1266,7 +1266,66 @@ describe('kanban', () => {
     expect(about('beta-api')).toContain('one batch: acme — Backend Developer (lead acme-api')
   })
 
-  test('a prefill that stops last still brings the batch to its ready message', async ($, on) => {
+  test('a lead that drops out is named once a report of its batch has reached the conversation', async ($, on) => {
+    const ids = ['acme-api', 'beta-api', 'gamma-api', 'delta-api']
+    const w = world(on, {
+      leads: ids.map(id => lead(id, { column: 'ready' })),
+      applications: ids.map(leadId => ({
+        leadId,
+        dir: `packages/${leadId}`,
+        createdAt: '',
+        updatedAt: '',
+        files: {},
+        status: 'ready' as const,
+      })),
+    })
+    const prompts: string[] = []
+    on('prompt.submit', (_, e) => {
+      prompts.push(e.text)
+      return { text: e.text }
+    })
+    on('turn.start', (_, e) => ({ turnId: e.turnId }))
+    on('turn.complete', (_, e) => ({ text: e.answer }))
+    const end = (n: number, reason: 'answer' | 'aborted') =>
+      $.turn.complete({
+        answer: reason === 'answer' ? `Tab: ${ids[n]}` : '',
+        durationMs: 1,
+        isAborted: reason !== 'answer',
+        turnId: `p-${n}`,
+        agentId: `agent-${n}`,
+        reason,
+      })
+    await start($)
+    const ui = await $.ui.mount({ ...pane, surface: 'desktop' })
+    for (const id of ids) await ui.press({ key: `submit:${id}` })
+    for (const [n, spawn] of w.spawns.entries()) {
+      await $.turn.start({ text: spawn.prompt, turnId: `p-${n}`, agentId: `agent-${n}` })
+    }
+
+    // Acme stops before any report: the conversation has heard of nothing, so it is told nothing.
+    await end(0, 'aborted')
+    expect(prompts).toEqual([])
+    await end(1, 'answer')
+    expect(prompts).toHaveLength(1)
+    expect(prompts[0]).not.toContain('acme-api')
+    expect(prompts[0]).toContain('gamma-api, still being prefilled; its report comes later')
+
+    // Gamma stops with Delta still running: that report said Gamma's was coming, so it is withdrawn.
+    await end(2, 'aborted')
+    expect(prompts).toHaveLength(2)
+    expect(prompts[1]).toContain('lead gamma-api (gamma — Backend Developer) is out of this batch')
+    expect(prompts[1]).toContain('stop waiting for one')
+    expect(prompts[1]).not.toContain('beta-api')
+    expect(prompts[1]).not.toContain('delta-api')
+
+    // Delta's report no longer names Gamma at all.
+    await end(3, 'answer')
+    expect(prompts).toHaveLength(3)
+    expect(prompts[2]).toContain('beta-api')
+    expect(prompts[2]).not.toContain('gamma-api')
+  })
+
+  test('prefills ending together are never taken for prefilled once they stopped', async ($, on) => {
     const ids = ['acme-api', 'beta-api', 'gamma-api']
     const w = world(on, {
       leads: ids.map(id => lead(id, { column: 'ready' })),
@@ -1302,20 +1361,110 @@ describe('kanban', () => {
       await $.turn.start({ text: spawn.prompt, turnId: `p-${n}`, agentId: `agent-${n}` })
     }
 
-    // Acme stops with Beta and Gamma running: their reports are still to come, so nothing is sent.
-    await end(0, 'aborted')
-    expect(prompts).toEqual([])
-    await end(1, 'answer')
-    expect(prompts).toHaveLength(1)
+    // Beta's report and Gamma's stop at once, with Acme still running. Whichever goes first, Gamma
+    // is never called prefilled, and the drop names only Gamma.
+    await Promise.all([end(1, 'answer'), end(2, 'aborted')])
+    const report = prompts.find(one => one.includes('lead beta-api (')) ?? ''
+    expect(report).toContain('Carry on with the job-tracker:submit skill from step 4')
+    expect(report).not.toMatch(/gamma[^;]*prefilled; its report is its own/)
+    for (const left of prompts.filter(one => one.includes('is out of this batch'))) {
+      expect(left).toContain('lead gamma-api (')
+      expect(left).not.toContain('prefilled:')
+    }
 
-    // Gamma, the last run, stops too: no report would otherwise bring Beta's ready message.
-    await end(2, 'aborted')
+    // Acme stops last: one drop, for Acme, and it asks for the ready message only if none went out.
+    await end(0, 'aborted')
+    const left = prompts.at(-1) ?? ''
+    expect(left).toContain('lead acme-api (acme — Backend Developer) is out of this batch')
+    expect(left).toContain('If you have sent it already, do not send it again')
+    expect(left).not.toContain('beta-api')
+  })
+
+  test('a report that cannot reach the conversation drops its lead out of the batch', async ($, on) => {
+    const ids = ['acme-api', 'beta-api']
+    const w = world(on, {
+      leads: ids.map(id => lead(id, { column: 'ready' })),
+      applications: ids.map(leadId => ({
+        leadId,
+        dir: `packages/${leadId}`,
+        createdAt: '',
+        updatedAt: '',
+        files: {},
+        status: 'ready' as const,
+      })),
+    })
+    const prompts: string[] = []
+    on('prompt.submit', (_, e) => {
+      // Beta's report is refused; what says it dropped out still gets through.
+      if (e.text.includes('lead beta-api (') && e.text.includes('PREFILL REPORT')) {
+        return { drop: 'a hook refused it' }
+      }
+      prompts.push(e.text)
+      return { text: e.text }
+    })
+    on('turn.start', (_, e) => ({ turnId: e.turnId }))
+    on('turn.complete', (_, e) => ({ text: e.answer }))
+    const end = (n: number) =>
+      $.turn.complete({
+        answer: `Tab: ${ids[n]}`,
+        durationMs: 1,
+        isAborted: false,
+        turnId: `p-${n}`,
+        agentId: `agent-${n}`,
+        reason: 'answer',
+      })
+    await start($)
+    const ui = await $.ui.mount({ ...pane, surface: 'desktop' })
+    for (const id of ids) await ui.press({ key: `submit:${id}` })
+    for (const [n, spawn] of w.spawns.entries()) {
+      await $.turn.start({ text: spawn.prompt, turnId: `p-${n}`, agentId: `agent-${n}` })
+    }
+    await end(0)
+    expect(prompts).toHaveLength(1)
+    await end(1)
     expect(prompts).toHaveLength(2)
-    expect(prompts[1]).toContain('lead gamma-api (gamma — Backend Developer) ended with no report')
-    expect(prompts[1]).toContain(
-      'The rest are prefilled: beta — Backend Developer (lead beta-api).',
+    expect(prompts[1]).toContain('lead beta-api (beta — Backend Developer) is out of this batch')
+  })
+
+  test('two prefills stopping together with no report anywhere tell the conversation nothing', async ($, on) => {
+    const ids = ['acme-api', 'beta-api']
+    const w = world(on, {
+      leads: ids.map(id => lead(id, { column: 'ready' })),
+      applications: ids.map(leadId => ({
+        leadId,
+        dir: `packages/${leadId}`,
+        createdAt: '',
+        updatedAt: '',
+        files: {},
+        status: 'ready' as const,
+      })),
+    })
+    const prompts: string[] = []
+    on('prompt.submit', (_, e) => {
+      prompts.push(e.text)
+      return { text: e.text }
+    })
+    on('turn.start', (_, e) => ({ turnId: e.turnId }))
+    on('turn.complete', (_, e) => ({ text: e.answer }))
+    await start($)
+    const ui = await $.ui.mount({ ...pane, surface: 'desktop' })
+    for (const id of ids) await ui.press({ key: `submit:${id}` })
+    for (const [n, spawn] of w.spawns.entries()) {
+      await $.turn.start({ text: spawn.prompt, turnId: `p-${n}`, agentId: `agent-${n}` })
+    }
+    await Promise.all(
+      ids.map((_, n) =>
+        $.turn.complete({
+          answer: '',
+          durationMs: 1,
+          isAborted: true,
+          turnId: `p-${n}`,
+          agentId: `agent-${n}`,
+          reason: 'aborted',
+        }),
+      ),
     )
-    expect(prompts[1]).not.toContain('acme-api')
+    expect(prompts).toEqual([])
   })
 
   test('a prefill alone in its batch stops with nothing sent to the conversation', async ($, on) => {

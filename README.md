@@ -88,8 +88,8 @@ flowchart LR
   the board can all land at once. `bin/lib/store.ts` takes a lock file, reads, applies a pure
   function and renames a temporary file over the old one. It recovers stale locks and retries the
   renames Windows refuses while a file is briefly held open.
-- **A code guard backs the human gate where an agent works unattended.** The submit skill stops and
-  asks in chat. Background prefills also pass a guard (`hooks/lib/chrome.ts`) that limits them to
+- **A code guard backs the human gate where an agent works unattended.** The submit skill leaves
+  the final click to the person. Background prefills also pass a guard (`hooks/lib/chrome.ts`) that limits them to
   tabs they opened, requires an element ref for every click, reads each element first, and refuses
   a click on anything labelled or typed like a final submit. It exists because one prefill's clicks
   once landed in another's tab and sent an application nobody approved. The mod now also looks for

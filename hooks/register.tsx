@@ -447,8 +447,10 @@ async function finishDraft($: EngineInterface, agentId: string, answer: string, 
     return
   }
   const report = stray ? `${stray}\n\n${answer}` : answer
+  const isStray = stray !== undefined || isStraySubmit(answer)
   // A prefill's lead is handed on in the same write that ends its run, so it stays claimed
-  // throughout and a batch member ending meanwhile still finds it (`batchOf`).
+  // throughout and a batch member ending meanwhile still finds it (`batchOf`). One that stopped
+  // has nothing to hand on, and leaves in that write, so nothing takes it for prefilled.
   const handedOn: DraftRun = {
     kind: 'submit',
     leadId: run.leadId,
@@ -459,7 +461,7 @@ async function finishDraft($: EngineInterface, agentId: string, answer: string, 
   }
   await update($, drafts, list => [
     ...list.filter(one => one.agentId !== agentId),
-    ...(run.kind === 'submit' ? [handedOn] : []),
+    ...(run.kind === 'submit' && (reason === 'answer' || isStray) ? [handedOn] : []),
   ])
   await refresh($)
   if (run.kind === 'revise') {
@@ -486,14 +488,14 @@ async function finishDraft($: EngineInterface, agentId: string, answer: string, 
     const release = () => update($, drafts, list => list.filter(one => one.task !== handedOn.task))
     const lead = (await read($, board)).leads.find(one => one.id === run.leadId)
     const named = lead ?? { id: run.leadId, company: run.company, role: 'the approved role' }
-    // Only a report brings the batch's ready message, so a prefill that ends without one, last of
-    // its batch, tells the conversation itself.
+    // A conversation already holding a report of this batch may be told this lead's is coming, and
+    // waits on it before saying the batch is ready, so a lead that drops out says so.
     const settle = async () => {
       const others = await batchOf($, run.leadId, await $.clock.now())
-      if (others.length === 0 || others.some(one => !one.isPrefilled)) return
-      await sendPrompt($, submitBatchLeft(named, others), 'Finishing the prefilled applications')
+      if (!others.some(one => one.isPrefilled)) return
+      await sendPrompt($, submitBatchLeft(named), `Dropping the ${run.company} application`)
     }
-    if (stray !== undefined || isStraySubmit(answer)) {
+    if (isStray) {
       // Said first, whatever else happened. The lead stays claimed, even when the conversation
       // cannot be told, so nothing starts on it again before the person has looked.
       const others = await batchOf($, run.leadId, await $.clock.now())
@@ -505,7 +507,6 @@ async function finishDraft($: EngineInterface, agentId: string, answer: string, 
           : `The ${run.company} application looks submitted, but nobody approved a submit; check its tab in Chrome.`,
       )
     } else if (reason !== 'answer') {
-      await release()
       $.ui.toast(
         `The ${run.company} application prefill stopped (${reason}); Approve and submit starts it again.`,
       )
@@ -522,7 +523,10 @@ async function finishDraft($: EngineInterface, agentId: string, answer: string, 
       const others = await batchOf($, run.leadId, await $.clock.now())
       const label = `Finishing the ${run.company} application`
       // It never reached the conversation, so nothing is asking: the lead is free again.
-      if (!(await sendPrompt($, submitFollowUp(lead, answer, others), label))) await release()
+      if (!(await sendPrompt($, submitFollowUp(lead, answer, others), label))) {
+        await release()
+        await settle()
+      }
     }
     return
   }

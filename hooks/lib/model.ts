@@ -1391,16 +1391,17 @@ export function submitFollowUp(
 }
 
 /**
- * What the conversation is told when a prefill ended with no report and the rest of its batch is
- * prefilled: no report is left to bring the batch's ready message, so this does.
+ * What the conversation is told when a lead drops out of a batch with no report to bring it: an
+ * earlier prompt may have said one is coming. It says nothing of the other leads: the board cannot
+ * tell which are filled, and the conversation knows what it has already said about them.
  */
-export function submitBatchLeft(lead: Named, others: readonly Named[]): string {
-  const listed = others.map(one => `${one.company} — ${one.role} (lead ${one.id})`).join('; ')
+export function submitBatchLeft(lead: Named): string {
   return [
-    `The prefill of the application for lead ${lead.id} (${lead.company} — ${lead.role}) ended`,
-    `with no report, so that lead is out of this batch. The rest are prefilled: ${listed}. Carry`,
-    'on with the job-tracker:submit skill from step 4 for those: if nothing is open, say once that',
-    'they need only my click, as its step 6 says.',
+    `The application for lead ${lead.id} (${lead.company} — ${lead.role}) is out of this batch:`,
+    'no report is coming from it, so stop waiting for one and tell me so in one line. Then carry',
+    'on with the job-tracker:submit skill from step 4 for whatever else I approved. If this was',
+    'all that the message saying they need only my click was waiting for, send it now as its',
+    'step 6 says. If you have sent it already, do not send it again.',
   ].join(' ')
 }
 
