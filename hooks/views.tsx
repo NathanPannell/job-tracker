@@ -12,11 +12,14 @@ import type {
 import { readyNote } from './lib/answers.ts'
 import {
   ago,
+  clarifyKey,
   COLUMN_TITLES,
   columnLeads,
   columnTitle,
   defaultStage,
+  isApprovable,
   leadAges,
+  openClarification,
   previousColumn,
   PASS_REASONS,
   PIPELINE,
@@ -53,6 +56,12 @@ export type Actions = {
   openPdf: (path: string) => void
   /** Decides one change of a proposal, or `all` its pending ones. */
   decide: (proposalId: string, changeId: string, decision: 'approve' | 'reject') => void
+  /** Opens the clarification field on one change, or closes it. */
+  askClarify: (proposalId: string, changeId: string) => void
+  /** Keeps the person's words on a change and starts its revision. */
+  clarify: (proposalId: string, changeId: string, text: string) => void
+  /** Starts the revision of a change whose clarification is still waiting. */
+  revise: (proposalId: string, changeId: string) => void
 }
 
 export type ViewContext = {
@@ -64,6 +73,10 @@ export type ViewContext = {
   busy: string | null
   /** The lead whose pass reasons are open; null when none. */
   passing: string | null
+  /** The change whose clarification field is open (`clarifyKey`); null when none. */
+  clarifying: string | null
+  /** The changes a background run is revising right now (`clarifyKey`). */
+  revising: string[]
   /** What the pane's buttons sent to the conversation that has not started yet. */
   queued: string[]
   /** Undefined on a surface that only reads. */
@@ -652,6 +665,85 @@ function resumeBody(ctx: ViewContext, loaded: JobPackage): RenderElement {
   )
 }
 
+/** What a clarification may take on the page; `proposals.json` keeps it whole. */
+const CLARIFICATION_CHARS = 300
+
+/** What the person wrote on a change, and where its revision stands. */
+function clarificationNote(ctx: ViewContext, proposal: Proposal, change: ProposalChange) {
+  const { Text } = ctx.el
+  const last = change.clarifications?.at(-1)
+  if (!last) return null
+  const key = `clarified:${proposal.id}:${change.id}`
+  const words = clip(last.text, CLARIFICATION_CHARS)
+  if (!openClarification(change)) {
+    return <Text key={key} dimColor>{`Revised from your clarification: ${words}`}</Text>
+  }
+  const isRevising = ctx.revising.includes(clarifyKey(proposal.id, change.id))
+  return (
+    <Text key={key} color="claude">
+      {`Your clarification: ${words}\n${
+        isRevising
+          ? 'Claude is revising this; the new version comes back here for review.'
+          : 'Waiting to be revised; the text above is unchanged until then.'
+      }`}
+    </Text>
+  )
+}
+
+/** What a pending change offers: Approve, Reject and Clarify, or Revise now while it waits. */
+function changeButtons(ctx: ViewContext, proposal: Proposal, change: ProposalChange) {
+  const { Box, Button } = ctx.el
+  const act = ctx.act
+  if (!act) return null
+  const ids = clarifyKey(proposal.id, change.id)
+  const isOpen = ctx.clarifying === ids
+  const isWaiting = !isApprovable(change)
+  return (
+    <Box flexDirection="column">
+      <Box flexDirection="row" gap={1}>
+        {!isWaiting && (
+          <Button
+            key={`approve:${ids}`}
+            variant="primary"
+            label="Approve"
+            onPress={() => act.decide(proposal.id, change.id, 'approve')}
+          />
+        )}
+        <Button
+          key={`reject:${ids}`}
+          label="Reject"
+          onPress={() => act.decide(proposal.id, change.id, 'reject')}
+        />
+        {!isWaiting && (
+          <Button
+            key={`clarify:${ids}`}
+            variant={isOpen ? 'primary' : undefined}
+            label="Clarify"
+            onPress={() => act.askClarify(proposal.id, change.id)}
+          />
+        )}
+        {isWaiting && !ctx.revising.includes(ids) && (
+          <Button
+            key={`revise:${ids}`}
+            label="Revise now"
+            onPress={() => act.revise(proposal.id, change.id)}
+          />
+        )}
+      </Box>
+      {isOpen && !isWaiting && 'Input' in ctx.el && (
+        <ctx.el.Input
+          key={`clarification:${ids}`}
+          label="Clarification"
+          placeholder="What should change, in your own words"
+          submitLabel="send"
+          autoFocus
+          onSubmit={text => act.clarify(proposal.id, change.id, text)}
+        />
+      )}
+    </Box>
+  )
+}
+
 /** Pending proposals drawn in full, newest first; decided ones as one line per change. */
 const FULL_PROPOSALS = 2
 const DECIDED_PROPOSALS = 4
@@ -719,31 +811,20 @@ export function proposalsView(ctx: ViewContext): RenderElement {
                     key={`text:${proposal.id}:${change.id}`}
                     text={`**${change.title}** → \`${change.file}\`\n\n_${change.rationale}_\n\n${change.text}`}
                   />
-                  {ctx.act && (
-                    <Box flexDirection="row" gap={1}>
-                      <Button
-                        key={`approve:${proposal.id}:${change.id}`}
-                        variant="primary"
-                        label="Approve"
-                        onPress={() => ctx.act?.decide(proposal.id, change.id, 'approve')}
-                      />
-                      <Button
-                        key={`reject:${proposal.id}:${change.id}`}
-                        label="Reject"
-                        onPress={() => ctx.act?.decide(proposal.id, change.id, 'reject')}
-                      />
-                    </Box>
-                  )}
+                  {clarificationNote(ctx, proposal, change)}
+                  {changeButtons(ctx, proposal, change)}
                 </Box>
               ),
             )}
             {ctx.act && open > 1 && (
               <Box flexDirection="row" gap={1}>
-                <Button
-                  key={`approve:${proposal.id}:all`}
-                  label="Approve all remaining"
-                  onPress={() => ctx.act?.decide(proposal.id, 'all', 'approve')}
-                />
+                {proposal.changes.some(isApprovable) && (
+                  <Button
+                    key={`approve:${proposal.id}:all`}
+                    label="Approve all remaining"
+                    onPress={() => ctx.act?.decide(proposal.id, 'all', 'approve')}
+                  />
+                )}
                 <Button
                   key={`reject:${proposal.id}:all`}
                   label="Reject all remaining"

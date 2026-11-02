@@ -20,6 +20,7 @@ import {
   archiveStale,
   byScore,
   checkProposal,
+  clarifyChange,
   checkSummary,
   COLUMN_TITLES,
   correctScore,
@@ -37,6 +38,7 @@ import {
   moveLead,
   newProposal,
   normalizeProposal,
+  reviseChange,
   patchLead,
 } from '../../hooks/lib/model.ts'
 import type {
@@ -51,8 +53,10 @@ import type {
   LeadPatch,
   MoveResult,
   PackageFiles,
+  ClarifyInput,
   Proposal,
   ProposalInput,
+  ReviseInput,
 } from '../../hooks/lib/model.ts'
 import { fetchBoards, isReachable } from './ats.ts'
 import type { Ats, Board, Fetch, Posting } from './ats.ts'
@@ -485,12 +489,12 @@ export function submitted(dir: string, id: string) {
   })
 }
 
-export type { ProposalInput }
+export type { ClarifyInput, ProposalInput, ReviseInput }
 
 /**
  * Saves the learn skill's proposal: 3 to 10 changes (fewer with a reason), each pending on its
- * own. Saving under the id of a proposal with decided changes is refused, so a rerun of the
- * review never wipes the person's decisions.
+ * own. Saving under the id of a proposal with decided or clarified changes is refused, so a rerun
+ * of the review never wipes what the person did.
  */
 export function propose(dir: string, input: ProposalInput) {
   const problem = checkProposal(input)
@@ -499,8 +503,14 @@ export function propose(dir: string, input: ProposalInput) {
   const id = input.id ?? `proposal-${at.slice(0, 10)}`
   return transact<Proposal>(dir, data => {
     const existing = data.proposals.proposals.find(one => one.id === id)
-    if (existing && normalizeProposal(existing).changes.some(one => one.status !== 'pending')) {
+    const changes = existing ? normalizeProposal(existing).changes : []
+    if (changes.some(one => one.status !== 'pending')) {
       throw new Error(`Proposal ${id} already has decided changes; save this one under another id`)
+    }
+    if (changes.some(one => one.clarifications?.length)) {
+      throw new Error(
+        `Proposal ${id} already has clarified changes; save this one under another id`,
+      )
     }
     const entry = newProposal(input, id, at)
     return {
@@ -547,6 +557,27 @@ export function decide(dir: string, id: string, first: string, second?: string) 
         changes: decided.proposal.changes.map(({ id: change, status }) => ({ id: change, status })),
       },
     }
+  })
+}
+
+/**
+ * Keeps the person's clarification on a pending change, which stays open: the learn skill revises
+ * it (`revise`) and it comes back for review. Nothing reaches a profile file.
+ */
+export function clarify(dir: string, input: ClarifyInput) {
+  const at = now()
+  return transact(dir, data => {
+    const clarified = clarifyChange(data.proposals, input, at)
+    return { write: { proposals: clarified.file }, result: clarified.change }
+  })
+}
+
+/** Saves the learn skill's revision of a clarified change, pending again for the person. */
+export function revise(dir: string, input: ReviseInput) {
+  const at = now()
+  return transact(dir, data => {
+    const revised = reviseChange(data.proposals, input, at)
+    return { write: { proposals: revised.file }, result: revised.change }
   })
 }
 

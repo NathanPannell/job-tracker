@@ -1,6 +1,6 @@
 ---
 name: learn
-description: Weekly review of the job search — pass reasons, score corrections, the person's edits to drafted packages and outcomes by source — written as a reviewable proposal of changes to learnings.md and preferences.md plus a short funnel summary, shown on the job board for approval. Runs on a weekly schedule; also on request.
+description: Weekly review of the job search — pass reasons, score corrections, the person's edits to drafted packages and outcomes by source — written as a reviewable proposal of changes to learnings.md and preferences.md plus a short funnel summary, shown on the job board for approval. Also revises a proposed change the person clarified on the board. Runs on a weekly schedule; also on request.
 ---
 
 # Learn
@@ -29,12 +29,43 @@ packages are written. You propose; the person approves in /jobs. Never edit the 
   A proposal saved before per-change decisions has a single `status` that applies to all of
   its changes. Do not re-propose a change that was rejected unless new evidence is strong, and
   do not re-propose one that is approved (it is already in the profile file) or still pending.
+  A change may also hold `clarifications`, the person's own words on it, oldest first: `text`
+  (what they wrote), `was` (the change's text when they wrote it) and `revisedAt` (when it was
+  answered; absent while it waits). Read them on every change, whatever its status: never
+  propose again what a clarification corrected, and let a clarification outweigh event counts,
+  since it is what the person said, not what you inferred.
 
 Scores: `fitScore` in `leads.json` and `feedback.json` is the scout's fit judgement, and the
 board shows it as is: scores never age. A score correction means the fit was misjudged. Never
 propose rules that score a lead down for its age or its posting's age: `fitScore` is about fit
 only, and posting age is handled apart from it (scout skips postings over 14 days old, and the
 board archives a New lead once its posting is that old).
+
+## Revise a clarified change
+
+On Clarify in /jobs the person types what should change on a pending change. It stays pending,
+and approving it is held back until it is revised, so nothing reaches a profile file meanwhile.
+The board starts a background subagent to revise it; a weekly run revises any still waiting
+first, before step 1. A run told to revise one change revises only that one; a weekly run takes
+each pending change with a clarification that has no `revisedAt`:
+
+1. Read the change and its clarifications in `proposals.json`. Read `profile/learnings.md` and
+   `profile/preferences.md` so the revision does not repeat or contradict what is already there,
+   except where the person's words say to.
+2. Rewrite the change so it says what the person meant, keeping it one small learning that stands
+   alone, in the same short, imperative, testable style. Their words outrank your evidence: never
+   argue with them or restate the old rule. Ask nothing: the person reviews the result. Keep their
+   meaning, in the change's own voice, rather than pasting their sentence in. Approving only
+   appends, so where their words override a rule already in a profile file, say so in the text.
+3. Save it with `jobs revise '<json>'`, or `jobs revise @<file>`:
+   `{ "proposal": "<id>", "change": "c2", "answers": "<that clarification's at>", "text": "<new Markdown>" }`, adding `title`, `rationale`
+   or `file` when those change too (a clarification that states a preference may move a change
+   to `preferences.md`). The limits of step 3 below apply. The change stays pending and comes
+   back on the board for the person to approve, reject or clarify again. `revise` refuses a change
+   decided or revised meanwhile, and one clarified again since you read it: that is not an error,
+   so leave that change and go on.
+
+Do nothing else when the task was only this revision: no funnel, no new proposal.
 
 ## Steps
 
@@ -65,10 +96,10 @@ board archives a New lead once its posting is that old).
    `{ "summary": "<2-3 sentences>", "funnel": "<Markdown table>", "fewerReason": "<only with fewer than 3 changes>", "changes": [ { "file", "title", "rationale", "text" } ] }`
    to `$JOB_TRACKER_DATA/scout/proposal-<YYYY-MM-DD>.json` and run
    `jobs propose @<that file>`. Leave `fewerReason` out with 3 or more changes. Saving again
-   the same day replaces that day's proposal while none of its changes is decided; once one
-   is, `propose` refuses: add `"id": "proposal-<YYYY-MM-DD>-2"` to the JSON. It appears in /jobs under "Learning proposals" with Approve and
-   Reject on every change (and Approve all remaining / Reject all remaining); approving a change
-   appends only its text to its profile file.
+   the same day replaces that day's proposal while none of its changes is decided or clarified;
+   once one is, `propose` refuses: add `"id": "proposal-<YYYY-MM-DD>-2"` to the JSON. It appears in /jobs under "Learning proposals" with Approve,
+   Reject and Clarify on every change (and Approve all remaining / Reject all remaining); approving
+   a change appends only its text to its profile file.
 5. Reply with the summary and the number of proposed changes.
 
 ## Rules

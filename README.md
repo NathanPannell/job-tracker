@@ -40,7 +40,8 @@ Built on Claude Code. Not affiliated with or endorsed by Anthropic.
   moves in a table. No card moves until the person confirms.
 - **Learn** runs weekly. It reads passes, score corrections, edits to drafted packages and outcomes
   by source, and proposes up to ten small changes, each backed by at least two events. Each change
-  is approved or rejected on its own.
+  is approved or rejected on its own, or clarified: you type what should change, and it comes back
+  revised for review.
 
 An application with no reply a month after it was submitted is marked ghosted on its own, and a
 late reply still moves the card on.
