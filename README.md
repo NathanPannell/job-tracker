@@ -37,8 +37,9 @@ Built on Claude Code. Not affiliated with or endorsed by Anthropic.
   is saved word for word, so a question answered once is not asked again where that answer applies.
   Sign-ins, passwords, CAPTCHAs and agreements go back to the person.
 - **Sync** runs on a schedule. It reads Gmail and Calendar for replies, and moves the card itself
-  for a clear rejection, interview request or offer. Anything unclear stays where it is, and the
-  board names both for a week. It never sends, drafts, labels or deletes email.
+  for a clear rejection, interview request or offer. Rejections are filed quietly; interviews,
+  offers and anything unclear (whose card stays where it is) are named on the board for a week. It
+  never sends, drafts, labels or deletes email.
 - **Learn** runs weekly. It reads passes, score corrections, edits to drafted packages and outcomes
   by source, and proposes up to ten small changes, each backed by at least two events. Each change
   is approved or rejected on its own, or clarified: you type what should change, and it comes back

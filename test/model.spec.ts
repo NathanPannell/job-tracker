@@ -154,7 +154,7 @@ test('a lead saved while snoozing existed loses its snooze date, and every New l
   assert.equal(migrated.leads[0]?.history.length, legacy.leads[0]?.history.length)
   assert.equal(migrated.leads[1], legacy.leads[1])
   assert.equal(migrateLeads(migrated, AT), migrated)
-  assert.equal(counts(legacy).newLeads, 2)
+  assert.equal(counts(legacy, Date.parse(AT)).newLeads, 2)
 })
 
 test('a lead saved with a follow-up date loses it and keeps its history', () => {
@@ -484,12 +484,36 @@ test('counts and the band line', () => {
   const [a, b, c] = file.leads.map(lead => lead.id) as [string, string, string]
   let next = moveLead(file, b, 'ready', AT, 'package').leads
   next = moveLead(next, c, 'applied', AT, 'submit').leads
-  const c1 = counts(next)
-  assert.deepEqual(c1, { newLeads: 1, readyToApply: 1 })
+  const c1 = counts(next, Date.parse(AT))
+  assert.deepEqual(c1, { newLeads: 1, readyToApply: 1, news: [] })
   assert.equal(bandText(c1), '1 new lead · 1 ready to apply')
-  assert.equal(bandText({ newLeads: 2, readyToApply: 0 }), '2 new leads · 0 ready to apply')
-  assert.equal(bandText({ newLeads: 0, readyToApply: 0 }), undefined)
+  const none = { newLeads: 0, readyToApply: 0, news: [] }
+  assert.equal(bandText({ ...none, newLeads: 2 }), '2 new leads · 0 ready to apply')
+  assert.equal(bandText(none), undefined)
   assert.equal(stageLeads(next, 'new')[0]?.id, a)
+})
+
+test('the band leads with interviews and offers email brought, never its rejections', () => {
+  const file = seeded([{}, {}, {}])
+  const [a, b, c] = file.leads.map(lead => lead.id) as [string, string, string]
+  let next = file
+  for (const id of [a, b, c]) next = moveLead(next, id, 'applied', AT, 'submit').leads
+  const later = new Date(Date.parse(AT) + 60_000).toISOString()
+  const latest = new Date(Date.parse(AT) + 120_000).toISOString()
+  next = moveLead(next, a, 'interviewing', later, 'sync').leads
+  next = moveLead(next, b, 'rejected', later, 'sync').leads
+  next = moveLead(next, c, 'offer', latest, 'sync').leads
+  const c1 = counts(next, Date.parse(latest))
+  assert.deepEqual(c1.news, [
+    { company: 'Co2', column: 'offer' },
+    { company: 'Co0', column: 'interviewing' },
+  ])
+  assert.equal(bandText(c1), 'Offer: Co2 · Interview: Co0')
+  const busy = {
+    ...c1,
+    news: [...c1.news, { company: 'Co9', column: 'interviewing' as const }, ...c1.news],
+  }
+  assert.equal(bandText(busy), 'Offer: Co2 · Interview: Co0 · 3 more from email')
 })
 
 test('stageLeads sorts best first', () => {

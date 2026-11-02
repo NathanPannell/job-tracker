@@ -505,9 +505,19 @@ export function restoreNote(lead: Pick<Lead, 'column' | 'history'>): string | un
   return into && isGhostMove(into) ? into.note : undefined
 }
 
+/** The columns an email move is news in: a rejection is filed without a word. */
+const NEWS_COLUMNS: readonly Column[] = ['interviewing', 'offer']
+
+/** The sync skill's move into Interviewing or Offer, while it is the card's last one. */
+function syncNews(lead: Pick<Lead, 'history'>): HistoryEntry | undefined {
+  const move = syncMove(lead)
+  return move?.to && NEWS_COLUMNS.includes(move.to) ? move : undefined
+}
+
 /**
- * What email did in the last `SYNC_NOTICE_DAYS`, most recent first: the board names it, since a
- * scheduled sync runs with nobody watching.
+ * The interviews and offers email brought and what it left unclear, in the last
+ * `SYNC_NOTICE_DAYS`, most recent first: the board names them, since a scheduled sync runs with
+ * nobody watching.
  */
 export function syncNotices(file: LeadsFile, now: number) {
   const recent = (entryOf: (lead: Lead) => HistoryEntry | undefined) =>
@@ -518,7 +528,7 @@ export function syncNotices(file: LeadsFile, now: number) {
       })
       .sort((a, b) => b.at - a.at)
       .map(one => one.lead)
-  return { moved: recent(syncMove), unclear: recent(openUnclear) }
+  return { news: recent(syncNews), unclear: recent(openUnclear) }
 }
 
 /**
@@ -1282,25 +1292,42 @@ export function appendEvent(file: FeedbackFile, event: FeedbackEvent): FeedbackF
   return { ...file, events: [...file.events, event] }
 }
 
-export type Counts = { newLeads: number; readyToApply: number }
+export type Counts = {
+  newLeads: number
+  readyToApply: number
+  /** Interviews and offers email brought this week, most recent first. */
+  news: readonly { company: string; column: Column }[]
+}
 
-export function counts(file: LeadsFile): Counts {
+export function counts(file: LeadsFile, now: number): Counts {
   let newLeads = 0
   let readyToApply = 0
   for (const lead of file.leads) {
     if (lead.column === 'new') newLeads += 1
     if (lead.column === 'ready') readyToApply += 1
   }
-  return { newLeads, readyToApply }
+  const news = syncNotices(file, now).news.map(({ company, column }) => ({ company, column }))
+  return { newLeads, readyToApply, news }
 }
 
-/** The band's line, or undefined when there is nothing to say. */
+/** How many interviews and offers the band names before it counts the rest. */
+const BAND_NEWS = 2
+
+/** The band's line, or undefined when there is nothing to say. Interviews and offers lead it. */
 export function bandText(c: Counts): string | undefined {
-  if (c.newLeads + c.readyToApply === 0) return undefined
   const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`
-  return [plural(c.newLeads, 'new lead', 'new leads'), `${c.readyToApply} ready to apply`].join(
-    ' · ',
-  )
+  // The band is one row: past BAND_NEWS names, the rest is a count.
+  const named = c.news
+    .slice(0, BAND_NEWS)
+    .map(one => `${one.column === 'offer' ? 'Offer' : 'Interview'}: ${one.company}`)
+  const more = c.news.length - named.length
+  const news = more > 0 ? [...named, `${more} more from email`] : named
+  const queue =
+    c.newLeads + c.readyToApply === 0
+      ? []
+      : [plural(c.newLeads, 'new lead', 'new leads'), `${c.readyToApply} ready to apply`]
+  const parts = [...news, ...queue]
+  return parts.length > 0 ? parts.join(' · ') : undefined
 }
 
 /** Best first by fit score. */

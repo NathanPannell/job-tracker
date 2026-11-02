@@ -311,11 +311,14 @@ const ghostedNotice = (ctx: ViewContext, file: { version: 1; leads: Lead[] }) =>
     recentlyGhosted(file, ctx.now),
   )
 
-/** What email moved this week and what it left unclear: a scheduled sync has nobody watching. */
+/**
+ * The interviews and offers email brought this week and what it left unclear: a scheduled sync has
+ * nobody watching. A rejection it filed goes unnamed.
+ */
 function syncNotice(ctx: ViewContext, file: { version: 1; leads: Lead[] }) {
-  const { moved, unclear } = syncNotices(file, ctx.now)
+  const { news, unclear } = syncNotices(file, ctx.now)
   return [
-    noticeRow(ctx, 'sync-moved', 'Moved by email this week:', moved),
+    noticeRow(ctx, 'sync-news', 'Interview or offer by email this week:', news),
     noticeRow(ctx, 'sync-unclear', 'Unclear from email, still where it was:', unclear),
   ]
 }

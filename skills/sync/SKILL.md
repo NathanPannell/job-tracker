@@ -38,8 +38,15 @@ nothing: it moves what is clear and leaves the rest for the person to read on th
    you found>'`, the column being `interviewing`, `offer` or `rejected`, and record the outcome with
    `jobs feedback '{"leadId":"<id>","kind":"outcome","reason":"<rejection|screen|interview|offer>: <one line>"}'`.
 6. For each unclear one, run `jobs unclear <id> '<date>, <sender domain>: <what is unclear>'`. The
-   card stays where it is, and the board names it for a week beside what email moved.
-7. Reply with what moved and what is unclear in two lines. On a request, name the leads.
+   card stays where it is, and the board names it for a week beside the interviews and offers
+   email brought.
+7. If this run moved a card to `interviewing` or `offer`, send one notification with
+   PushNotification (load it with ToolSearch `select:PushNotification`; status `proactive`), naming
+   each company and whether it is an interview or an offer. If the tool cannot be loaded, carry
+   on: the board and the line above the prompt still name them. Never notify for a rejection, an
+   unclear reply or a run that found nothing.
+8. Reply in two lines: first the interviews and offers moved, ending with how many rejections were
+   filed; then what is unclear. Name a rejection only when the person asks about it.
 
 If Gmail or Calendar cannot be read, carry on with the other and say so in the reply. If neither
 can be read, change nothing.
