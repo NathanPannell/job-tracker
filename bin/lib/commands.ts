@@ -38,6 +38,7 @@ import {
   moveLead,
   newProposal,
   normalizeProposal,
+  noteUnclear,
   reviseChange,
   patchLead,
 } from '../../hooks/lib/model.ts'
@@ -211,6 +212,11 @@ export function move(dir: string, id: string, column: string, options: MoveOptio
   )
 }
 
+/** What the sync skill could not settle from email; the card stays and the board names it. */
+export function unclear(dir: string, id: string, note: string) {
+  return transact(dir, data => commit(data, noteUnclear(data.leads, id, note, now()), id))
+}
+
 export function score(dir: string, id: string, correction: string) {
   if (correction !== 'too-high' && correction !== 'too-low') {
     throw new Error('A score correction is too-high or too-low')
@@ -361,7 +367,7 @@ export type PackageResult = Application & { column: Column; notice?: string }
 
 /**
  * Records a lead's package from the files in `packages/<id>/`, renders the résumé preview and
- * diff, snapshots the draft, and moves the card to Ready to review (or `column`).
+ * diff, snapshots the draft, and moves the card to Ready to apply (or `column`).
  *
  * The card moves only from Drafting, where the package skill put it when the build began. In any
  * other column the person (or another flow) moved it during the build, most often to Archived or

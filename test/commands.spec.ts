@@ -332,6 +332,27 @@ test('the jobs CLI lists and fills summaries from a file', () => {
   )
 })
 
+test('jobs unclear records what email left unclear; the card stays and nothing is an outcome', () => {
+  const dir = fresh()
+  commands.add(dir, [lead('Acme')])
+  const id = 'acme-backend-developer'
+  commands.move(dir, id, 'applied', { by: 'submit' })
+  const cli = (...args: string[]) =>
+    JSON.parse(
+      execFileSync(process.execPath, ['bin/jobs.ts', ...args, '--data', dir], { encoding: 'utf8' }),
+    ) as { column: string; history: { by: string; action: string; note?: string }[] }
+  const note = 'Oct 19, recruiter: asks for references'
+  const noted = cli('unclear', id, note)
+  assert.equal(noted.column, 'applied')
+  assert.equal(noted.history.at(-1)?.note, note)
+  assert.equal(noted.history.at(-1)?.by, 'sync')
+  // Another run reads the same message and has the same words for it.
+  assert.equal(cli('unclear', id, note).history.length, noted.history.length)
+  assert.equal(readData(dir, 'feedback').events.filter(one => one.kind === 'outcome').length, 0)
+  assert.throws(() => commands.unclear(dir, 'nope', note), /No lead nope/)
+  assert.throws(() => commands.unclear(dir, id, ' '), /Say what is unclear/)
+})
+
 test('a lead stored in the removed Shortlisted column is read as New and saved so once', () => {
   const dir = fresh()
   commands.add(dir, [lead('Acme'), lead('Beta')])
@@ -425,7 +446,7 @@ const drafted = () => {
   return { dir, id, pkg }
 }
 
-test('package moves a card still in Drafting to Ready to review', () => {
+test('package moves a card still in Drafting to Ready to apply', () => {
   const { dir, id } = drafted()
   const result = commands.registerPackage(dir, id)
   assert.equal(result.column, 'ready')

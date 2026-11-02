@@ -65,9 +65,20 @@ The types of every file are in `types/index.d.ts`.
 
 ## Using it
 
-- `/jobs` opens the board on tabs, one stage at a time: New → Drafting → Ready to review →
-  Applied → Interviewing → Offer → Rejected, with Passed and Archived behind "Passed & archived". New shows
-  the ten best first ("Show more" adds ten). Each card is three lines: a coloured fit badge (green
+- `/jobs` always opens on **Active**, the work to do. Three tabs with counts stay on top, and
+  each shows its own stages as a second row, one at a time:
+  - **Active:** New, Drafting and Ready to apply; its count adds them up. Drafting shows only with
+    cards in it, and an empty Active says there is nothing to do.
+  - **Applications:** Current (the `applied` column, what is still live), Interviews and Offers,
+    the last two only with cards in them. Its count is every application you ever made: Current,
+    Interviews, Offers, Rejected, Ghosted and anything else that reached Applied and has since
+    settled.
+  - **Settled:** Passed, Archived, Rejected and Ghosted; its count is the total. Ghosted is no
+    column of its own: a ghosted card sits in `archived`, and the board shows it under Ghosted
+    instead of Archived, whether you pressed Ghosted or the board did.
+
+  New sorts best fit first, Current by the date you applied, newest first, and every other stage by
+  when the lead was found, newest first. Each stage shows ten cards ("Show more" adds ten). Each card is three lines: a coloured fit badge (green
   90+, amber 75–89, grey below) with company and role; age (since added, and the posting's when known), source and location (remote or
   where); and a one-line tagline of about 40 characters saying what the company makes or what
   the role is (the fit reason until scout has written one; a longer one ends in "…"). A Ready to
@@ -78,8 +89,9 @@ The types of every file are in `types/index.d.ts`.
   Rejected — Offer: Accepted · Declined. Company decisions (Got interview, Got offer, Rejected,
   Ghosted, Accepted, Declined) move the card and record an outcome for the weekly review, never a
   pass (an application silent for a month is marked Ghosted for you, see "Ghosting"). Rejected
-  goes to Rejected; Ghosted, Accepted and Declined go to Archived. A rejected, archived or passed card offers "Back to <where it was>" to undo a mis-click. Click a card's name to open it: the same next steps, then
+  goes to Rejected, Ghosted to Ghosted; Accepted and Declined go to Archived. A rejected, archived or passed card offers "Back to <where it was>" to undo a mis-click. Click a card's name to open it: the same next steps, then
   Pass… · Archive · Draft package, then feedback (Score too high / too low).
+
 - **Ready notes.** The note counts the distinct `NEEDS ANSWER` questions in the package's
   `answers.md`, leaving out any that `profile/knowledge-base/application-answers.md` already
   answers. So it clears when you reply, though `answers.md` stays as drafted. The lead's own page
@@ -111,8 +123,8 @@ The types of every file are in `types/index.d.ts`.
   refreshes and on every `jobs add` (or by hand with `jobs archive`). The limits are the
   `POSTING_MAX_DAYS` and `ADD_MIN_SCORE` constants in `hooks/lib/model.ts`.
 - **Ghosting.** An application in Applied with no reply one calendar month after you submitted
-  it is marked Ghosted on its own, as if you had pressed Ghosted: the card moves to Archived
-  (history says `tracker: moved → Archived (no reply 1 month after applying (ghosted))`) and the
+  it is marked Ghosted on its own, as if you had pressed Ghosted: the card moves to Ghosted
+  under Settled (history says `tracker: moved → Archived (no reply 1 month after applying (ghosted))`) and the
   same outcome, `rejection: no reply (ghosted)`, is recorded for the weekly review, with
   `by: "tracker"` so `learn` can tell it from one you marked. A toast names the leads it ghosted,
   and for a week the board lists them above the tabs (each opens its card), since a scheduled
@@ -121,14 +133,14 @@ The types of every file are in `types/index.d.ts`.
   application and the card's last move into Applied. Only Applied is swept: a lead with any recorded outcome (a reply
   `sync` found, an interview), one that has been in Interviewing or Offer, and one you put back
   in Applied by hand are left alone, as is every other column. A reply that comes later still
-  moves the card on: `sync` also reads leads the board ghosted, and proposes Rejected for a late
-  rejection, and "Back to Applied" on the archived card undoes it. Like the stale-lead archive it runs when the board refreshes, on every
+  moves the card on: `sync` also reads ghosted leads, and moves a late rejection to Rejected, and
+  "Back to Applied" on the Ghosted card undoes it. Like the stale-lead archive it runs when the board refreshes, on every
   `jobs add` and on `jobs archive`, never on a timer. The threshold is `GHOST_AFTER_MONTHS` in
   `hooks/lib/model.ts` (and `GHOST_NOTICE_DAYS` how long the board lists them).
 - **Draft package** moves the card to Drafting at once and builds the package in a background
   subagent, never in your conversation, so you keep triaging while it runs and several build side
   by side (each takes several minutes). A toast says when one starts and when it ends; the card
-  moves to Ready to review unless you moved it meanwhile. Redraft package does the same. If the
+  moves to Ready to apply unless you moved it meanwhile. Redraft package does the same. If the
   engine will not start a subagent, the button asks your conversation to start one instead,
   queued until the current reply ends. Asking in chat ("draft a package for Acme") uses the
   `draft_package` tool, which starts the same background build.
@@ -144,7 +156,7 @@ The types of every file are in `types/index.d.ts`.
   over each tab and submit it yourself, then say they are submitted, and that message moves the
   cards to Applied. Claude never clicks the final submit. Chrome can unload a prefilled background
   tab about 30 minutes after it is filled, which wipes the form and the résumé, so submit soon.
-  "Approve and submit all" on Ready to review does this for every lead there at once, side by
+  "Approve and submit all" on Ready to apply does this for every lead there at once, side by
   side. If Claude in Chrome is not available to the subagent, the conversation does the whole job.
 - **The Chrome guard** holds every background prefill to tabs it opened itself and to an element
   ref for every click, and reads each element first. It refuses a click on a control labelled like
@@ -162,7 +174,7 @@ The types of every file are in `types/index.d.ts`.
   question you have answered once is not asked again where that answer applies. A data-processing
   acknowledgment or "keep in contact" box your saved answer covers is ticked for you. Account
   creation, sign-ins, passwords, CAPTCHAs and any other agreement are left to you.
-- The band above the prompt reads `● N new leads · M ready to review · /jobs`; click it to open the
+- The band above the prompt reads `● N new leads · M ready to apply · /jobs`; click it to open the
   board. It is hidden when both are zero.
 - In an unrelated conversation, the first reply ends with one short line naming the top new leads,
   at most once per conversation and never within three hours of the last mention.
@@ -177,8 +189,8 @@ Ask in any session:
 - "Draft a package for lead `<id>`" — or press Draft package on the card. Either way it runs in
   a background subagent.
 - "Use the job-tracker:submit skill for lead `<id>`" — or press Approve and submit.
-- "Use the job-tracker:sync skill" — check Gmail and Calendar for replies; it proposes moves and
-  waits for your confirmation.
+- "Use the job-tracker:sync skill" — check Gmail and Calendar for replies now, instead of waiting
+  for its schedule. See "Email sync".
 - "Use the job-tracker:learn skill" — write this week's learning proposal now; review it under
   "Learning proposals" in `/jobs`. Each change has Approve, Reject and Clarify. Clarify opens a
   field on that change: type what should change and press Enter. It is neither approved nor
@@ -198,6 +210,17 @@ approved from `learn` proposals; edit or delete lines there too. Answer or delet
 Ashby board, add `{ "company", "ats", "slug" }` to `profile/ats-boards.json`
 (`node bin/jobs.ts probe <slug>` finds which one it uses).
 
+## Email sync
+
+`sync` keeps the board in step with Gmail and Calendar, on its schedule and whenever you ask. It
+moves a card itself, with no confirmation, for a clear rejection, interview request or offer,
+including a late reply on a ghosted card, and records the outcome for the weekly review. Anything
+unclear stays where it is, with what `sync` found on the card's page. For a week the board lists
+what email moved and what is unclear above the tabs, each lead a button to its page. If a move is
+wrong, a press on the card puts it back and it leaves the list; `sync` then ignores the emails from
+before that press. It never sends, drafts, labels or deletes email and never touches calendar
+events.
+
 ## The schedule
 
 Desktop scheduled tasks run the work in their own sessions. They live on your machine, each
@@ -208,6 +231,7 @@ prompts.
 | --------------------------- | ------------------------------------- | ------------------------ | ------------------------------------ |
 | `job-tracker-scout`         | Weekdays at 8:00, 12:00, 16:00, 20:00 | `0 8,12,16,20 * * 1-5`   | The `scout` skill                    |
 | `job-tracker-scout-weekend` | Saturdays and Sundays at 12:00        | `0 12 * * 0,6`           | The `scout` skill                    |
+| `job-tracker-sync`          | Daily at 9:00, 13:00, 17:00           | `0 9,13,17 * * *`        | The `sync` skill                     |
 | `job-tracker-tsenta`        | Daily, every 3 hours, 8:30 to 20:30   | `30 8,11,14,17,20 * * *` | An optional job source (below)       |
 | `job-tracker-learn`         | Sundays at 18:00                      | `0 18 * * 0`             | The `learn` skill                    |
 | `job-tracker-board-check`   | Manual                                |                          | Optional check that the tools answer |

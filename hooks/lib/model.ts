@@ -7,6 +7,7 @@ import type {
   Actor,
   Application,
   ApplicationsFile,
+  BoardTab,
   ChangeStatus,
   Clarification,
   Column,
@@ -18,12 +19,14 @@ import type {
   Proposal,
   ProposalChange,
   ProposalsFile,
+  Stage,
 } from '../../types/index.d.ts'
 
 export type {
   Actor,
   Application,
   ApplicationsFile,
+  BoardTab,
   Clarification,
   Column,
   FeedbackEvent,
@@ -37,6 +40,7 @@ export type {
   Proposal,
   ProposalChange,
   ProposalsFile,
+  Stage,
 } from '../../types/index.d.ts'
 
 export const COLUMNS = [
@@ -51,27 +55,43 @@ export const COLUMNS = [
   'archived',
 ] as const satisfies readonly Column[]
 
-/** The columns of the board's main row, in order; Passed and Archived sit apart. */
-export const PIPELINE: readonly Column[] = [
-  'new',
-  'drafting',
-  'ready',
-  'applied',
-  'interviewing',
-  'offer',
-  'rejected',
-]
-
 export const COLUMN_TITLES: Record<Column, string> = {
   new: 'New',
   drafting: 'Drafting',
-  ready: 'Ready to review',
+  ready: 'Ready to apply',
   applied: 'Applied',
   interviewing: 'Interviewing',
   offer: 'Offer',
   rejected: 'Rejected',
   passed: 'Passed',
   archived: 'Archived',
+}
+
+/** The board's top row, in order; each tab shows only its own stages as a second row. */
+export const BOARD_TABS: readonly BoardTab[] = ['active', 'applications', 'settled']
+
+export const TAB_TITLES: Record<BoardTab, string> = {
+  active: 'Active',
+  applications: 'Applications',
+  settled: 'Settled',
+}
+
+export const TAB_STAGES: Record<BoardTab, readonly Stage[]> = {
+  active: ['new', 'drafting', 'ready'],
+  applications: ['applied', 'interviewing', 'offer'],
+  settled: ['passed', 'archived', 'rejected', 'ghosted'],
+}
+
+/** Stages whose button shows only while they hold cards. */
+const SHOWN_WITH_CARDS: readonly Stage[] = ['drafting', 'interviewing', 'offer']
+
+/** A stage's button. A column keeps its own title on a card's page and in its history. */
+export const STAGE_TITLES: Record<Stage, string> = {
+  ...COLUMN_TITLES,
+  applied: 'Current',
+  interviewing: 'Interviews',
+  offer: 'Offers',
+  ghosted: 'Ghosted',
 }
 
 /** A column's title, or the name itself for one the board no longer has (`shortlisted`). */
@@ -178,11 +198,47 @@ export function previousColumn(lead: Pick<Lead, 'column' | 'history'>): Column |
   return last?.from && last.from !== lead.column && isColumn(last.from) ? last.from : undefined
 }
 
-/** The stage the board opens on: New while it has leads, else the first stage that has any. */
-export function defaultStage(file: LeadsFile): Column {
-  const has = (column: Column) => file.leads.some(lead => lead.column === column)
-  return PIPELINE.find(has) ?? 'new'
+/** The stage a lead shows under: its column, except that a ghosted lead leaves Archived. */
+export const stageOf = (lead: Pick<Lead, 'column' | 'history'>): Stage =>
+  isGhosted(lead) ? 'ghosted' : lead.column
+
+/** The tab a stage belongs to. */
+export const stageTab = (stage: Stage) =>
+  BOARD_TABS.find(tab => TAB_STAGES[tab].includes(stage)) as BoardTab
+
+export const stageCount = (file: LeadsFile, stage: Stage) =>
+  file.leads.filter(lead => stageOf(lead) === stage).length
+
+/** The stages a tab's second row shows. */
+export const tabStages = (file: LeadsFile, tab: BoardTab) =>
+  TAB_STAGES[tab].filter(stage => !SHOWN_WITH_CARDS.includes(stage) || stageCount(file, stage) > 0)
+
+/** The stage a tab opens on: the first with leads, else its first. It never leaves the tab. */
+export function defaultStage(file: LeadsFile, tab: BoardTab = 'active'): Stage {
+  const stages = tabStages(file, tab)
+  return stages.find(stage => stageCount(file, stage) > 0) ?? (stages[0] as Stage)
 }
+
+/** Columns a lead reaches only once it has been applied to. */
+const APPLIED: readonly (string | undefined)[] = ['applied', 'interviewing', 'offer']
+
+/**
+ * Whether a lead counts as an application made: still live, turned down, ghosted, or settled any
+ * other way after it reached Applied. A lead moved back to the start is no application.
+ */
+export function isApplication(lead: Pick<Lead, 'column' | 'history'>): boolean {
+  if (APPLIED.includes(lead.column) || lead.column === 'rejected' || isGhosted(lead)) return true
+  return (
+    (lead.column === 'passed' || lead.column === 'archived') &&
+    lead.history.some(entry => entry.action === 'moved' && APPLIED.includes(entry.to))
+  )
+}
+
+/** A tab's count: Applications is every application ever made, the others what they show. */
+export const tabCount = (file: LeadsFile, tab: BoardTab) =>
+  tab === 'applications'
+    ? file.leads.filter(isApplication).length
+    : TAB_STAGES[tab].reduce((sum, stage) => sum + stageCount(file, stage), 0)
 
 // A lead's score is the scout's fit judgement and never ages. What ages is the posting: one up for
 // over two weeks is likely filled, so scout does not add it, and a New lead is archived once its
@@ -274,6 +330,12 @@ export const GHOST_NOTICE_DAYS = 7
 /** Columns a lead reaches only after the company replied, or after the person settled it. */
 const SETTLED: readonly string[] = ['interviewing', 'offer', 'rejected', 'passed', 'archived']
 
+/** A lead's submission time and last move into Applied, as times; NaN for one it lacks. */
+function applyTimes(lead: Pick<Lead, 'history'>, application?: Pick<Application, 'submittedAt'>) {
+  const moved = lead.history.findLast(entry => entry.action === 'moved' && entry.to === 'applied')
+  return [application?.submittedAt, moved?.at].map(at => Date.parse(at ?? ''))
+}
+
 /**
  * When a lead was submitted: the later of the time `jobs submitted` recorded on its application
  * and its last move into Applied (a lead moved back and applied again by hand counts from then).
@@ -282,12 +344,18 @@ export function appliedTime(
   lead: Pick<Lead, 'history'>,
   application?: Pick<Application, 'submittedAt'>,
 ): number | undefined {
-  const moved = lead.history.findLast(entry => entry.action === 'moved' && entry.to === 'applied')
-  const times = [application?.submittedAt, moved?.at]
-    .map(at => Date.parse(at ?? ''))
-    .filter(at => !Number.isNaN(at))
+  const times = applyTimes(lead, application).filter(at => !Number.isNaN(at))
   return times.length > 0 ? Math.max(...times) : undefined
 }
+
+/**
+ * The date Current sorts on: the submission, or the last move into Applied for a lead moved by
+ * hand. A restored lead keeps the date it was applied to.
+ */
+export const applicationTime = (
+  lead: Pick<Lead, 'history'>,
+  application?: Pick<Application, 'submittedAt'>,
+) => applyTimes(lead, application).find(at => !Number.isNaN(at)) ?? 0
 
 /** `time` plus `months` calendar months (UTC), the day clamped to the month: Jan 31 → Feb 28. */
 export function addMonths(time: number, months: number): number {
@@ -323,12 +391,22 @@ export function isGhostable(
   return !events.some(event => event.leadId === lead.id && event.kind === 'outcome')
 }
 
+/** A move into Archived that says ghosted: `GHOST_NOTE` or `GHOSTED_REASON`. */
+const isGhostMove = (entry: HistoryEntry) =>
+  entry.action === 'moved' && entry.to === 'archived' && (entry.note ?? '').endsWith('(ghosted)')
+
 /** Whether this history entry is the board ghosting a lead (`ghostSilent`). */
-export const isGhostEntry = (entry: HistoryEntry) =>
-  entry.by === 'tracker' &&
-  entry.action === 'moved' &&
-  entry.to === 'archived' &&
-  (entry.note ?? '').endsWith('(ghosted)')
+export const isGhostEntry = (entry: HistoryEntry) => entry.by === 'tracker' && isGhostMove(entry)
+
+/** A lead's last move, or undefined when it has never moved. */
+const lastMove = (lead: Pick<Lead, 'history'>) =>
+  lead.history.findLast(entry => entry.action === 'moved')
+
+/** Whether a lead sits in Archived as ghosted, by the board or by the Ghosted button. */
+export function isGhosted(lead: Pick<Lead, 'column' | 'history'>): boolean {
+  const last = lastMove(lead)
+  return lead.column === 'archived' && last !== undefined && isGhostMove(last)
+}
 
 /**
  * Leads the board ghosted in the last `GHOST_NOTICE_DAYS` and still in Archived, most recent
@@ -336,7 +414,7 @@ export const isGhostEntry = (entry: HistoryEntry) =>
  */
 export function recentlyGhosted(file: LeadsFile, now: number): Lead[] {
   const ghostedAt = (lead: Lead) => {
-    const last = lead.history.findLast(entry => entry.action === 'moved')
+    const last = lastMove(lead)
     return lead.column === 'archived' && last && isGhostEntry(last) ? Date.parse(last.at) : NaN
   }
   return file.leads
@@ -392,6 +470,53 @@ export function ghostSilent(
   return ghosted.length > 0
     ? { leads: { ...file, leads }, feedback: events, ghosted }
     : { leads: file, feedback, ghosted }
+}
+
+/** How many days the board names what email moved or left unclear. */
+export const SYNC_NOTICE_DAYS = 7
+
+/** What email left unclear on a lead, until the card moves on. */
+export function openUnclear(lead: Pick<Lead, 'history'>): HistoryEntry | undefined {
+  const last = lead.history.findLast(entry => ['moved', 'unclear'].includes(entry.action))
+  return last?.action === 'unclear' ? last : undefined
+}
+
+/** The sync skill's move, while it is the card's last one: a later press takes it back. */
+function syncMove(lead: Pick<Lead, 'history'>): HistoryEntry | undefined {
+  const last = lastMove(lead)
+  return last?.by === 'sync' ? last : undefined
+}
+
+/**
+ * What email did in the last `SYNC_NOTICE_DAYS`, most recent first: the board names it, since a
+ * scheduled sync runs with nobody watching.
+ */
+export function syncNotices(file: LeadsFile, now: number) {
+  const recent = (entryOf: (lead: Lead) => HistoryEntry | undefined) =>
+    file.leads
+      .flatMap(lead => {
+        const at = Date.parse(entryOf(lead)?.at ?? '')
+        return now - at <= SYNC_NOTICE_DAYS * DAY_MS ? [{ lead, at }] : []
+      })
+      .sort((a, b) => b.at - a.at)
+      .map(one => one.lead)
+  return { moved: recent(syncMove), unclear: recent(openUnclear) }
+}
+
+/**
+ * Records what email left unclear about a lead, whose card stays where it is. Every run reads the
+ * same inbox, so the same words again record nothing.
+ */
+export function noteUnclear(file: LeadsFile, id: string, note: string, at: string): MoveResult {
+  const lead = file.leads.find(one => one.id === id)
+  if (!lead) return { leads: file, error: `No lead ${id}` }
+  const text = note.trim()
+  if (!text) return { leads: file, error: 'Say what is unclear' }
+  if (lead.history.some(entry => entry.action === 'unclear' && entry.note === text)) {
+    return { leads: file }
+  }
+  const entry = { at, by: 'sync' as const, action: 'unclear', note: text }
+  return { leads: replaceLead(file, { ...lead, history: [...lead.history, entry] }) }
 }
 
 /**
@@ -781,13 +906,6 @@ export function normalizeUrl(url: string): string {
   }
 }
 
-/** The column left or right of `column` along the pipeline; undefined at either end. */
-export function neighbour(column: Column, direction: -1 | 1): Column | undefined {
-  const at = PIPELINE.indexOf(column)
-  if (at < 0) return direction === -1 ? 'new' : undefined
-  return PIPELINE[at + direction]
-}
-
 export type MoveResult = { leads: LeadsFile; event?: FeedbackEvent; error?: string }
 
 /** Moves a lead to `to`, records it in its history and returns the feedback event for it. */
@@ -1146,23 +1264,23 @@ export function appendEvent(file: FeedbackFile, event: FeedbackEvent): FeedbackF
   return { ...file, events: [...file.events, event] }
 }
 
-export type Counts = { newLeads: number; readyToReview: number }
+export type Counts = { newLeads: number; readyToApply: number }
 
 export function counts(file: LeadsFile): Counts {
   let newLeads = 0
-  let readyToReview = 0
+  let readyToApply = 0
   for (const lead of file.leads) {
     if (lead.column === 'new') newLeads += 1
-    if (lead.column === 'ready') readyToReview += 1
+    if (lead.column === 'ready') readyToApply += 1
   }
-  return { newLeads, readyToReview }
+  return { newLeads, readyToApply }
 }
 
 /** The band's line, or undefined when there is nothing to say. */
 export function bandText(c: Counts): string | undefined {
-  if (c.newLeads + c.readyToReview === 0) return undefined
+  if (c.newLeads + c.readyToApply === 0) return undefined
   const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`
-  return [plural(c.newLeads, 'new lead', 'new leads'), `${c.readyToReview} ready to review`].join(
+  return [plural(c.newLeads, 'new lead', 'new leads'), `${c.readyToApply} ready to apply`].join(
     ' · ',
   )
 }
@@ -1170,11 +1288,25 @@ export function bandText(c: Counts): string | undefined {
 /** Best first by fit score. */
 export const byScore = (a: Lead, b: Lead) => b.fitScore - a.fitScore
 
-/** Leads in a column, best first. */
-export function columnLeads(file: LeadsFile, column: Column): Lead[] {
+const byCompany = (a: Lead, b: Lead) => a.company.localeCompare(b.company)
+
+/**
+ * The leads a stage shows: New best fit first, Current by application date, newest first, and
+ * every other stage by when the lead was found, newest first.
+ */
+export function stageLeads(
+  file: LeadsFile,
+  stage: Stage,
+  applications: readonly Application[] = [],
+): Lead[] {
+  const submitted = new Map(applications.map(one => [one.leadId, one]))
+  const when = (lead: Lead) =>
+    stage === 'applied'
+      ? applicationTime(lead, submitted.get(lead.id))
+      : Date.parse(lead.foundAt) || 0
   return file.leads
-    .filter(lead => lead.column === column)
-    .sort((a, b) => byScore(a, b) || a.company.localeCompare(b.company))
+    .filter(lead => stageOf(lead) === stage)
+    .sort((a, b) => (stage === 'new' ? byScore(a, b) : when(b) - when(a)) || byCompany(a, b))
 }
 
 export const NUDGE_QUIET_MS = 3 * 60 * 60 * 1000

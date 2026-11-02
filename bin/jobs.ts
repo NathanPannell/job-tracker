@@ -30,6 +30,8 @@ const USAGE = `jobs <command> [args] [--data <dir>]
                                          (or, undated, added then) to Archived, and mark Applied
                                          leads with no reply a month after submitting ghosted
   move <id> <column> [--reason r] [--by actor] [--note n]
+  unclear <id> <note>                    what email left unclear about a lead; the card stays and
+                                         the board names it for a week
   pass <id> <reason>
   score <id> too-high|too-low
   patch <id> <json|@file> [--by actor]   change fields of a lead
@@ -103,6 +105,8 @@ async function main(argv: string[]): Promise<unknown> {
       return commands.archive(dir)
     case 'move':
       return commands.move(dir, need(args[0], 'id'), need(args[1], 'column'), values)
+    case 'unclear':
+      return commands.unclear(dir, need(args[0], 'id'), need(args[1], 'note'))
     case 'pass':
       return commands.move(dir, need(args[0], 'id'), 'passed', { reason: need(args[1], 'reason') })
     case 'score':

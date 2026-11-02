@@ -1,6 +1,6 @@
 ---
 name: package
-description: Build a tailored application package for one job lead on the board — résumé compiled to PDF from the person's LaTeX template using only approved facts, cover letter, answers to the posting's questions, company brief and a warm-intro search with a Gmail draft — then move the card to Ready to review. Always runs in a background subagent, never in the person's conversation. Use when asked to draft, build or prepare an application for a lead.
+description: Build a tailored application package for one job lead on the board — résumé compiled to PDF from the person's LaTeX template using only approved facts, cover letter, answers to the posting's questions, company brief and a warm-intro search with a Gmail draft — then move the card to Ready to apply. Always runs in a background subagent, never in the person's conversation. Use when asked to draft, build or prepare an application for a lead.
 ---
 
 # Package
@@ -105,7 +105,7 @@ below: nobody can answer you, so never stop to ask a question.
 9. Register the package: `jobs package <id>` (add `--draft-id <gmail draft id>` when you drafted
    one, `--redraft` when you rebuilt a package the person already saw). It renders the résumé
    preview for the pane, writes `resume.diff` against the master, snapshots the draft for the
-   learning loop and moves the card to Ready to review — but only if the card is still in
+   learning loop and moves the card to Ready to apply — but only if the card is still in
    Drafting. The person keeps triaging the board while you build; if they moved the card
    elsewhere meanwhile (Archived, Passed or any other column), the files are still registered and
    the card stays where they put it. The output then has a `notice` and `column` says where the

@@ -12,13 +12,22 @@ export type Column =
   | 'passed'
   | 'archived'
 
+/** The board's top row: work to do, applications made, and what is settled. */
+export type BoardTab = 'active' | 'applications' | 'settled'
+
+/**
+ * A button of the board's second row: a column, or Ghosted, which is not stored: a ghosted lead sits
+ * in `archived`, and its last move says so (`isGhosted` in hooks/lib/model.ts).
+ */
+export type Stage = Column | 'ghosted'
+
 /** Who changed a lead; `tracker` is the board itself, e.g. archiving a lead left too long in New, or ghosting. */
 export type Actor = 'user' | 'scout' | 'package' | 'submit' | 'sync' | 'learn' | 'model' | 'tracker'
 
 export type HistoryEntry = {
   at: string
   by: Actor
-  /** `created`, `moved`, `scored`, `mentioned` or `note` (`snoozed` in older history). */
+  /** `created`, `moved`, `scored`, `mentioned`, `note` or `unclear` (`snoozed` in older history). */
   action: string
   /** Older entries may name `shortlisted`, a column the board no longer has. */
   from?: Column
@@ -267,9 +276,10 @@ declare module 'claude-code' {
       board: JobBoard
       view: JobView
       pkg: JobPackage | null
-      showClosed: boolean
-      /** The board's selected stage tab; null until the person picks one. */
-      stage: Column | null
+      /** The board's top-row tab; each opening starts on Active. */
+      boardTab: BoardTab
+      /** The tab's selected stage; null until the person picks one. */
+      stage: Stage | null
       /** How many cards the selected stage shows (grows by ten with "Show more"). */
       shown: number
       /** Leads the nudge named in this session's first prompt, marked when the turn ends. */

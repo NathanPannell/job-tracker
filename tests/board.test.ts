@@ -2,8 +2,8 @@ import { describe, expect, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 
 import { draftTask } from '../hooks/lib/model.ts'
-import type { Lead } from '../hooks/lib/model.ts'
-import { DATA, lead, PANE_PROPS, world } from './world.ts'
+import type { Lead, Stage } from '../hooks/lib/model.ts'
+import { DATA, goTo, lead, PANE_PROPS, world } from './world.ts'
 
 const ACTING = ['terminal', 'desktop'] as const
 
@@ -18,11 +18,11 @@ const pane = {
 
 type Mounted = Awaited<ReturnType<Engine['ui']['mount']>>
 
-/** The board's selected stage tab, as its key (`tab:new`); undefined off the board. */
+/** The board's selected stage, as its key (`stage:new`); undefined off the board. */
 async function boardTab(ui: Pick<Mounted, 'find' | 'findAll'>): Promise<string | undefined> {
   if (await ui.find({ key: 'back' })) return undefined
   const tabs = await ui.findAll({ type: 'Button' })
-  const at = tabs.find(one => /^tab:/.test(String(one.key)) && one.props.variant === 'primary')
+  const at = tabs.find(one => /^stage:/.test(String(one.key)) && one.props.variant === 'primary')
   return at ? String(at.key) : undefined
 }
 
@@ -53,8 +53,8 @@ describe('kanban', () => {
       on('turn.complete', (_, e) => ({ text: e.answer }))
       await start($)
       const ui = await $.ui.mount({ ...pane, surface })
-      expect(await ui.find({ key: 'tab:new', text: /New 2/ })).toBeDefined()
-      expect(await ui.find({ key: 'tab:shortlisted' })).toBeUndefined()
+      expect(await ui.find({ key: 'stage:new', text: /New 2/ })).toBeDefined()
+      expect(await ui.find({ key: 'stage:shortlisted' })).toBeUndefined()
       expect(await ui.find({ text: /^added 1h · Ashby board · Remote \(Canada\)/ })).toBeDefined()
       // The tagline is one line of at most 40 characters, clipped with an ellipsis.
       const tagline = await ui.find({ type: 'Text', text: /^Billing APIs/ })
@@ -79,7 +79,7 @@ describe('kanban', () => {
         'Drafting the Acme package in the background.',
         'Drafting the Beta package in the background.',
       ])
-      expect(await ui.find({ key: 'tab:drafting', text: /Drafting 2/ })).toBeDefined()
+      expect(await ui.find({ key: 'stage:drafting', text: /Drafting 2/ })).toBeDefined()
       expect(await ui.find({ text: /Package being drafted/ })).toBeDefined()
 
       // A second press while it builds starts nothing.
@@ -87,7 +87,7 @@ describe('kanban', () => {
       await ui.press({ key: 'redraft' })
       expect(w.spawns).toHaveLength(2)
       expect(toasts.at(-1)).toBe('The Acme package is already being drafted.')
-      expect(await boardTab(ui)).toBe('tab:drafting')
+      expect(await boardTab(ui)).toBe('stage:drafting')
 
       // Its end is the subagent's own turn: a toast says how it went.
       for (const [n, spawn] of w.spawns.entries()) {
@@ -148,34 +148,178 @@ describe('kanban', () => {
     })
     await start($)
     const ui = await $.ui.mount({ ...pane, surface: 'desktop' })
-    expect(await ui.find({ key: 'tab:new', text: /New 1/ })).toBeDefined()
+    expect(await ui.find({ key: 'stage:new', text: /New 1/ })).toBeDefined()
     await ui.press({ key: 'open:acme-api' })
     expect(await ui.find({ text: /user: moved → shortlisted/ })).toBeDefined()
     expect(await ui.find({ text: /tracker: moved → New \(shortlisted was removed/ })).toBeDefined()
   })
 
   for (const surface of ACTING) {
-    test(`tabs show one stage at a time and open on New (${surface})`, async ($, on) => {
+    test(`three tabs with counts stay on top and each shows only its own stages (${surface})`, async ($, on) => {
       world(on, {
         leads: [
           lead('a-1', { company: 'Alpha', fitScore: 95 }),
           lead('b-2', { company: 'Beta', fitScore: 80, column: 'applied' }),
+          lead('c-3', { column: 'passed', passReason: 'Too senior' }),
         ],
       })
       await start($)
       const ui = await $.ui.mount({ ...pane, surface })
+      const labels = async (prefix: RegExp) =>
+        (await ui.findAll({ type: 'Button' }))
+          .filter(one => prefix.test(String(one.key)))
+          .map(one => String(one.props.label))
+      expect(await labels(/^tab:/)).toEqual(['Active 1', 'Applications 1', 'Settled 1'])
+      expect(await labels(/^stage:/)).toEqual(['New 1', 'Ready to apply 0'])
       expect(await ui.find({ key: 'card:a-1' })).toBeDefined()
       expect(await ui.find({ key: 'card:b-2' })).toBeUndefined()
-      expect(await ui.find({ key: 'tab:drafting', text: /Drafting 0/ })).toBeDefined()
-      await ui.press({ key: 'tab:applied' })
+      await ui.press({ key: 'tab:applications' })
+      expect(await labels(/^tab:/)).toEqual(['Active 1', 'Applications 1', 'Settled 1'])
+      expect(await labels(/^stage:/)).toEqual(['Current 1'])
       expect(await ui.find({ key: 'card:b-2' })).toBeDefined()
       expect(await ui.find({ key: 'card:a-1' })).toBeUndefined()
       expect(await ui.find({ key: 'interview:b-2', text: /Got interview/ })).toBeDefined()
-      await ui.press({ key: 'tab:drafting' })
-      expect(await ui.find({ text: /Nothing in Drafting yet/ })).toBeDefined()
+      await ui.press({ key: 'tab:settled' })
+      expect(await labels(/^stage:/)).toEqual(['Passed 1', 'Archived 0', 'Rejected 0', 'Ghosted 0'])
+      await ui.press({ key: 'stage:ghosted' })
+      expect(await ui.find({ text: /Nothing in Ghosted yet/ })).toBeDefined()
       await ui.unmount()
     })
   }
+
+  test('Drafting, Interviews and Offers show only with cards in them', async ($, on) => {
+    world(on, {
+      leads: [
+        lead('a-1', { column: 'drafting' }),
+        lead('b-2', { column: 'interviewing' }),
+        lead('c-3', { column: 'offer' }),
+      ],
+    })
+    await start($)
+    const ui = await $.ui.mount({ ...pane, surface: 'desktop' })
+    expect(await ui.find({ key: 'stage:drafting', text: /Drafting 1/ })).toBeDefined()
+    expect(await boardTab(ui)).toBe('stage:drafting')
+    await ui.press({ key: 'tab:applications' })
+    expect(await boardTab(ui)).toBe('stage:interviewing')
+    expect(await ui.find({ key: 'stage:interviewing', text: /Interviews 1/ })).toBeDefined()
+    expect(await ui.find({ key: 'stage:offer', text: /Offers 1/ })).toBeDefined()
+  })
+
+  test('an empty Active stays on Active and says there is nothing to do', async ($, on) => {
+    const w = world(on, { leads: [lead('b-2', { column: 'applied' })] })
+    await start($)
+    const ui = await $.ui.mount({ ...pane, surface: 'desktop' })
+    expect(await ui.find({ key: 'tab:active', text: /Active 0/ })).toBeDefined()
+    expect((await ui.find({ key: 'tab:active' }))?.props.variant).toBe('primary')
+    expect(await ui.find({ text: /^Nothing to do\.$/ })).toBeDefined()
+    expect(await ui.find({ key: 'card:b-2' })).toBeUndefined()
+    expect(w.leads()).toHaveLength(1)
+  })
+
+  test('the board always opens on Active, wherever the last visit ended', async ($, on) => {
+    const w = world(on, { leads: [lead('a-1'), lead('b-2', { column: 'applied' })] })
+    on('ui.open', () => ({ value: { isPlaced: true } }))
+    on('ui.panes', () => ({ value: [] }))
+    on('ui.render', { component: 'AbovePrompt' }, ($, e) => $.ui.resolve(e).Box({ key: 'engine' }))
+    await start($)
+    const ui = await $.ui.mount({ ...pane, surface: 'desktop' })
+    await goTo(ui, 'applied')
+    expect(await boardTab(ui)).toBe('stage:applied')
+    await $.command.run({ command: 'jobs', args: '' } as never)
+    expect(await boardTab(ui)).toBe('stage:new')
+    await goTo(ui, 'applied')
+    const opened = $.tool.call({ tool: 'mcp__job-tracker__open_board', view: 'board' })
+    await w.clock.advance(2000)
+    await opened
+    expect(await boardTab(ui)).toBe('stage:new')
+    await goTo(ui, 'applied')
+    const band = await $.ui.mount({
+      plugin: 'job-tracker',
+      surface: 'desktop',
+      component: 'AbovePrompt',
+      props: {
+        hasSurvey: false,
+        isWorking: false,
+        maxRows: 10,
+        bodyColumns: 100,
+        scroll: { offset: 0, bodyRows: 10 },
+        view: {},
+      },
+    })
+    await band.press({ key: 'open-jobs' })
+    expect(await boardTab(ui)).toBe('stage:new')
+  })
+
+  test('a stage emptied while open falls back within its tab', async ($, on) => {
+    world(on, {
+      leads: [lead('b-2', { column: 'interviewing' }), lead('c-3', { column: 'applied' })],
+    })
+    await start($)
+    const ui = await $.ui.mount({ ...pane, surface: 'desktop' })
+    await goTo(ui, 'interviewing')
+    await ui.press({ key: 'rejected:b-2' })
+    expect(await ui.find({ key: 'stage:interviewing' })).toBeUndefined()
+    expect(await boardTab(ui)).toBe('stage:applied')
+    expect((await ui.find({ key: 'tab:applications' }))?.props.variant).toBe('primary')
+  })
+
+  test('Current sorts by application date and other stages by when the lead was found', async ($, on) => {
+    const moved = (at: string) => [
+      { at, by: 'user' as const, action: 'moved', from: 'ready' as const, to: 'applied' as const },
+    ]
+    world(on, {
+      leads: [
+        lead('old-1', {
+          column: 'applied',
+          fitScore: 99,
+          foundAt: '2026-10-19T00:00:00.000Z',
+          history: moved('2026-10-01T00:00:00.000Z'),
+        }),
+        lead('new-2', {
+          column: 'applied',
+          fitScore: 50,
+          foundAt: '2026-10-01T00:00:00.000Z',
+          history: moved('2026-10-02T00:00:00.000Z'),
+        }),
+        lead('mid-3', {
+          column: 'applied',
+          foundAt: '2026-10-10T00:00:00.000Z',
+          history: moved('2026-10-03T00:00:00.000Z'),
+        }),
+        lead('low-4', {
+          column: 'passed',
+          fitScore: 50,
+          foundAt: '2026-10-20T00:00:00.000Z',
+        }),
+        lead('top-5', {
+          column: 'passed',
+          fitScore: 99,
+          foundAt: '2026-10-01T00:00:00.000Z',
+        }),
+      ],
+      applications: [
+        {
+          leadId: 'new-2',
+          dir: 'packages/new-2',
+          createdAt: '2026-10-01T00:00:00.000Z',
+          updatedAt: '2026-10-01T00:00:00.000Z',
+          files: {},
+          status: 'submitted',
+          submittedAt: '2026-10-15T00:00:00.000Z',
+        },
+      ],
+    })
+    await start($)
+    const ui = await $.ui.mount({ ...pane, surface: 'desktop' })
+    const cards = async () =>
+      (await ui.findAll({ type: 'Button' }))
+        .filter(one => /^open:/.test(String(one.key)))
+        .map(one => String(one.key).slice('open:'.length))
+    await goTo(ui, 'applied')
+    expect(await cards()).toEqual(['new-2', 'mid-3', 'old-1'])
+    await goTo(ui, 'passed')
+    expect(await cards()).toEqual(['low-4', 'top-5'])
+  })
 
   for (const surface of ACTING) {
     test(`passing asks for a reason chip and records it as feedback (${surface})`, async ($, on) => {
@@ -188,7 +332,7 @@ describe('kanban', () => {
       await ui.press({ key: 'reason:Too senior' })
       expect(w.leads()[0]?.column).toBe('passed')
       // Done with it: back on the New tab, where it was.
-      expect(await boardTab(ui)).toBe('tab:new')
+      expect(await boardTab(ui)).toBe('stage:new')
       expect(w.leads()[0]?.passReason).toBe('Too senior')
       expect(w.feedback()).toEqual([
         expect.objectContaining({
@@ -215,7 +359,7 @@ describe('kanban', () => {
       const ui = await $.ui.mount({ ...pane, surface })
       await ui.press({ key: 'pass:acme-api' })
       // Still the board: the reasons open on that card alone.
-      expect(await boardTab(ui)).toBe('tab:new')
+      expect(await boardTab(ui)).toBe('stage:new')
       expect(await ui.find({ key: 'reason:Too senior:acme-api' })).toBeDefined()
       expect(await ui.find({ key: 'reason:Too senior:l-11' })).toBeUndefined()
       expect(await ui.find({ text: /Why pass\?/ })).toBeDefined()
@@ -235,7 +379,7 @@ describe('kanban', () => {
       expect(w.feedback()).toEqual([
         expect.objectContaining({ kind: 'pass', reason: 'Not interested', leadId: 'acme-api' }),
       ])
-      expect(await boardTab(ui)).toBe('tab:new')
+      expect(await boardTab(ui)).toBe('stage:new')
       expect(await ui.find({ key: 'card:acme-api' })).toBeUndefined()
       expect(await ui.find({ text: /Why pass\?/ })).toBeUndefined()
       await ui.unmount()
@@ -265,10 +409,10 @@ describe('kanban', () => {
       await ui.press({ key: 'pass' })
       await ui.press({ key: 'reason:Wrong stack' })
       expect(w.leads().find(one => one.id === 'acme-api')?.column).toBe('passed')
-      expect(await boardTab(ui)).toBe('tab:new')
+      expect(await boardTab(ui)).toBe('stage:new')
 
       // A lead past New passes from its own Pass button the same way.
-      await ui.press({ key: 'tab:applied' })
+      await goTo(ui, 'applied')
       await ui.press({ key: 'open:beta-api' })
       await ui.press({ key: 'pass-any' })
       await ui.press({ key: 'cancel-pass' })
@@ -292,7 +436,7 @@ describe('kanban', () => {
     await ui.press({ key: 'pass:acme-api' })
     await ui.press({ key: 'draft:acme-api' })
     expect(w.leads()[0]?.column).toBe('drafting')
-    await ui.press({ key: 'tab:drafting' })
+    await goTo(ui, 'drafting')
     expect(await ui.find({ key: 'card:acme-api' })).toBeDefined()
     expect(await ui.find({ text: /Why pass\?/ })).toBeUndefined()
     await ui.press({ key: 'open:acme-api' })
@@ -305,7 +449,7 @@ describe('kanban', () => {
     const w = world(on, { leads: [lead('acme-api', { company: 'Acme', column: 'applied' })] })
     await start($)
     const ui = await $.ui.mount({ ...pane, surface: 'desktop' })
-    await ui.press({ key: 'tab:applied' })
+    await goTo(ui, 'applied')
     await ui.press({ key: 'rejected:acme-api' })
     expect(w.leads()[0]?.column).toBe('rejected')
     expect(w.leads()[0]?.passReason).toBeUndefined()
@@ -313,31 +457,166 @@ describe('kanban', () => {
       ['move', undefined],
       ['outcome', 'rejection: marked on the board'],
     ])
-    await ui.press({ key: 'tab:rejected' })
+    await goTo(ui, 'rejected')
     expect(await ui.find({ key: 'restore:acme-api', text: /Back to Applied/ })).toBeDefined()
     await ui.press({ key: 'restore:acme-api' })
     expect(w.leads()[0]?.column).toBe('applied')
   })
 
-  test('Rejected is a stage of its own, after Offer, on every surface', async ($, on) => {
+  test('Rejected and Ghosted are stages of Settled, on every surface, and no card shows twice', async ($, on) => {
+    const at = '2026-10-19T00:00:00.000Z'
+    const ghost = (by: 'tracker' | 'user', note: string): Lead['history'] => [
+      { at, by, action: 'moved', from: 'applied', to: 'archived', note },
+    ]
     world(on, {
       leads: [
         lead('acme-api', { company: 'Acme', column: 'rejected' }),
         lead('beta-api', { company: 'Beta', column: 'archived' }),
+        lead('quiet-1', {
+          column: 'archived',
+          history: ghost('tracker', 'no reply 1 month after applying (ghosted)'),
+        }),
+        lead('quiet-2', {
+          column: 'archived',
+          history: ghost('user', 'rejection: no reply (ghosted)'),
+        }),
       ],
     })
     await start($)
     for (const surface of ['desktop', 'terminal', 'mobile'] as const) {
       const ui = await $.ui.mount({ ...pane, surface })
-      const tabs = (await ui.findAll({ type: 'Button' }))
-        .filter(one => /^tab:/.test(String(one.key)))
+      expect(await ui.find({ key: 'tab:applications', text: /Applications 3/ })).toBeDefined()
+      await ui.press({ key: 'tab:settled' })
+      const stages = (await ui.findAll({ type: 'Button' }))
+        .filter(one => /^stage:/.test(String(one.key)))
         .map(one => String(one.props.label))
-      expect(tabs.slice(-4)).toEqual(['Applied 0', 'Interviewing 0', 'Offer 0', 'Rejected 1'])
-      await ui.press({ key: 'tab:rejected' })
+      expect(stages).toEqual(['Passed 0', 'Archived 1', 'Rejected 1', 'Ghosted 2'])
+      expect(await ui.find({ key: 'tab:settled', text: /Settled 4/ })).toBeDefined()
+      await goTo(ui, 'rejected')
       expect(await ui.find({ key: 'card:acme-api' })).toBeDefined()
+      expect(await ui.find({ key: 'card:beta-api' })).toBeUndefined()
+      await goTo(ui, 'archived')
+      expect(await ui.find({ key: 'card:beta-api' })).toBeDefined()
+      expect(await ui.find({ key: 'card:quiet-1' })).toBeUndefined()
+      await goTo(ui, 'ghosted')
+      expect(await ui.find({ key: 'card:quiet-1' })).toBeDefined()
+      expect(await ui.find({ key: 'card:quiet-2' })).toBeDefined()
       expect(await ui.find({ key: 'card:beta-api' })).toBeUndefined()
       await ui.unmount()
     }
+  })
+
+  test('Back to Applied works from Ghosted, and the card is back in Current', async ($, on) => {
+    const w = world(on, {
+      leads: [
+        lead('quiet-1', {
+          column: 'archived',
+          history: [
+            {
+              at: '2026-10-19T00:00:00.000Z',
+              by: 'user',
+              action: 'moved',
+              from: 'applied',
+              to: 'archived',
+              note: 'rejection: no reply (ghosted)',
+            },
+          ],
+        }),
+      ],
+    })
+    await start($)
+    const ui = await $.ui.mount({ ...pane, surface: 'desktop' })
+    await goTo(ui, 'ghosted')
+    await ui.press({ key: 'open:quiet-1' })
+    expect(await ui.find({ text: /^Ghosted · / })).toBeDefined()
+    await ui.press({ key: 'restore' })
+    expect(w.leads()[0]?.column).toBe('applied')
+    // Back where the press was, on a stage the card has left.
+    expect(await boardTab(ui)).toBe('stage:ghosted')
+    await goTo(ui, 'applied')
+    expect(await ui.find({ key: 'card:quiet-1' })).toBeDefined()
+  })
+
+  test('the Ghosted button lands the card in Ghosted', async ($, on) => {
+    const w = world(on, { leads: [lead('beta-api', { column: 'applied' })] })
+    await start($)
+    const ui = await $.ui.mount({ ...pane, surface: 'desktop' })
+    await goTo(ui, 'applied')
+    await ui.press({ key: 'ghosted:beta-api' })
+    expect(w.leads()[0]?.column).toBe('archived')
+    await goTo(ui, 'ghosted')
+    expect(await ui.find({ key: 'card:beta-api' })).toBeDefined()
+  })
+
+  test('what email moved and what it left unclear show above the tabs, each opening its lead', async ($, on) => {
+    const week = '2026-10-15T12:00:00.000Z'
+    const stale = '2026-10-10T12:00:00.000Z'
+    const moved = (at: string): Lead['history'] => [
+      { at, by: 'sync', action: 'moved', from: 'applied', to: 'rejected', note: 'Oct 15, a: no' },
+    ]
+    const unclear = (at: string): Lead['history'] => [
+      { at, by: 'sync', action: 'unclear', note: 'Oct 15, Recruiter: asks for references' },
+    ]
+    world(on, {
+      leads: [
+        lead('gone-1', { company: 'Gone', column: 'rejected', history: moved(week) }),
+        lead('old-2', { company: 'Old', column: 'rejected', history: moved(stale) }),
+        lead('what-3', { company: 'What', column: 'applied', history: unclear(week) }),
+        lead('past-4', { company: 'Past', column: 'applied', history: unclear(stale) }),
+      ],
+    })
+    await start($)
+    for (const surface of ['desktop', 'terminal', 'mobile'] as const) {
+      const ui = await $.ui.mount({ ...pane, surface })
+      expect(await ui.find({ type: 'Text', text: /^Moved by email this week:$/ })).toBeDefined()
+      expect((await ui.find({ key: 'sync-moved-notice:gone-1' }))?.props.label).toBe(
+        'Gone · Backend Developer',
+      )
+      expect(await ui.find({ key: 'sync-moved-notice:old-2' })).toBeUndefined()
+      expect(await ui.find({ type: 'Text', text: /^Unclear from email/ })).toBeDefined()
+      expect(await ui.find({ key: 'sync-unclear-notice:what-3' })).toBeDefined()
+      expect(await ui.find({ key: 'sync-unclear-notice:past-4' })).toBeUndefined()
+      await ui.press({ key: 'sync-unclear-notice:what-3' })
+      expect(
+        await ui.find({
+          type: 'Text',
+          text: /^Unclear from email: Oct 15, Recruiter: asks for references$/,
+        }),
+      ).toBeDefined()
+      await ui.press({ key: 'back' })
+      await ui.unmount()
+    }
+  })
+
+  test('a card moved on by hand leaves the sync notice', async ($, on) => {
+    const at = '2026-10-19T12:00:00.000Z'
+    world(on, {
+      leads: [
+        lead('gone-1', {
+          column: 'rejected',
+          history: [{ at, by: 'sync', action: 'moved', from: 'applied', to: 'rejected' }],
+        }),
+      ],
+    })
+    await start($)
+    const ui = await $.ui.mount({ ...pane, surface: 'desktop' })
+    await ui.press({ key: 'sync-moved-notice:gone-1' })
+    await ui.press({ key: 'restore' })
+    expect(await ui.find({ key: 'sync-moved-notice:gone-1' })).toBeUndefined()
+  })
+
+  test('nothing from email, nothing above the tabs', async ($, on) => {
+    world(on, { leads: [lead('a-1')] })
+    await start($)
+    const ui = await $.ui.mount({ ...pane, surface: 'desktop' })
+    expect(await ui.find({ type: 'Text', text: /email/ })).toBeUndefined()
+  })
+
+  test('the Passed & archived toggle is gone', async ($, on) => {
+    world(on, { leads: [lead('a-1')] })
+    await start($)
+    const ui = await $.ui.mount({ ...pane, surface: 'desktop' })
+    expect(await ui.find({ key: 'closed' })).toBeUndefined()
   })
 
   test('a rejection after interviews lands in Rejected; Ghosted stays in Archived', async ($, on) => {
@@ -349,9 +628,9 @@ describe('kanban', () => {
     })
     await start($)
     const ui = await $.ui.mount({ ...pane, surface: 'desktop' })
-    await ui.press({ key: 'tab:interviewing' })
+    await goTo(ui, 'interviewing')
     await ui.press({ key: 'rejected:acme-api' })
-    await ui.press({ key: 'tab:applied' })
+    await goTo(ui, 'applied')
     await ui.press({ key: 'ghosted:beta-api' })
     expect(w.leads().map(one => one.column)).toEqual(['rejected', 'archived'])
   })
@@ -364,7 +643,7 @@ describe('kanban', () => {
     const w = world(on, { leads: [lead('acme-api', { column: 'rejected', history })] })
     await start($)
     const ui = await $.ui.mount({ ...pane, surface: 'desktop' })
-    await ui.press({ key: 'tab:rejected' })
+    await goTo(ui, 'rejected')
     expect(await ui.find({ key: 'restore:acme-api', text: /Back to Archived/ })).toBeDefined()
     expect(await ui.find({ key: 'back-new:acme-api' })).toBeDefined()
     await ui.press({ key: 'restore:acme-api' })
@@ -375,7 +654,7 @@ describe('kanban', () => {
     const w = world(on, { leads: [lead('acme-api', { column: 'rejected' })] })
     await start($)
     const ui = await $.ui.mount({ ...pane, surface: 'desktop' })
-    await ui.press({ key: 'tab:rejected' })
+    await goTo(ui, 'rejected')
     expect(await ui.find({ key: 'restore:acme-api' })).toBeUndefined()
     await ui.press({ key: 'back-new:acme-api' })
     expect(w.leads()[0]?.column).toBe('new')
@@ -522,8 +801,7 @@ describe('kanban', () => {
     expect(await ui.find({ key: 'open:stale-1' })).toBeUndefined()
     expect(await ui.find({ key: 'open:fresh-3' })).toBeDefined()
     // Moved back to New by hand, it stays there through later refreshes.
-    await ui.press({ key: 'closed' })
-    await ui.press({ key: 'tab:archived' })
+    await goTo(ui, 'archived')
     await ui.press({ key: 'back-new:stale-1' })
     await ui.press({ key: 'refresh' })
     expect(w.leads()[0]?.column).toBe('new')
@@ -603,10 +881,10 @@ describe('kanban', () => {
       by: 'tracker',
     })
     expect(toasts).toEqual([
-      'Marked ghosted (no reply a month after applying): Quiet — Backend Developer. Now in Archived; "Back to Applied" on the card undoes it.',
+      'Marked ghosted (no reply a month after applying): Quiet — Backend Developer. Now under Settled, in Ghosted; "Back to Applied" on the card undoes it.',
     ])
     const ui = await $.ui.mount({ ...pane, surface: 'desktop' })
-    await ui.press({ key: 'tab:applied' })
+    await goTo(ui, 'applied')
     expect(await ui.find({ key: 'card:quiet-1' })).toBeUndefined()
     expect(await ui.find({ key: 'card:recent-2' })).toBeDefined()
     // The board names it for a week, for a person who missed the toast; it opens the card.
@@ -686,7 +964,7 @@ describe('kanban', () => {
     expect(toasts.at(-1)).toBe(
       'Prefilling the Acme application in Chrome in the background; Claude says here when it needs only your click.',
     )
-    expect(await boardTab(ui)).toBe('tab:ready')
+    expect(await boardTab(ui)).toBe('stage:ready')
     // A second press, or a redraft, while it runs starts nothing.
     await ui.press({ key: 'submit:acme-api' })
     await ui.press({ key: 'open:acme-api' })
@@ -810,7 +1088,7 @@ describe('kanban', () => {
     await end(3, 'Tab: Acme — https://jobs.example/acme', 'answer')
     expect(prompts).toHaveLength(2)
     expect(toasts.at(-1)).toBe(
-      'The Acme application was prefilled, but its card left Ready to review meanwhile; nothing was sent.',
+      'The Acme application was prefilled, but its card left Ready to apply meanwhile; nothing was sent.',
     )
   })
 
@@ -1060,7 +1338,7 @@ describe('kanban', () => {
     }))
     await start($)
     const ui = await $.ui.mount({ ...pane, surface: 'desktop' })
-    await ui.press({ key: 'tab:ready' })
+    await goTo(ui, 'ready')
     await ui.press({ key: 'submit:acme-api' })
     await $.turn.start({ text: w.spawns[0]?.prompt ?? '', turnId: 'p-1', agentId: 'agent-1' })
     await $.tool.call({
@@ -1131,7 +1409,7 @@ describe('kanban', () => {
     }))
     await start($)
     const ui = await $.ui.mount({ ...pane, surface: 'desktop' })
-    await ui.press({ key: 'tab:ready' })
+    await goTo(ui, 'ready')
     await ui.press({ key: 'submit:acme-api' })
     await $.turn.start({ text: w.spawns[0]?.prompt ?? '', turnId: 'p-1', agentId: 'agent-1' })
     await $.tool.call({
@@ -1504,7 +1782,7 @@ describe('kanban', () => {
   })
 
   for (const surface of ACTING) {
-    test(`Approve and submit all on Ready to review prefills every lead there as one batch (${surface})`, async ($, on) => {
+    test(`Approve and submit all on Ready to apply prefills every lead there as one batch (${surface})`, async ($, on) => {
       const ids = Array.from({ length: 15 }, (_, n) => `co${n}-api`)
       const w = world(on, {
         leads: [
@@ -1538,10 +1816,10 @@ describe('kanban', () => {
       const ui = await $.ui.mount({ ...pane, surface })
       const all = { key: 'submit-all' } as const
 
-      // Only on Ready to review, counting the leads with a package.
-      await ui.press({ key: 'tab:new' })
+      // Only on Ready to apply, counting the leads with a package.
+      await goTo(ui, 'new')
       expect(await ui.find(all)).toBeUndefined()
-      await ui.press({ key: 'tab:ready' })
+      await goTo(ui, 'ready')
       expect((await ui.find(all))?.text).toBe('Approve and submit all (15)')
       const root = (await ui.findAll({}))[0]
       expect(JSON.stringify(root).length).toBeLessThan(100_000)
@@ -1656,14 +1934,14 @@ describe('kanban', () => {
     })
     await start($)
     const mobile = await $.ui.mount({ ...pane, surface: 'mobile' })
-    expect(await mobile.find({ key: 'tab:ready', text: /Ready to review 1/ })).toBeDefined()
+    expect(await mobile.find({ key: 'stage:ready', text: /Ready to apply 1/ })).toBeDefined()
     expect(await mobile.find({ key: 'submit-all' })).toBeUndefined()
     await mobile.unmount()
     const ui = await $.ui.mount({ ...pane, surface: 'desktop' })
     expect((await ui.find({ key: 'submit-all' }))?.text).toBe('Approve and submit all (1)')
     await $.tool.call({ tool: 'mcp__job-tracker__update_lead', id: 'acme-api', column: 'applied' })
-    await ui.press({ key: 'tab:ready' })
-    expect(await ui.find({ text: /^Nothing in Ready to review yet\.$/ })).toBeDefined()
+    await goTo(ui, 'ready')
+    expect(await ui.find({ text: /^Nothing to do\.$/ })).toBeDefined()
     expect(await ui.find({ key: 'submit-all' })).toBeUndefined()
   })
 
@@ -1803,9 +2081,9 @@ describe('kanban', () => {
     await ui.press({ key: 'draft' })
     expect(w.leads()[0]?.column).toBe('drafting')
     // Back on New at once, before the queued prompt has even started.
-    expect(await boardTab(ui)).toBe('tab:new')
+    expect(await boardTab(ui)).toBe('stage:new')
     const redraft = async () => {
-      await ui.press({ key: 'tab:drafting' })
+      await goTo(ui, 'drafting')
       await ui.press({ key: 'open:acme-api' })
       await ui.press({ key: 'redraft' })
     }
@@ -1883,40 +2161,40 @@ describe('kanban', () => {
     await start($)
     const ui = await $.ui.mount({ ...pane, surface: 'desktop' })
     const columnOf = (id: string) => w.leads().find(one => one.id === id)?.column
-    const openOn = async (tab: string, id: string) => {
-      await ui.press({ key: tab })
+    const openOn = async (stage: Stage, id: string) => {
+      await goTo(ui, stage)
       await ui.press({ key: `open:${id}` })
       expect(await boardTab(ui)).toBeUndefined()
     }
 
     // Feedback on the lead keeps it open.
-    await openOn('tab:new', 'a-1')
+    await openOn('new', 'a-1')
     await ui.press({ key: 'too-low' })
     expect(await boardTab(ui)).toBeUndefined()
     // Archive: back on New, where the next lead waits.
     await ui.press({ key: 'archive' })
     expect(columnOf('a-1')).toBe('archived')
-    expect(await boardTab(ui)).toBe('tab:new')
+    expect(await boardTab(ui)).toBe('stage:new')
     expect(await ui.find({ key: 'card:b-2' })).toBeDefined()
 
     // An outcome: back on Applied.
-    await openOn('tab:applied', 'c-3')
+    await openOn('applied', 'c-3')
     await ui.press({ key: 'interview' })
     expect(columnOf('c-3')).toBe('interviewing')
-    expect(await boardTab(ui)).toBe('tab:applied')
+    expect(await boardTab(ui)).toBe('stage:applied')
 
-    // A move back a stage: back on Drafting.
-    await openOn('tab:drafting', 'e-5')
+    // A move back a stage out of a Drafting it empties: its button goes, and the tab shows New.
+    await openOn('drafting', 'e-5')
     await ui.press({ key: 'back-new' })
     expect(columnOf('e-5')).toBe('new')
-    expect(await boardTab(ui)).toBe('tab:drafting')
+    expect(await boardTab(ui)).toBe('stage:new')
 
-    // Approve and submit from the package: back on Ready to review.
-    await openOn('tab:ready', 'd-4')
+    // Approve and submit from the package: back on Ready to apply.
+    await openOn('ready', 'd-4')
     await ui.press({ key: 'review' })
     expect(await ui.find({ key: 'submit' })).toBeDefined()
     await ui.press({ key: 'submit' })
-    expect(await boardTab(ui)).toBe('tab:ready')
+    expect(await boardTab(ui)).toBe('stage:ready')
     await ui.unmount()
   })
 
@@ -1967,11 +2245,11 @@ describe('kanban', () => {
         ...kids.flatMap((kid, n) => problems(kid, `${at}/${n}`)),
       ]
     }
-    await ui.press({ key: 'closed' })
-    for (const column of ['new', 'drafting', 'ready', 'applied', 'rejected', 'passed']) {
-      await ui.press({ key: `tab:${column}` })
+    const stages = ['new', 'ready', 'applied', 'passed', 'archived', 'rejected', 'ghosted'] as const
+    for (const stage of stages) {
+      await goTo(ui, stage)
       const root = (await ui.findAll({}))[0] as unknown as Node
-      expect(problems(root, column)).toEqual([])
+      expect(problems(root, stage)).toEqual([])
     }
   })
 
@@ -1979,7 +2257,7 @@ describe('kanban', () => {
     const w = world(on, { leads: [lead('acme-api')] })
     await start($)
     const ui = await $.ui.mount({ ...pane, surface: 'desktop' })
-    await ui.press({ key: 'tab:drafting' })
+    await goTo(ui, 'applied')
     expect(w.logs.filter(line => /drew/.test(line))).toEqual([
       expect.stringMatching(/^job-tracker: the board drew on desktop in \d+ ms$/),
     ])
@@ -2014,10 +2292,10 @@ describe('kanban', () => {
     world(on, { leads: [lead('acme-api'), lead('beta-api', { column: 'applied' })] })
     await start($)
     const ui = await $.ui.mount({ ...pane, surface: 'mobile' })
-    expect(await ui.find({ key: 'tab:new' })).toBeDefined()
+    expect(await ui.find({ key: 'stage:new' })).toBeDefined()
     expect(await ui.find({ key: 'draft:acme-api' })).toBeUndefined()
     expect(await ui.find({ key: 'refresh' })).toBeUndefined()
-    await ui.press({ key: 'tab:applied' })
+    await goTo(ui, 'applied')
     expect(await ui.find({ key: 'card:beta-api' })).toBeDefined()
     await ui.press({ key: 'open:beta-api' }).catch(() => undefined)
     expect(await ui.find({ key: 'too-high' })).toBeUndefined()
@@ -2062,7 +2340,7 @@ describe('band', () => {
           view: {},
         },
       })
-      expect(await band.find({ text: /2 new leads · 1 ready to review/ })).toBeDefined()
+      expect(await band.find({ text: /2 new leads · 1 ready to apply/ })).toBeDefined()
       expect(await band.find({ text: /follow-up/ })).toBeUndefined()
       await band.unmount()
     }
