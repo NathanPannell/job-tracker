@@ -216,7 +216,8 @@ Ashby board, add `{ "company", "ats", "slug" }` to `profile/ats-boards.json`
 moves a card itself, with no confirmation, for a clear rejection, interview request or offer,
 including a late reply on a ghosted card, and records the outcome for the weekly review. Anything
 unclear stays where it is, with what `sync` found on the card's page. A rejection is filed quietly.
-An interview or offer sends a notification, leads the line above the prompt, and for a week the
+An interview or offer sends a notification where the run can send one, leads the line above the
+prompt, and for a week the
 board lists it above the tabs with what is unclear, each lead a button to its page. If a move is
 wrong, "Back to <where it was>" on the card puts it back and it leaves the list; `sync` then ignores
 the emails from before that press, and so it does after you put a card back from a conversation. An

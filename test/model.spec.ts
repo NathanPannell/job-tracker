@@ -509,6 +509,11 @@ test('the band leads with interviews and offers email brought, never its rejecti
     { company: 'Co0', column: 'interviewing' },
   ])
   assert.equal(bandText(c1), 'Offer: Co2 · Interview: Co0')
+  const busy = {
+    ...c1,
+    news: [...c1.news, { company: 'Co9', column: 'interviewing' as const }, ...c1.news],
+  }
+  assert.equal(bandText(busy), 'Offer: Co2 · Interview: Co0 · 3 more from email')
 })
 
 test('stageLeads sorts best first', () => {

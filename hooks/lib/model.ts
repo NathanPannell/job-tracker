@@ -1310,12 +1310,18 @@ export function counts(file: LeadsFile, now: number): Counts {
   return { newLeads, readyToApply, news }
 }
 
+/** How many interviews and offers the band names before it counts the rest. */
+const BAND_NEWS = 2
+
 /** The band's line, or undefined when there is nothing to say. Interviews and offers lead it. */
 export function bandText(c: Counts): string | undefined {
   const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`
-  const news = c.news.map(
-    one => `${one.column === 'offer' ? 'Offer' : 'Interview'}: ${one.company}`,
-  )
+  // The band is one row: past BAND_NEWS names, the rest is a count.
+  const named = c.news
+    .slice(0, BAND_NEWS)
+    .map(one => `${one.column === 'offer' ? 'Offer' : 'Interview'}: ${one.company}`)
+  const more = c.news.length - named.length
+  const news = more > 0 ? [...named, `${more} more from email`] : named
   const queue =
     c.newLeads + c.readyToApply === 0
       ? []

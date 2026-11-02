@@ -704,7 +704,7 @@ describe('kanban', () => {
     })
     await start($)
     const ui = await $.ui.mount({ ...pane, surface: 'desktop' })
-    for (const stage of ['applied', 'rejected', 'ghosted'] as const) {
+    for (const stage of ['applied', 'interviewing', 'ghosted'] as const) {
       await goTo(ui, stage)
       expect(JSON.stringify((await ui.findAll({}))[0]).length).toBeLessThan(40_000)
     }
