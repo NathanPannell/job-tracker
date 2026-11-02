@@ -247,7 +247,8 @@ async function draftPackage(
  * spawn, the conversation is asked to start the subagent instead.
  */
 async function reviseClarified($: EngineInterface, proposalId: string, changeId: string) {
-  const proposal = (await read($, board)).proposals.find(one => one.id === proposalId)
+  // Read afresh: its revision may have landed since the page drew.
+  const proposal = (await refresh($, false)).proposals.find(one => one.id === proposalId)
   const change = proposal?.changes.find(one => one.id === changeId)
   if (!change || !openClarification(change)) return
   const task = reviseTask(proposalId, change)
@@ -458,19 +459,23 @@ async function finishDraft($: EngineInterface, agentId: string, answer: string, 
   ])
   await refresh($)
   if (run.kind === 'revise') {
-    const proposals = (await read($, board)).proposals
-    const change = proposals
-      .flatMap(proposal => proposal.changes.map(one => ({ proposal, one })))
-      .find(({ proposal, one }) => clarifyKey(proposal.id, one.id) === run.leadId)?.one
-    const why = reason === 'answer' ? '' : ` (${reason})`
+    const found = (await read($, board)).proposals
+      .flatMap(proposal => proposal.changes.map(change => ({ proposal, change })))
+      .find(({ proposal, change }) => clarifyKey(proposal.id, change.id) === run.leadId)
     // Decided while it ran, the change has nothing left to come back for.
-    if (change?.status === 'pending') {
-      $.ui.toast(
-        openClarification(change)
-          ? `"${run.company}" was not revised${why}; Revise now starts it again.`
-          : `"${run.company}" is revised and back for review under Learning proposals.`,
-      )
+    if (found?.change.status !== 'pending') return
+    const open = openClarification(found.change)
+    // Clarified again after this run started: those words were claimed by it, so they get a run.
+    if (open && Date.parse(open.at) > run.at) {
+      await reviseClarified($, found.proposal.id, found.change.id)
+      return
     }
+    const why = reason === 'answer' ? '' : ` (${reason})`
+    $.ui.toast(
+      open
+        ? `"${run.company}" was not revised${why}; Revise now starts it again.`
+        : `"${run.company}" is revised and back for review under Learning proposals.`,
+    )
     return
   }
   if (run.kind === 'submit') {
@@ -664,7 +669,8 @@ function actions($: EngineInterface): Actions {
   return {
     open: id => void show($, { kind: 'lead', id }),
     board: () => void show($, { kind: 'board' }),
-    proposals: () => void show($, { kind: 'proposals' }),
+    // Refreshed on opening: a revision lands whenever its run saves it, in any session.
+    proposals: () => void show($, { kind: 'proposals' }).then(() => refresh($, false)),
     refresh: () => void refresh($),
     toggleClosed: () =>
       void update($, showClosed, value => !value)
@@ -729,10 +735,12 @@ function actions($: EngineInterface): Actions {
         )
         if (!open?.length) return
         const what = changeId === 'all' ? `${open.length} learnings` : `"${open[0]?.title}"`
+        // The ids the page drew, not `all`: a revision that landed since must not be approved
+        // unseen, and the CLI would take it as no longer waiting.
         await act($, `${decision === 'approve' ? 'Approving' : 'Rejecting'} ${what}`, [
           'decide',
           id,
-          changeId,
+          open.map(one => one.id).join(','),
           decision,
         ])
       })(),

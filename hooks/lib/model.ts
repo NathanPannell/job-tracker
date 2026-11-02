@@ -468,7 +468,7 @@ export const MIN_CHANGES = 3
 export const MAX_CHANGES = 10
 /** Each change is short: these bounds keep a page of proposals well under the pane's cap. */
 export const CHANGE_LIMITS = { title: 120, rationale: 300, text: 1200 } as const
-/** A clarification is a few sentences; the pane draws it in full on its change. */
+/** A clarification is a few sentences; the pane clips a long one, the file keeps it whole. */
 export const CLARIFICATION_LIMIT = 1000
 
 /** A proposal as `proposals.json` may hold it: changes saved before per-change decisions. */
@@ -632,19 +632,30 @@ export function clarifyChange(file: ProposalsFile, input: ClarifyInput, at: stri
   return withChange(file, proposal, { ...change, clarifications })
 }
 
-export type ReviseInput = { proposal: string; change: string } & Pick<ProposalChange, 'text'> &
+export type ReviseInput = {
+  proposal: string
+  change: string
+  /** The `at` of the clarification this revision answers. */
+  answers: string
+} & Pick<ProposalChange, 'text'> &
   Partial<Pick<ProposalChange, 'file' | 'title' | 'rationale'>>
 
 /**
  * Replaces the text of a change waiting for its revision (and its title, rationale or file, when
  * given) and marks the clarification answered. Writes no profile file: the change stays pending,
- * for the person to approve, reject or clarify again.
+ * for the person to approve, reject or clarify again. It must name the clarification it answers:
+ * one written from an earlier read would otherwise mark newer words as answered.
  */
 export function reviseChange(file: ProposalsFile, input: ReviseInput, at: string) {
   const { proposal, change } = findChange(file, input.proposal, input.change)
   needPending(proposal, change)
   const open = openClarification(change)
   if (!open) throw new Error(`Change ${change.id} of ${proposal.id} has no clarification to answer`)
+  if (input.answers !== open.at) {
+    throw new Error(
+      `Change ${change.id} of ${proposal.id} waits on its clarification of ${open.at}`,
+    )
+  }
   const revised = {
     ...change,
     file: input.file ?? change.file,
@@ -674,7 +685,7 @@ export const isApprovable = (change: Pick<ProposalChange, 'status' | 'clarificat
   isPending(change) && !openClarification(change)
 
 /**
- * Decides one change of a proposal (`c3`, or `3`), or `all` its pending ones. Repeating a
+ * Decides changes of a proposal (`c3`, `3`, or a list, `c2,c3`), or `all` its pending ones. Repeating a
  * change's decision is a no-op, so a double press appends nothing twice; the opposite decision
  * on a decided change is refused. A change waiting for its revision is never approved, since its
  * text is the one the person corrected: `all` leaves it open.
@@ -695,14 +706,16 @@ export function decideChanges(
     const takes = decision === 'approve' ? isApprovable : isPending
     ids = proposal.changes.filter(takes).map(one => one.id)
   } else {
-    const { change } = findChange(file, id, target)
-    if (change.status !== 'pending' && change.status !== status) {
-      throw new Error(`Change ${change.id} of ${id} is already ${change.status}`)
+    const named = target.split(',').map(one => findChange(file, id, one).change)
+    for (const change of named) {
+      if (change.status !== 'pending' && change.status !== status) {
+        throw new Error(`Change ${change.id} of ${id} is already ${change.status}`)
+      }
+      if (decision === 'approve' && isPending(change) && !isApprovable(change)) {
+        throw new Error(`Change ${change.id} of ${id} is waiting for its revision`)
+      }
     }
-    if (decision === 'approve' && isPending(change) && !isApprovable(change)) {
-      throw new Error(`Change ${change.id} of ${id} is waiting for its revision`)
-    }
-    ids = isPending(change) ? [change.id] : []
+    ids = named.filter(isPending).map(one => one.id)
   }
   const changes = proposal.changes.map(one =>
     ids.includes(one.id) ? { ...one, status, decidedAt: at } : one,

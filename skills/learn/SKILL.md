@@ -46,7 +46,8 @@ board archives a New lead once its posting is that old).
 On Clarify in /jobs the person types what should change on a pending change. It stays pending,
 and approving it is held back until it is revised, so nothing reaches a profile file meanwhile.
 The board starts a background subagent to revise it; a weekly run revises any still waiting
-first, before step 1. For each pending change with a clarification that has no `revisedAt`:
+first, before step 1. A run told to revise one change revises only that one; a weekly run takes
+each pending change with a clarification that has no `revisedAt`:
 
 1. Read the change and its clarifications in `proposals.json`. Read `profile/learnings.md` and
    `profile/preferences.md` so the revision does not repeat or contradict what is already there,
@@ -57,11 +58,12 @@ first, before step 1. For each pending change with a clarification that has no `
    meaning, in the change's own voice, rather than pasting their sentence in. Approving only
    appends, so where their words override a rule already in a profile file, say so in the text.
 3. Save it with `jobs revise '<json>'`, or `jobs revise @<file>`:
-   `{ "proposal": "<id>", "change": "c2", "text": "<new Markdown>" }`, adding `title`, `rationale`
+   `{ "proposal": "<id>", "change": "c2", "answers": "<that clarification's at>", "text": "<new Markdown>" }`, adding `title`, `rationale`
    or `file` when those change too (a clarification that states a preference may move a change
    to `preferences.md`). The limits of step 3 below apply. The change stays pending and comes
    back on the board for the person to approve, reject or clarify again. `revise` refuses a change
-   decided meanwhile, or one with no clarification waiting: that is not an error, so stop there.
+   decided or revised meanwhile, and one clarified again since you read it: that is not an error,
+   so leave that change and go on.
 
 Do nothing else when the task was only this revision: no funnel, no new proposal.
 

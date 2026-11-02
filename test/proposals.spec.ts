@@ -54,6 +54,12 @@ const profile = (dir: string, file: string) => {
   return existsSync(path) ? readFileSync(path, 'utf8') : ''
 }
 
+/** The `at` of the clarification last written on a change: what its revision answers. */
+const waiting = (dir: string, id = 'c1') =>
+  readData(dir, 'proposals')
+    .proposals[0]?.changes.find(one => one.id === id)
+    ?.clarifications?.at(-1)?.at ?? ''
+
 /** The shape `proposals.json` held before per-change decisions. */
 const legacy = (status: 'pending' | 'approved' | 'rejected'): StoredProposal => ({
   id: `old-${status}`,
@@ -314,7 +320,12 @@ test('revise replaces the text, answers the clarification and leaves the change 
   const dir = fresh()
   commands.propose(dir, input(3, { id: 'p' }))
   commands.clarify(dir, { proposal: 'p', change: 'c1', text: 'Only startups.' })
-  const revised = commands.revise(dir, { proposal: 'p', change: '1', text: 'Rule: startups only.' })
+  const revised = commands.revise(dir, {
+    proposal: 'p',
+    change: '1',
+    answers: waiting(dir),
+    text: 'Rule: startups only.',
+  })
   assert.equal(revised.status, 'pending')
   assert.equal(revised.text, 'Rule: startups only.')
   assert.equal(revised.title, 'Learning 1')
@@ -328,6 +339,7 @@ test('revise replaces the text, answers the clarification and leaves the change 
   const again = commands.revise(dir, {
     proposal: 'p',
     change: 'c1',
+    answers: waiting(dir),
     text: 'Rule: remote startups only.',
     title: '  Remote startups  ',
     rationale: 'You said so',
@@ -352,12 +364,14 @@ test('revise refuses a change with nothing to answer, a decided one and a malfor
   const dir = fresh()
   commands.propose(dir, input(3, { id: 'p' }))
   const revise = (change: string, patch: object = {}) =>
-    commands.revise(dir, { proposal: 'p', change, text: 'New.', ...patch })
+    commands.revise(dir, { proposal: 'p', change, answers: waiting(dir), text: 'New.', ...patch })
   assert.throws(() => revise('c1'), /Change c1 of p has no clarification to answer/)
   commands.clarify(dir, { proposal: 'p', change: 'c1', text: 'Hm' })
   assert.throws(() => revise('c1', { text: ' ' }), /Change c1 needs the text/)
   assert.throws(() => revise('c1', { text: 'x'.repeat(1201) }), /text is 1201 characters/)
   assert.throws(() => revise('c1', { file: 'notes.md' }), /needs file/)
+  // One written from an earlier read cannot mark newer words as answered.
+  assert.throws(() => revise('c1', { answers: 'earlier' }), /waits on its clarification of 20/)
   // A refused revision leaves the change waiting.
   assert.ok(openClarification(readData(dir, 'proposals').proposals[0]?.changes[0] as never))
   commands.decide(dir, 'p', 'c1', 'reject')
@@ -388,6 +402,24 @@ test('a change waiting for its revision cannot be approved; it can be rejected',
   assert.equal(isApprovable({ status: 'approved' }), false)
 })
 
+test('decide takes a list of changes, all or none', () => {
+  const dir = fresh()
+  commands.propose(dir, input(4, { id: 'p' }))
+  assert.deepEqual(commands.decide(dir, 'p', 'c2,3', 'approve').decided, [
+    { id: 'c2', status: 'approved' },
+    { id: 'c3', status: 'approved' },
+  ])
+  assert.throws(() => commands.decide(dir, 'p', 'c1,c9', 'approve'), /has no change c9/)
+  assert.throws(() => commands.decide(dir, 'p', 'c1,c2', 'reject'), /c2 of p is already approved/)
+  commands.clarify(dir, { proposal: 'p', change: 'c4', text: 'Hm' })
+  assert.throws(() => commands.decide(dir, 'p', 'c1,c4', 'approve'), /c4 of p is waiting/)
+  assert.deepEqual(
+    readData(dir, 'proposals').proposals[0]?.changes.map(one => one.status),
+    ['pending', 'approved', 'approved', 'pending'],
+  )
+  assert.doesNotMatch(profile(dir, 'learnings.md'), /Learning 1/)
+})
+
 test('a rerun of the review never replaces a proposal the person clarified', () => {
   const dir = fresh()
   commands.propose(dir, input(3, { id: 'same-day' }))
@@ -397,7 +429,8 @@ test('a rerun of the review never replaces a proposal the person clarified', () 
     /already has clarified changes/,
   )
   // A clarification answered long ago counts too: the words are what is kept.
-  commands.revise(dir, { proposal: 'same-day', change: 'c1', text: 'New.' })
+  const answers = waiting(dir)
+  commands.revise(dir, { proposal: 'same-day', change: 'c1', answers, text: 'New.' })
   assert.throws(
     () => commands.propose(dir, input(3, { id: 'same-day' })),
     /already has clarified changes/,
@@ -423,7 +456,12 @@ test('a legacy proposal takes a clarification and leaves the others as they were
   assert.equal(clarified.change.id, 'c2')
   const revised = reviseChange(
     clarified.file,
-    { proposal: 'old-pending', change: 'c2', text: 'New' },
+    {
+      proposal: 'old-pending',
+      change: 'c2',
+      answers: '2026-10-28T00:00:00.000Z',
+      text: 'New',
+    },
     '2026-10-29T00:00:00.000Z',
   )
   assert.equal(revised.change.clarifications?.[0]?.revisedAt, '2026-10-29T00:00:00.000Z')
@@ -451,7 +489,8 @@ test('the CLI clarifies and revises from a JSON argument, whatever the words sta
   const text = '--not this, "senior"\nroles'
   const change = run('clarify', JSON.stringify({ proposal: 'p', change: 'c1', text }))
   assert.equal(change.clarifications[0].text, text)
-  const revision = JSON.stringify({ proposal: 'p', change: 'c1', text: 'New.' })
+  const answers = change.clarifications[0].at
+  const revision = JSON.stringify({ proposal: 'p', change: 'c1', answers, text: 'New.' })
   assert.equal(run('revise', revision).text, 'New.')
 })
 

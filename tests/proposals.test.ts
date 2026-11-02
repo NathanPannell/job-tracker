@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 
-import { reviseChange } from '../hooks/lib/model.ts'
+import { clarifyChange, reviseChange } from '../hooks/lib/model.ts'
 import type { StoredProposal } from '../hooks/lib/model.ts'
 import { DATA, NOW, PANE_PROPS, world } from './world.ts'
 
@@ -75,6 +75,15 @@ async function clarified($: Engine, text = WORDS) {
 /** Subagent a1's own turn ends. */
 const subagentEnds = ($: Engine, answer: string, reason: 'answer' | 'error') =>
   $.turn.complete({ answer, durationMs: 1, isAborted: false, turnId: 't1', agentId: 'a1', reason })
+
+/** A subagent's revision of c1 saved to the file, without the pane hearing of it. */
+function landRevision(w: ReturnType<typeof world>, text: string) {
+  const path = `${DATA}/proposals.json`
+  const answers = new Date(NOW).toISOString()
+  const input = { proposal: 'p', change: 'c1', answers, text }
+  const stored = JSON.parse(w.files.get(path) ?? '{}')
+  w.files.set(path, JSON.stringify(reviseChange(stored, input, '2026-10-20T13:00:00.000Z').file))
+}
 
 const statuses = (w: ReturnType<typeof world>) => w.proposals()[0]?.changes.map(one => one.status)
 
@@ -164,7 +173,7 @@ describe('learning proposals', () => {
     await ui.press({ key: 'approve:p:all' })
     expect(decides(w.runs)).toEqual([
       ['p', 'c1', 'reject'],
-      ['p', 'all', 'approve'],
+      ['p', 'c2,c3,c4', 'approve'],
     ])
     const statuses = (id: string) =>
       w
@@ -270,7 +279,12 @@ describe('learning proposals', () => {
     // The subagent saves its revision through the CLI.
     const path = `${DATA}/proposals.json`
     const stored = JSON.parse(w.files.get(path) ?? '{}')
-    const input = { proposal: 'p', change: 'c1', text: 'Rule 1, for big companies only.' }
+    const input = {
+      proposal: 'p',
+      change: 'c1',
+      answers: new Date(NOW).toISOString(),
+      text: 'Rule 1, for big companies only.',
+    }
     w.files.set(path, JSON.stringify(reviseChange(stored, input, '2026-10-20T13:00:00.000Z').file))
     await subagentEnds($, 'Narrowed it.', 'answer')
     expect(toasts.at(-1)).toMatch(/"Learning 1" is revised and back for review/)
@@ -379,6 +393,77 @@ describe('learning proposals', () => {
     expect(statuses(w)).toEqual(['pending', 'approved', 'approved'])
     expect(w.profile('learnings.md')).not.toMatch(/Learning 1 /)
     expect(w.proposals()[0]?.status).toBe('pending')
+  })
+
+  test('Approve all remaining approves what the page shows, not a revision that landed since', async ($, on) => {
+    const w = world(on, { proposals: [proposal('p', 3)] })
+    await start($)
+    const ui = await $.ui.mount({ ...pane, surface: 'desktop' })
+    await ui.press({ key: 'proposals' })
+    await clarified($)
+    // The revision lands; the page has not refreshed, so it still shows c1 as waiting.
+    landRevision(w, 'The revised rule nobody has read.')
+    await ui.press({ key: 'approve:p:all' })
+    expect(decides(w.runs)).toEqual([['p', 'c2,c3', 'approve']])
+    expect(statuses(w)).toEqual(['pending', 'approved', 'approved'])
+    expect(w.profile('learnings.md')).not.toMatch(/nobody has read/)
+    // The write refreshed the page: the revision is there to read, and Approve is back.
+    expect(await ui.find({ key: 'text:p:c1', text: /nobody has read/ })).toBeDefined()
+    expect(await ui.find({ key: 'approve:p:c1' })).toBeDefined()
+  })
+
+  test('opening the page shows a revision saved since the board last read', async ($, on) => {
+    const w = world(on, { proposals: [proposal('p', 3)] })
+    await start($)
+    const ui = await $.ui.mount({ ...pane, surface: 'desktop' })
+    await ui.press({ key: 'proposals' })
+    await clarified($)
+    await ui.press({ key: 'back' })
+    landRevision(w, 'Saved by a weekly run in another session.')
+    await ui.press({ key: 'proposals' })
+    expect(await ui.find({ key: 'text:p:c1', text: /weekly run in another/ })).toBeDefined()
+  })
+
+  test('Revise now on a change revised meanwhile starts nothing', async ($, on) => {
+    const seeded = proposal('p', 3)
+    const clarifications = [{ at: new Date(NOW).toISOString(), text: WORDS, was: 'Old' }]
+    const [first, ...rest] = seeded.changes
+    const w = world(on, {
+      proposals: [{ ...seeded, changes: [{ ...first, clarifications }, ...rest] }],
+    } as never)
+    await start($)
+    const ui = await $.ui.mount({ ...pane, surface: 'desktop' })
+    await ui.press({ key: 'proposals' })
+    expect(await ui.find({ key: 'revise:p:c1' })).toBeDefined()
+    landRevision(w, 'Already done.')
+    await ui.press({ key: 'revise:p:c1' })
+    expect(w.spawns).toEqual([])
+    expect(await ui.find({ key: 'text:p:c1', text: /Already done/ })).toBeDefined()
+  })
+
+  test('words added as a run ends get a run of their own', async ($, on) => {
+    const w = world(on, { proposals: [proposal('p', 3)] })
+    on('ui.toast', () => ({ value: undefined }))
+    on('turn.start', (_, e) => ({ turnId: e.turnId }))
+    on('turn.complete', (_, e) => ({ text: e.answer }))
+    await start($)
+    const ui = await $.ui.mount({ ...pane, surface: 'desktop' })
+    await ui.press({ key: 'proposals' })
+    await clarified($)
+    await $.turn.start({ agentId: 'a1', text: w.spawns[0]?.prompt ?? '', turnId: 't1' })
+    landRevision(w, 'First revision.')
+    const path = `${DATA}/proposals.json`
+    const later = clarifyChange(
+      JSON.parse(w.files.get(path) ?? '{}'),
+      { proposal: 'p', change: 'c1', text: 'And only in Canada.' },
+      '2026-10-20T13:30:00.000Z',
+    )
+    w.files.set(path, JSON.stringify(later.file))
+    await subagentEnds($, 'Revised.', 'answer')
+    expect(w.spawns).toHaveLength(2)
+    expect(
+      await ui.find({ type: 'Text', text: /^Your clarification: And only in Canada\./ }),
+    ).toBeDefined()
   })
 
   test('only a waiting change left: no Approve all, and Reject still ends it', async ($, on) => {

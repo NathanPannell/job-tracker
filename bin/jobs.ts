@@ -45,15 +45,15 @@ const USAGE = `jobs <command> [args] [--data <dir>]
   submitted <id>                         the person submitted it: move to Applied
   propose <json|@file>                   add a learning proposal: 3-10 changes, each decided
                                          on its own (fewer than 3 needs a fewerReason)
-  decide <proposal-id> <change-id>|all approve|reject
-                                         approve (append to its profile file) or reject one
-                                         change (c1, c2, ... or 1, 2, ...), or all pending ones;
+  decide <proposal-id> <change-ids>|all approve|reject
+                                         approve (append to its profile file) or reject changes
+                                         (c1, 2 or a list, c1,c3), or all pending ones;
                                          decide <proposal-id> approve|reject decides all
   clarify <json|@file>                   { proposal, change, text }: the person's words on a
                                          pending change, which stays open until it is revised
-  revise <json|@file>                    { proposal, change, text, title?, rationale?, file? }:
-                                         the change rewritten from its clarification, pending
-                                         for the person again
+  revise <json|@file>                    { proposal, change, answers, text, title?, rationale?,
+                                         file? }: the change rewritten from the clarification
+                                         named by its at in answers, pending for the person
   edits                                  the person's edits to drafted packages, as diffs
   ats [--all]                            fetch the Greenhouse/Lever/Ashby boards in profile/ats-boards.json
   probe <slug>... [--company name]       which ATS (if any) has a public board under this slug
