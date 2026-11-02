@@ -605,6 +605,54 @@ describe('kanban', () => {
     expect(await ui.find({ key: 'sync-moved-notice:gone-1' })).toBeUndefined()
   })
 
+  test('a full page under full notices stays well under the pane tree cap', async ($, on) => {
+    const at = '2026-10-19T12:00:00.000Z'
+    const long = (id: string, fields: Partial<Lead>) =>
+      lead(id, {
+        company: 'C'.repeat(60),
+        role: 'R'.repeat(120),
+        tagline: 'x'.repeat(60),
+        location: 'L'.repeat(60),
+        ...fields,
+      })
+    const many = (name: string, fields: Partial<Lead>) =>
+      Array.from({ length: 30 }, (_, n) => long(`${name}-${n}`, fields))
+    world(on, {
+      leads: [
+        ...many('moved', {
+          column: 'rejected',
+          history: [{ at, by: 'sync', action: 'moved', from: 'applied', to: 'rejected' }],
+        }),
+        ...many('open', {
+          column: 'applied',
+          history: [{ at, by: 'sync', action: 'unclear', note: 'n'.repeat(4000) }],
+        }),
+        ...many('quiet', {
+          column: 'archived',
+          history: [
+            {
+              at,
+              by: 'tracker',
+              action: 'moved',
+              from: 'applied',
+              to: 'archived',
+              note: 'no reply 1 month after applying (ghosted)',
+            },
+          ],
+        }),
+      ],
+    })
+    await start($)
+    const ui = await $.ui.mount({ ...pane, surface: 'desktop' })
+    for (const stage of ['applied', 'rejected', 'ghosted'] as const) {
+      await goTo(ui, stage)
+      expect(JSON.stringify((await ui.findAll({}))[0]).length).toBeLessThan(40_000)
+    }
+    expect(await ui.findAll({ type: 'Button' })).not.toHaveLength(0)
+    await ui.press({ key: 'sync-unclear-notice:open-0' })
+    expect(JSON.stringify((await ui.findAll({}))[0]).length).toBeLessThan(20_000)
+  })
+
   test('nothing from email, nothing above the tabs', async ($, on) => {
     world(on, { leads: [lead('a-1')] })
     await start($)
