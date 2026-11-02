@@ -104,9 +104,11 @@ DETECTED`, the person submitted it. Never refill it; it waits for their word (st
    skill reads changes to it as the person's own edits, and the next build reads the saved
    answers anyway. If anything is still open, say which numbers in one line, without asking them
    again. If not, go to step 6.
-6. When nothing is open and no lead is still being prefilled, read each tab back (read_page or
-   get_page_text) to yourself and refill whatever was lost. Leave out a lead that has a `STRAY SUBMIT
-   DETECTED` report: never tell the person it needs a click. Then say so once, in one message, with
+6. When nothing is open, no lead is still being prefilled and you hold every report a prompt says
+   is in this conversation (one that lands alongside this one may still be queued, and may hold a
+   question: wait for it), read each tab back (read_page or get_page_text) to yourself and refill
+   whatever was lost. Leave out a lead that has a `STRAY SUBMIT DETECTED` report and any tab that
+   reads as sent: never tell the person those need a click. Then say so once, in one message, with
    no checklist:
 
    ```markdown
