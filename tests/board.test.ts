@@ -588,6 +588,58 @@ describe('kanban', () => {
     }
   })
 
+  test('a card email moved to Interviews or Offers can go back where it was', async ($, on) => {
+    const at = '2026-10-19T12:00:00.000Z'
+    const w = world(on, {
+      leads: [
+        lead('screen-1', {
+          column: 'interviewing',
+          history: [{ at, by: 'sync', action: 'moved', from: 'applied', to: 'interviewing' }],
+        }),
+        lead('byhand-2', {
+          column: 'interviewing',
+          history: [{ at, by: 'user', action: 'moved', from: 'applied', to: 'interviewing' }],
+        }),
+      ],
+    })
+    await start($)
+    const ui = await $.ui.mount({ ...pane, surface: 'desktop' })
+    await goTo(ui, 'interviewing')
+    expect(await ui.find({ key: 'restore:byhand-2' })).toBeUndefined()
+    expect(await ui.find({ key: 'restore:screen-1', text: /Back to Applied/ })).toBeDefined()
+    await ui.press({ key: 'restore:screen-1' })
+    expect(w.leads()[0]?.column).toBe('applied')
+  })
+
+  test('a late rejection undone goes back to Ghosted, not to plain Archived', async ($, on) => {
+    const at = '2026-10-19T12:00:00.000Z'
+    const w = world(on, {
+      leads: [
+        lead('late-1', {
+          column: 'rejected',
+          history: [
+            {
+              at,
+              by: 'tracker',
+              action: 'moved',
+              from: 'applied',
+              to: 'archived',
+              note: 'no reply 1 month after applying (ghosted)',
+            },
+            { at, by: 'sync', action: 'moved', from: 'archived', to: 'rejected' },
+          ],
+        }),
+      ],
+    })
+    await start($)
+    const ui = await $.ui.mount({ ...pane, surface: 'desktop' })
+    await goTo(ui, 'rejected')
+    await ui.press({ key: 'restore:late-1' })
+    expect(w.leads()[0]?.column).toBe('archived')
+    await goTo(ui, 'ghosted')
+    expect(await ui.find({ key: 'card:late-1' })).toBeDefined()
+  })
+
   test('a card moved on by hand leaves the sync notice', async ($, on) => {
     const at = '2026-10-19T12:00:00.000Z'
     world(on, {

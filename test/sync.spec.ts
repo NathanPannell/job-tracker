@@ -1,7 +1,15 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import { noteUnclear, openUnclear, SYNC_NOTICE_DAYS, syncNotices } from '../hooks/lib/model.ts'
+import {
+  GHOST_NOTE,
+  isMovedByEmail,
+  noteUnclear,
+  openUnclear,
+  restoreNote,
+  SYNC_NOTICE_DAYS,
+  syncNotices,
+} from '../hooks/lib/model.ts'
 import type { HistoryEntry, Lead, LeadsFile } from '../hooks/lib/model.ts'
 
 const AT = '2026-10-20T12:00:00.000Z'
@@ -69,6 +77,32 @@ test('a lead keeps its latest unclear note until the card moves', () => {
     openUnclear({ history: [unclear(daysAgo(3)), moved(daysAgo(1), 'sync', 'offer')] }),
     undefined,
   )
+})
+
+test('the board ghosting a lead leaves its unclear reply standing', () => {
+  const swept = { ...moved(daysAgo(1), 'tracker', 'archived'), note: GHOST_NOTE }
+  assert.equal(openUnclear({ history: [unclear(daysAgo(3)), swept] })?.note, unclear('').note)
+  const file = board([unclear(daysAgo(3)), swept])
+  assert.deepEqual(ids(syncNotices(file, NOW).unclear), ['lead-0'])
+})
+
+test('a card email moved last can be undone; one moved since cannot be taken for it', () => {
+  assert.ok(isMovedByEmail({ history: [moved(daysAgo(1), 'sync', 'interviewing')] }))
+  assert.ok(
+    !isMovedByEmail({
+      history: [moved(daysAgo(2), 'sync', 'interviewing'), moved(daysAgo(1), 'user', 'offer')],
+    }),
+  )
+  assert.ok(!isMovedByEmail({ history: [] }))
+})
+
+test('a ghosted lead sent elsewhere goes back with its ghosted note', () => {
+  const ghosted = { ...moved(daysAgo(3), 'tracker', 'archived'), note: GHOST_NOTE }
+  const rejected = { ...moved(daysAgo(1), 'sync', 'rejected'), from: 'archived' as const }
+  assert.equal(restoreNote({ column: 'rejected', history: [ghosted, rejected] }), GHOST_NOTE)
+  const archived = moved(daysAgo(3), 'user', 'archived')
+  assert.equal(restoreNote({ column: 'rejected', history: [archived, rejected] }), undefined)
+  assert.equal(restoreNote({ column: 'new', history: [] }), undefined)
 })
 
 test('noteUnclear records the note on the lead and leaves its column alone', () => {

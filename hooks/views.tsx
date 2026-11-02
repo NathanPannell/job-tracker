@@ -19,12 +19,14 @@ import {
   defaultStage,
   isApprovable,
   isGhosted,
+  isMovedByEmail,
   leadAges,
   openClarification,
   openUnclear,
   previousColumn,
   PASS_REASONS,
   recentlyGhosted,
+  restoreNote,
   scoreTone,
   sourceLabel,
   STAGE_ACTIONS,
@@ -50,7 +52,7 @@ export type Actions = {
   tab: (tab: BoardTab) => void
   stage: (stage: Stage) => void
   more: () => void
-  move: (lead: Lead, to: Column) => void
+  move: (lead: Lead, to: Column, note?: string) => void
   outcome: (lead: Lead, to: Column, reason: string) => void
   askPass: (lead: Lead) => void
   cancelPass: () => void
@@ -148,7 +150,7 @@ function run(ctx: ViewContext, lead: Lead, action: StageAction): void {
   }
   // While an earlier press is still being written, a second one would record it twice.
   if (ctx.busy) return
-  if (action.kind === 'move') act.move(lead, action.to)
+  if (action.kind === 'move') act.move(lead, action.to, action.note)
   else if (action.kind === 'outcome') act.outcome(lead, action.to, action.reason)
   else if (action.kind === 'draft') act.draft(lead)
   else if (action.kind === 'review') act.review(lead)
@@ -168,14 +170,18 @@ function stageButtons(ctx: ViewContext, lead: Lead, suffix: string): RenderEleme
   if (actions.length === 0 && lead.column === 'ready') {
     actions.push({ key: 'draft', label: 'Draft package', kind: 'draft', primary: true })
   }
-  // A closed lead can go straight back to where it was, undoing a mis-click.
+  // A closed lead can go straight back to where it was, undoing a mis-click, and so can a card
+  // email moved: nobody saw that move before it was made.
   const from = previousColumn(lead)
-  if (['rejected', 'passed', 'archived'].includes(lead.column) && from && from !== 'new') {
+  const isClosed = ['rejected', 'passed', 'archived'].includes(lead.column)
+  if ((isClosed || isMovedByEmail(lead)) && from && from !== 'new') {
+    const note = restoreNote(lead)
     actions.unshift({
       key: 'restore',
       label: `Back to ${COLUMN_TITLES[from]}`,
       kind: 'move',
       to: from,
+      ...(note ? { note } : {}),
     })
   }
   return actions.map(action => (

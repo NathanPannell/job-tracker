@@ -43,8 +43,10 @@ import {
   counts,
   draftRelay,
   draftTask,
+  GHOSTED_REASON,
   isApprovable,
   isColumn,
+  isGhosted,
   leadsToMention,
   nudgeContext,
   openClarification,
@@ -220,7 +222,8 @@ async function draftPackage(
     await release()
     if (lead.column === 'drafting') return
     const reason = lead.column === 'passed' ? ['--reason', lead.passReason ?? 'Not interested'] : []
-    await act($, 'Undoing the move', ['move', lead.id, lead.column, ...reason])
+    const note = isGhosted(lead) ? ['--note', GHOSTED_REASON] : []
+    await act($, 'Undoing the move', ['move', lead.id, lead.column, ...reason, ...note])
   }
   const label = `Drafting the ${lead.company} package`
   let refused: string
@@ -690,10 +693,13 @@ async function leave($: EngineInterface, lead: Lead) {
 }
 
 function actions($: EngineInterface): Actions {
-  const move = (lead: Lead, to: Column) =>
-    void act($, `Moving ${lead.company}`, ['move', lead.id, to]).then(result =>
-      result.ok ? leave($, lead) : undefined,
-    )
+  const move = (lead: Lead, to: Column, note?: string) =>
+    void act($, `Moving ${lead.company}`, [
+      'move',
+      lead.id,
+      to,
+      ...(note ? ['--note', note] : []),
+    ]).then(result => (result.ok ? leave($, lead) : undefined))
   return {
     open: id => void show($, { kind: 'lead', id }),
     board: () => void show($, { kind: 'board' }),

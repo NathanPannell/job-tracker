@@ -103,7 +103,7 @@ export const columnTitle = (column: string): string =>
  * `outcome` also records what the company decided (`reason`) for the weekly review.
  */
 export type StageAction =
-  | { key: string; label: string; kind: 'move'; to: Column; primary?: true }
+  | { key: string; label: string; kind: 'move'; to: Column; note?: string; primary?: true }
   | { key: string; label: string; kind: 'outcome'; to: Column; reason: string; primary?: true }
   | { key: string; label: string; kind: 'pass' | 'draft' | 'review' | 'submit'; primary?: true }
 
@@ -475,9 +475,14 @@ export function ghostSilent(
 /** How many days the board names what email moved or left unclear. */
 export const SYNC_NOTICE_DAYS = 7
 
-/** What email left unclear on a lead, until the card moves on. */
+/**
+ * What email left unclear on a lead, until someone moves the card on. The board's own sweep settles
+ * nothing: a reply left unclear on a lead it ghosted is still waiting for the person.
+ */
 export function openUnclear(lead: Pick<Lead, 'history'>): HistoryEntry | undefined {
-  const last = lead.history.findLast(entry => ['moved', 'unclear'].includes(entry.action))
+  const last = lead.history.findLast(
+    entry => entry.action === 'unclear' || (entry.action === 'moved' && entry.by !== 'tracker'),
+  )
   return last?.action === 'unclear' ? last : undefined
 }
 
@@ -485,6 +490,19 @@ export function openUnclear(lead: Pick<Lead, 'history'>): HistoryEntry | undefin
 function syncMove(lead: Pick<Lead, 'history'>): HistoryEntry | undefined {
   const last = lastMove(lead)
   return last?.by === 'sync' ? last : undefined
+}
+
+/** Whether email made the card's last move, which a press can undo as a closed lead's can. */
+export const isMovedByEmail = (lead: Pick<Lead, 'history'>) => syncMove(lead) !== undefined
+
+/**
+ * The note a "Back to" press carries: a ghosted lead sent elsewhere goes back to being ghosted, not
+ * to plain Archived.
+ */
+export function restoreNote(lead: Pick<Lead, 'column' | 'history'>): string | undefined {
+  const from = previousColumn(lead)
+  const into = lead.history.findLast(entry => entry.action === 'moved' && entry.to === from)
+  return into && isGhostMove(into) ? into.note : undefined
 }
 
 /**

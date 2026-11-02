@@ -217,8 +217,10 @@ moves a card itself, with no confirmation, for a clear rejection, interview requ
 including a late reply on a ghosted card, and records the outcome for the weekly review. Anything
 unclear stays where it is, with what `sync` found on the card's page. For a week the board lists
 what email moved and what is unclear above the tabs, each lead a button to its page. If a move is
-wrong, a press on the card puts it back and it leaves the list; `sync` then ignores the emails from
-before that press. It never sends, drafts, labels or deletes email and never touches calendar
+wrong, "Back to <where it was>" on the card puts it back and it leaves the list; `sync` then ignores
+the emails from before that press, and so it does after you put a card back from a conversation. An
+unclear reply is not an outcome, so the month before ghosting still runs, and the card stays listed
+as unclear if it is ghosted meanwhile. It never sends, drafts, labels or deletes email and never touches calendar
 events.
 
 ## The schedule
