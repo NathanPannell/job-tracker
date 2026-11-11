@@ -586,12 +586,17 @@ export function revise(dir: string, input: ReviseInput) {
 
 export type PackageEdit = { leadId: string; file: string; diff: string }
 
-/** The person's edits to each drafted package: a diff per file changed since it was drafted. */
+/**
+ * The person's edits to each drafted package: a diff per file changed since it was drafted.
+ * Only files a package still has count; an old snapshot of a dropped file (`warm-intro.md`) does not.
+ */
 export function edits(dir: string): PackageEdit[] {
+  const drafted = new Set<string>(Object.values(PACKAGE_FILES))
   return readData(dir, 'applications').applications.flatMap(app => {
     const draft = join(dir, app.dir, '.draft')
     if (!existsSync(draft)) return []
     return readdirSync(draft).flatMap(name => {
+      if (!drafted.has(name)) return []
       const current = join(dir, app.dir, name)
       if (!existsSync(current)) return []
       const diff = diffFiles(join(draft, name), current, 1)

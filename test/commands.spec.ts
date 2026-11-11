@@ -431,7 +431,7 @@ test('a package is registered with its diff, draft snapshot and files, then subm
   assert.throws(() => commands.rerenderPreview(dir, 'other', fake), /No package registered/)
 })
 
-/** A lead in Drafting with a package on disk, as the package skill leaves it before step 9. */
+/** A lead in Drafting with a package on disk, as the package skill leaves it before step 8. */
 const drafted = () => {
   const dir = fresh()
   commands.add(dir, [lead('Acme')])
@@ -465,6 +465,13 @@ test('a recorded package has no warm intro, even beside an old warm-intro.md', (
   const stored = readData(dir, 'applications').applications[0]
   assert.ok(stored && !('warmIntro' in stored.files) && !('warmIntroDraftId' in stored))
   assert.ok(!existsSync(join(pkg, '.draft', 'warm-intro.md')))
+  // An old snapshot of the note, edited since, is not an edit the learning loop sees.
+  writeFileSync(join(pkg, '.draft', 'warm-intro.md'), '# Warm intro\n\nAsk Alex.')
+  writeFileSync(join(pkg, 'cover-letter.md'), 'Dear Acme team')
+  assert.deepEqual(
+    commands.edits(dir).map(one => one.file),
+    ['cover-letter.md'],
+  )
 })
 
 test('package moves a card still in Drafting to Ready to apply', () => {
