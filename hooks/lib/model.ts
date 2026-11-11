@@ -1529,7 +1529,7 @@ function batchNote(others: readonly BatchLead[]): string {
     "Reply as the skill's step 4 says: a short numbered list of only what you cannot infer from",
     'the record, across every application I approved in this conversation and have not submitted,',
     'asking nothing a second time. Show no checklist and repeat nothing that is in the forms. With',
-    'nothing new to ask, reply in one line. Once nothing is open, go on as its step 6 says: wait for my go,',
+    'nothing new to ask, reply in one line. Once nothing is open, go on as its step 6 says: wait for my go (one I already gave counts),',
     'then fill every form in fresh tabs in one sitting and say once that they need only my click.',
   ].join(' ')
 }
