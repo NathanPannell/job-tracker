@@ -1,6 +1,6 @@
 ---
 name: submit
-description: Fill in a job application from an approved package in Claude in Chrome, upload the résumé PDF, infer what the record implies, ask the person a short numbered list of only what it cannot answer (saving each answer to the shared knowledge base so it is never asked again), then on their go fill the whole batch in fresh tabs in one sitting and say once when every application needs only their click. The person clicks the final submit themself; when they say the applications are submitted, move the cards to Applied. Use when the person approves a package ("Approve and submit" on the job board, or "submit the application for <lead>"), and when they say applications are submitted.
+description: Fill in a job application from an approved package in Claude in Chrome, upload the résumé PDF, infer what the record implies, ask the person a short numbered list of only what it cannot answer (saving each answer to the shared knowledge base so it is never asked again), then on their go fill the whole batch in fresh tabs in one sitting and say once when every application needs only their click. The person's go starts that sitting; they click the final submit themself; when they say the applications are submitted, move the cards to Applied. Use when the person approves a package ("Approve and submit" on the job board, or "submit the application for <lead>"), and when they say applications are submitted.
 ---
 
 # Submit
@@ -119,10 +119,12 @@ submitted it. Never refill that lead; it waits for their word (step 7).
    is. Then, in the conversation itself, with no subagents:
    1. Work out which leads are still to fill. Leave out a lead with a `STRAY SUBMIT DETECTED`
       report, one no longer in Ready to apply (`jobs list --column ready`), one with a
-      `packages/<id>/submission.md`, and one whose old tab reads as sent (get_page_text on each
-      old tab of the batch). An old tab that does not answer (frozen or gone) proves nothing:
-      if the person may have clicked in it, ask in one line whether that lead was submitted
-      before you fill it. Never fill or offer a lead that may be sent.
+      `packages/<id>/submission.md`, one whose old tab reads as sent (get_page_text on each old
+      tab of the batch), and one with a confirmation email since its approval (Gmail, as in step
+      7, if connected). An old tab that does not answer, is gone, or reads as a blank form proves
+      nothing: a reloaded form can hide a sent one. Ask about all such leads in one line before
+      you fill them. Never fill or offer a lead that may be sent. If no lead is left to fill, say
+      so in one line and stop.
    2. Read what the fill needs for every remaining lead in one go: the files in "Before you
       start", and each prefill report's "Filled" list.
    3. Open one fresh tab per lead with tabs_create_mcp, then navigate them all to their
@@ -145,7 +147,8 @@ submitted it. Never refill that lead; it waits for their word (step 7).
 
    Then say so once, in one message, with no checklist and no form contents. Never tell the person
    a lead needs a click when its tab reads as sent or it has a `STRAY SUBMIT DETECTED` report; a
-   lead waiting on a hand-off gets its own line after the list.
+   lead waiting on a hand-off gets its own line after the list. Where the form sends a résumé
+   other than `resume.pdf` (Wellfound's profile copy), say so on that lead's line.
 
    ```markdown
    All 3 are filled and need only your click:

@@ -386,7 +386,9 @@ test('a prefill report asks each open question once and says once that the batch
   assert.match(alone, /a short numbered list of only what you cannot infer from the record/)
   assert.match(alone, /asking nothing a second time/)
   assert.match(alone, /Show no checklist and repeat nothing that is in the forms/)
-  assert.match(alone, /Once every application needs only my click, say so once/)
+  assert.match(alone, /Once nothing is open, go on as its step 6 says/)
+  assert.match(alone, /wait for my go/)
+  assert.doesNotMatch(alone, /Once every application needs only my click/)
   const others = [
     { id: 'beta-api', company: 'Beta', role: 'SRE', isPrefilled: true },
     { id: 'gamma-ui', company: 'Gamma', role: 'Frontend', isPrefilled: false },
@@ -410,6 +412,10 @@ test('a lead dropping out of its batch claims nothing about the others', () => {
   assert.match(left, /stop waiting for one and tell me so in one line/)
   // The ready message goes out at most once, and only if this was all it waited for.
   assert.match(left, /If you have sent it already, do not send it again/)
+  // Nothing is filled before the person's go, so the drop-out never sends the ready message itself.
+  assert.doesNotMatch(left, /send it now/)
+  assert.match(left, /carry on as its step 6 says/)
+  assert.match(left, /wait for my go/)
   assert.doesNotMatch(left, /prefilled/)
 })
 

@@ -144,7 +144,7 @@ function judgeOne(call: ChromeCall, own: readonly number[]): Verdict {
   if (tool === 'browser_batch') return { deny: 'A browser_batch cannot hold another.' }
   if (UNSCOPED.has(tool)) return { checks: [] }
   if (tool === 'tabs_close_mcp') {
-    return { deny: 'Leave your tab open on the form: the conversation picks it up from there.' }
+    return { deny: 'Leave your tab open on the form: the conversation works from your report.' }
   }
   if (!SCOPED.has(tool)) {
     return {
