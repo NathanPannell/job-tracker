@@ -236,7 +236,8 @@ Then report what was installed, what was skipped, and anything still waiting on 
 - **Updating.** `git pull` in `job-tracker/`, then start a new session.
 - **Data.** Keep `data/` out of git and back it up: it is the only copy of the board and the
   profile.
-- **Safety.** Claude never clicks the final submit, signs in or solves a CAPTCHA: the person does.
+- **Safety.** Claude clicks the final submit only for an application you approved, in your
+  conversation (never from a background prefill), and never signs in or solves a CAPTCHA: you do.
   It never accepts terms or another legal agreement. The one kind of consent it gives for the
   person is a data-processing acknowledgment or a box letting a company keep in contact, when their
   own saved answer in `application-answers.md` covers it. The rest come back to the person.
