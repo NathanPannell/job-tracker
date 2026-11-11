@@ -102,9 +102,10 @@ that lead; it waits for their word (step 7).
    - Each question is asked once. On a report, list only what is new, numbered on from the last list
      so a reply can answer by number, and do not repeat what is still unanswered. Never ask a
      question `application-answers.md` already answers for this application.
-   - Nothing new to ask, with something still open or still being prefilled: one short line (`Acme
-     is read.`) and stop. Never say a prefilled form is filled or ready: its tab is disposable, and
-     a click there is not what the batch waits for.
+   - Nothing new to ask, with something still open or still being prefilled: first send any lead
+     that now has nothing open (step 6), then one short line (`Acme is read.`) and stop. Never say a
+     prefilled form is filled or ready: its tab is disposable, and a click there is not what the
+     batch waits for.
    - A lead with nothing open goes to step 6 at once: it does not wait for the rest of the batch.
 
    Then stop and wait.
@@ -178,8 +179,12 @@ that lead; it waits for their word (step 7).
       - It reads as sent ("Thank you for applying", "Application submitted" and the like): write
         `packages/<id>/submission.md` with the time, what the form held and the page's confirmation
         text, run `jobs submitted <id>` (moves the card to Applied), and close the tab.
-      - It stays on the form with field errors: fix those fields and click once more. Two clicks in
-        all, per lead, never more.
+      - It stays on the form with field errors: if an error is on a CAPTCHA, check, agreement or
+        terms box, or a sign-in, the lead is the person's to click: leave it as it is, without
+        ticking or clicking anything more. Otherwise fix those fields from the record and click once
+        more. Two clicks in all, per lead, never more: if the second also ends in field errors, give
+        the lead its own line saying what is still wrong, and write `packages/<id>/submission.md`
+        saying you clicked twice and it was not sent.
       - Anything else (a CAPTCHA or check appears, an error page, no change, unclear): never click
         again. If Gmail is connected, search it for a confirmation (as in step 7); if one is there,
         treat the lead as sent. If not, leave the tab and the card as they are, write

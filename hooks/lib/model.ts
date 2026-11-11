@@ -1560,7 +1560,8 @@ export function submitFollowUp(
       `(${lead.company} — ${lead.role}) ended on a page that reads as a submitted application,`,
       'though I never approved a submit. Open your reply with one line saying so, then look at',
       'the tab the report names and tell me what it shows. Do not click, fill or submit anything',
-      'for this lead and do not move its card; ask me what to do with it.',
+      'for this lead and do not move its card; ask me what to do with it. What follows about sending',
+      'applications is for the other leads only, never this one.',
       `${batchNote(others)} ${fencedReport(report)}`,
     ].join(' ')
   }

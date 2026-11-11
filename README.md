@@ -3,8 +3,9 @@
 A job search that runs inside [Claude Code](https://code.claude.com). Scheduled agents find
 postings and score them against written preferences. One click builds a tailored application
 package, and an approved package is submitted for the person; only a CAPTCHA, a legal agreement
-or a sign-in waits for their own click. Their passes, edits and outcomes then
-feed a weekly review that proposes changes to how the next postings are scored and written.
+or a sign-in waits for their own click, and a lead marked for manual applying is theirs alone.
+Their passes, edits and outcomes then feed a weekly review that proposes changes to how the next
+postings are scored and written.
 
 It is a working personal tool, not a product. It is public as a worked example of agents carrying
 a messy, real workflow: they do the reading and the drafting, one small CLI owns the state, and a
