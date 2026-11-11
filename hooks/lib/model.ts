@@ -1560,8 +1560,9 @@ export function submitFollowUp(
   return [
     `The application for lead ${lead.id} (${lead.company} — ${lead.role}) was prefilled in Chrome`,
     'by a background agent, from the package I approved on the job board. Carry on with the',
-    'job-tracker:submit skill from step 4, using its report below and the tab it names: do not',
-    `fill the form again. ${batchNote(others)} Never click the final submit: I click it myself`,
+    'job-tracker:submit skill from step 4, using its report below. Its tab is disposable: do not',
+    'refill or tend it now. Once nothing is open and I say go, the skill fills every form again',
+    `in fresh tabs in one sitting, as its step 6 says. ${batchNote(others)} Never click the final submit: I click it myself`,
     'and tell you here when it is done. If it stopped at a sign-in, CAPTCHA or agreement, hand',
     `that off to me as the skill says. ${fencedReport(report)}`,
   ].join(' ')
