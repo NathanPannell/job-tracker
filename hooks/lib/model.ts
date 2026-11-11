@@ -1529,8 +1529,8 @@ function batchNote(others: readonly BatchLead[]): string {
     "Reply as the skill's step 4 says: a short numbered list of only what you cannot infer from",
     'the record, across every application I approved in this conversation and have not submitted,',
     'asking nothing a second time. Show no checklist and repeat nothing that is in the forms. With',
-    'nothing new to ask, reply in one line. Once every application needs only my click, say so',
-    'once, as its step 6 says.',
+    'nothing new to ask, reply in one line. Once nothing is open, go on as its step 6 says: wait for my go,',
+    'then fill every form in fresh tabs in one sitting and say once that they need only my click.',
   ].join(' ')
 }
 
@@ -1560,8 +1560,9 @@ export function submitFollowUp(
   return [
     `The application for lead ${lead.id} (${lead.company} — ${lead.role}) was prefilled in Chrome`,
     'by a background agent, from the package I approved on the job board. Carry on with the',
-    'job-tracker:submit skill from step 4, using its report below and the tab it names: do not',
-    `fill the form again. ${batchNote(others)} Never click the final submit: I click it myself`,
+    'job-tracker:submit skill from step 4, using its report below. Its tab is disposable: do not',
+    'refill or tend it now. Once nothing is open and I say go, the skill fills every form again',
+    `in fresh tabs in one sitting, as its step 6 says. ${batchNote(others)} Never click the final submit: I click it myself`,
     'and tell you here when it is done. If it stopped at a sign-in, CAPTCHA or agreement, hand',
     `that off to me as the skill says. ${fencedReport(report)}`,
   ].join(' ')
@@ -1577,8 +1578,9 @@ export function submitBatchLeft(lead: Named): string {
     `The application for lead ${lead.id} (${lead.company} — ${lead.role}) is out of this batch:`,
     'no report is coming from it, so stop waiting for one and tell me so in one line. Then carry',
     'on with the job-tracker:submit skill from step 4 for whatever else I approved. If this was',
-    'all that the message saying they need only my click was waiting for, send it now as its',
-    'step 6 says. If you have sent it already, do not send it again.',
+    'all the batch was waiting for, carry on as its step 6 says: tell me it is settled and wait for my go,',
+    'or fill it now in one sitting if I already said go. Never say the forms need only my click before',
+    'that sitting. That message goes out once. If you have sent it already, do not send it again.',
   ].join(' ')
 }
 
