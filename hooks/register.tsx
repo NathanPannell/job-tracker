@@ -332,7 +332,7 @@ async function submitApplication($: EngineInterface, lead: Lead) {
   const label = `Prefilling the ${lead.company} application`
   if (started === 'spawned') {
     $.ui.toast(
-      `${label} in Chrome in the background; Claude says here when it needs only your click.`,
+      `${label} in Chrome in the background; Claude submits it once nothing is open, or says here what it needs from you.`,
     )
   } else if (started === 'refused') {
     await sendPrompt($, submitRelay(lead), label)
@@ -391,7 +391,7 @@ async function submitAll($: EngineInterface, leads: readonly Lead[]) {
   const refused = leads.filter((_, n) => started[n] === 'refused')
   const notes = [
     spawned > 0 &&
-      `Prefilling ${plural(spawned, 'application')} in Chrome in the background; Claude says here once they need only your click.`,
+      `Prefilling ${plural(spawned, 'application')} in Chrome in the background; Claude submits each once nothing is open, or says here what it needs from you.`,
     running > 0 && `${plural(running, 'application')} already underway.`,
   ].filter(Boolean)
   if (notes.length > 0) $.ui.toast(notes.join(' '))

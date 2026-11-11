@@ -151,11 +151,14 @@ The types of every file are in `types/index.d.ts`.
   attaches the PDF, so the slow work never holds your conversation. It fills in everything the
   record answers or implies, drafted answers included, with no need for your word on each. When it
   ends, `submit` carries on in your conversation: it asks a short numbered list of only what the
-  record cannot answer, asks each question once and never repeats what is in the form. Once every
-  application needs only your click (a CAPTCHA, a consent box, submit) it says so, once. You look
-  over each tab and submit it yourself, then say they are submitted, and that message moves the
-  cards to Applied. Claude never clicks the final submit. Chrome can unload a prefilled background
-  tab about 30 minutes after it is filled, which wipes the form and the résumé, so submit soon.
+  record cannot answer, asks each question once and never repeats what is in the form. Your
+  approval is your yes to the final submit: once nothing is open for an application, Claude fills
+  it in a fresh tab, clicks submit, checks the sent page, moves the card to Applied and tells you
+  in one line. A lead whose notes start "MANUAL APPLY ONLY" is left for you to apply by hand. An
+  application behind a CAPTCHA, a terms or other legal agreement, or a sign-in stays yours to
+  click: when you say go, Claude fills those in one sitting and says once that they need only your click; you submit them and say so,
+  and that moves their cards. Chrome can unload a filled background tab about 30 minutes after it
+  is filled, which wipes the form and the résumé, so submit those soon.
   "Approve and submit all" on Ready to apply does this for every lead there at once, side by
   side. If Claude in Chrome is not available to the subagent, the conversation does the whole job.
 - **The Chrome guard** holds every background prefill to tabs it opened itself and to an element
