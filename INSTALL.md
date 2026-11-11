@@ -75,10 +75,10 @@ job-tracker-workspace/
 
 5. Connectors. **Person:** in Claude, go to Settings → Connectors, connect these and sign in:
 
-   | Connector       | Used by              | Without it                          |
-   | --------------- | -------------------- | ----------------------------------- |
-   | Gmail           | scout, package, sync | No job-alert source, no warm intros |
-   | Google Calendar | sync                 | Interviews are not picked up        |
+   | Connector       | Used by     | Without it                                 |
+   | --------------- | ----------- | ------------------------------------------ |
+   | Gmail           | scout, sync | No job-alert source, replies not picked up |
+   | Google Calendar | sync        | Interviews are not picked up               |
 
    Connect the Gmail account where job alerts arrive and applications get replies. It may not be
    the account they use for Claude. Web search and fetch are built in and need no setup.

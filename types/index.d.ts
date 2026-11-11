@@ -94,7 +94,6 @@ export type PackageFiles = {
   coverLetter?: string
   answers?: string
   brief?: string
-  warmIntro?: string
   /** The résumé PDF as SVG pages, in order, for the pane. */
   preview?: string[]
 }
@@ -108,8 +107,6 @@ export type Application = {
   updatedAt: string
   files: PackageFiles
   submittedAt?: string
-  /** The Gmail draft of the warm-intro ask, when one was drafted. */
-  warmIntroDraftId?: string
   status: 'drafting' | 'ready' | 'submitted' | 'withdrawn'
 }
 
@@ -208,7 +205,7 @@ export type JobBoard = {
   error: string | null
 }
 
-export type PackageTab = 'resume' | 'diff' | 'cover' | 'answers' | 'brief' | 'intro'
+export type PackageTab = 'resume' | 'diff' | 'cover' | 'answers' | 'brief'
 
 export type JobView =
   | { kind: 'board' }

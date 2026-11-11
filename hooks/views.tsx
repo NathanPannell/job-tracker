@@ -598,7 +598,6 @@ const TABS: [PackageTab, string][] = [
   ['cover', 'Cover letter'],
   ['answers', 'Answers'],
   ['brief', 'Company brief'],
-  ['intro', 'Warm intro'],
 ]
 
 export function packageView(
