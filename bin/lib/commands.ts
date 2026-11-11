@@ -321,7 +321,6 @@ const PACKAGE_FILES: Record<Exclude<keyof PackageFiles, 'preview'>, string> = {
   coverLetter: 'cover-letter.md',
   answers: 'answers.md',
   brief: 'company-brief.md',
-  warmIntro: 'warm-intro.md',
 }
 
 /** A unified diff of two files as `git diff --no-index` gives it, hunks only; '' when equal. */
@@ -360,7 +359,7 @@ function snapshotDraft(pkg: string): void {
   }
 }
 
-export type PackageOptions = { column?: string; draftId?: string; redraft?: boolean }
+export type PackageOptions = { column?: string; redraft?: boolean }
 
 /** The registered application, the column the card ended in, and why it stayed when it did. */
 export type PackageResult = Application & { column: Column; notice?: string }
@@ -402,7 +401,6 @@ export function registerPackage(
     const stays = lead.column !== column && lead.column !== 'drafting'
     const ends = stays ? lead.column : column
     const existing = data.applications.applications.find(one => one.leadId === id)
-    const draftId = options.draftId ?? existing?.warmIntroDraftId
     const application: Application = {
       leadId: id,
       dir: `packages/${id}`,
@@ -411,7 +409,6 @@ export function registerPackage(
       files,
       status: ends === 'ready' ? 'ready' : (existing?.status ?? 'drafting'),
       ...(existing?.submittedAt ? { submittedAt: existing.submittedAt } : {}),
-      ...(draftId ? { warmIntroDraftId: draftId } : {}),
     }
     const moved: MoveResult =
       lead.column === ends ? { leads: data.leads } : moveLead(data.leads, id, ends, at, 'package')

@@ -383,11 +383,10 @@ test('a package is registered with its diff, draft snapshot and files, then subm
   writeFileSync(join(pkg, 'cover-letter.md'), 'Dear Acme')
   assert.throws(() => commands.registerPackage(dir, id, { column: 'bogus' }), /Unknown column/)
   commands.move(dir, id, 'drafting', { by: 'package' })
-  const app = commands.registerPackage(dir, id, { draftId: 'r-123' })
+  const app = commands.registerPackage(dir, id)
   assert.equal(app.status, 'ready')
   assert.equal(app.column, 'ready')
   assert.equal(app.notice, undefined)
-  assert.equal(app.warmIntroDraftId, 'r-123')
   assert.deepEqual(Object.keys(app.files).sort(), ['coverLetter', 'resumeDiff', 'resumeTex'])
   assert.match(readFileSync(join(pkg, 'resume.diff'), 'utf8'), /\+line 2/)
   assert.equal(readData(dir, 'leads').leads[0]?.column, 'ready')
@@ -446,6 +445,28 @@ const drafted = () => {
   return { dir, id, pkg }
 }
 
+test('a recorded package has no warm intro, even beside an old warm-intro.md', () => {
+  const { dir, id, pkg } = drafted()
+  // A package built before warm intros were dropped: the note on disk and its Gmail draft on record.
+  writeFileSync(join(pkg, 'warm-intro.md'), '# Warm intro\n\nAsk Sam.')
+  const old = commands.registerPackage(dir, id)
+  writeAtomic(
+    join(dir, 'applications.json'),
+    JSON.stringify({
+      version: 1,
+      applications: [
+        { ...old, files: { ...old.files, warmIntro: 'warm-intro.md' }, warmIntroDraftId: 'r-1' },
+      ],
+    }),
+  )
+  const result = commands.registerPackage(dir, id, { redraft: true })
+  assert.ok(!('warmIntro' in result.files))
+  assert.ok(!('warmIntroDraftId' in result))
+  const stored = readData(dir, 'applications').applications[0]
+  assert.ok(stored && !('warmIntro' in stored.files) && !('warmIntroDraftId' in stored))
+  assert.ok(!existsSync(join(pkg, '.draft', 'warm-intro.md')))
+})
+
 test('package moves a card still in Drafting to Ready to apply', () => {
   const { dir, id } = drafted()
   const result = commands.registerPackage(dir, id)
@@ -471,11 +492,10 @@ for (const [column, options] of [
     const { dir, id, pkg } = drafted()
     commands.move(dir, id, column, options)
     const feedback = readData(dir, 'feedback').events.length
-    const result = commands.registerPackage(dir, id, { draftId: 'r-1' })
+    const result = commands.registerPackage(dir, id)
     assert.equal(result.column, column)
     assert.match(result.notice ?? '', new RegExp(`stays in ${column}`, 'i'))
     assert.equal(result.status, 'drafting')
-    assert.equal(result.warmIntroDraftId, 'r-1')
     assert.deepEqual(Object.keys(result.files).sort(), ['coverLetter', 'resumeDiff', 'resumeTex'])
     assert.ok(existsSync(join(pkg, 'resume.diff')))
     assert.ok(existsSync(join(pkg, '.draft', 'cover-letter.md')))

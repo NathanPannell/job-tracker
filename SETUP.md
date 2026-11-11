@@ -57,7 +57,7 @@ it updates every new session.
 | `applications.json`   | One entry per package and its files                                                                                                                                                                                                                                                                                                                                                |
 | `feedback.json`       | Passes, score corrections, moves and outcomes, for `learn`                                                                                                                                                                                                                                                                                                                         |
 | `proposals.json`      | Weekly learning proposals and their status                                                                                                                                                                                                                                                                                                                                         |
-| `packages/<lead-id>/` | `resume.tex`, `resume.pdf`, `resume.diff` (against the master résumé), `cover-letter.md`, `answers.md`, `company-brief.md`, `warm-intro.md`, `posting.md`, `sources.md`, `submission.md` (what was sent), `preview/` (the pane's résumé pages) and `.draft/` (the draft as written, so `learn` can see your edits)                                                                 |
+| `packages/<lead-id>/` | `resume.tex`, `resume.pdf`, `resume.diff` (against the master résumé), `cover-letter.md`, `answers.md`, `company-brief.md`, `posting.md`, `sources.md`, `submission.md` (what was sent), `preview/` (the pane's résumé pages) and `.draft/` (the draft as written, so `learn` can see your edits)                                                                                  |
 | `profile/`            | The career record written by `onboard`: `master-resume.tex`, `resume-format-template.tex`, `resume-generation-rules.md`, `voice.md`, `cover-letter-prompts.md`, `sources/`, `preferences.md`, `learnings.md`, `target-companies.md`, `ats-boards.json`, `OPEN-QUESTIONS.md` and `knowledge-base/application-answers.md` (your answers to application questions, saved by `submit`) |
 | `scout/`              | Each run's raw candidates (`candidates-*.json`, `ats-*.json`, `summaries-*.json`), `runs.md` (one line per run), `signals.md` (funding news), `gmail-cursor.json` (where Gmail reading stopped) and learn's proposal files                                                                                                                                                         |
 
@@ -145,7 +145,7 @@ The types of every file are in `types/index.d.ts`.
   queued until the current reply ends. Asking in chat ("draft a package for Acme") uses the
   `draft_package` tool, which starts the same background build.
 - **Review** shows the résumé PDF drawn in the pane (desktop), "Résumé vs master" (the
-  diff against the master résumé), the cover letter, answers, company brief and warm-intro note.
+  diff against the master résumé), the cover letter, answers and company brief.
   "Open PDF" opens the file in your PDF viewer.
 - **Approve and submit** starts a background subagent that fills in the form in Chrome and
   attaches the PDF, so the slow work never holds your conversation. It fills in everything the

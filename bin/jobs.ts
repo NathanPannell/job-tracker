@@ -40,7 +40,7 @@ const USAGE = `jobs <command> [args] [--data <dir>]
                                          fill them
   mention <id>...                        mark leads as mentioned to the person
   feedback <json|@file>                  { leadId, kind, reason? }
-  package <id> [--column ready] [--draft-id id] [--redraft]
+  package <id> [--column ready] [--redraft]
                                          record packages/<id>/, render the résumé preview and diff
   preview <id>                           render a package's résumé preview again
   diff <id>                              the tailored résumé against the master
@@ -76,7 +76,6 @@ async function main(argv: string[]): Promise<unknown> {
       reason: { type: 'string' },
       by: { type: 'string' },
       note: { type: 'string' },
-      'draft-id': { type: 'string' },
       redraft: { type: 'boolean' },
       all: { type: 'boolean' },
       company: { type: 'string' },
@@ -130,7 +129,6 @@ async function main(argv: string[]): Promise<unknown> {
     case 'package':
       return commands.registerPackage(dir, need(args[0], 'id'), {
         column: values.column,
-        draftId: values['draft-id'],
         redraft: values.redraft,
       })
     case 'preview':

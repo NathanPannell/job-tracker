@@ -28,8 +28,7 @@ Built on Claude Code. Not affiliated with or endorsed by Anthropic.
   can mark a score too high or too low on the lead's page.
 - **Package** runs in a background subagent. It builds a résumé from approved wording only, with a
   source line for every bullet, then a cover letter, answers to the posting's questions, a company
-  brief and a warm-intro search. A warm intro can become a Gmail draft, never a sent email. The
-  person reviews each file on the board.
+  brief. The person reviews each file on the board.
 - **Submit** starts with a background subagent that fills in the form in Chrome from the record,
   drafted answers included, and uploads the PDF. The conversation then asks a short numbered list
   of only what the record cannot answer, and says once when every application needs only the

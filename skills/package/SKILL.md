@@ -1,6 +1,6 @@
 ---
 name: package
-description: Build a tailored application package for one job lead on the board — résumé compiled to PDF from the person's LaTeX template using only approved facts, cover letter, answers to the posting's questions, company brief and a warm-intro search with a Gmail draft — then move the card to Ready to apply. Always runs in a background subagent, never in the person's conversation. Use when asked to draft, build or prepare an application for a lead.
+description: Build a tailored application package for one job lead on the board — résumé compiled to PDF from the person's LaTeX template using only approved facts, cover letter, answers to the posting's questions and company brief — then move the card to Ready to apply. Always runs in a background subagent, never in the person's conversation. Use when asked to draft, build or prepare an application for a lead.
 ---
 
 # Package
@@ -28,7 +28,8 @@ below: nobody can answer you, so never stop to ask a question.
   missing, stop and say to finish the job-tracker:onboard skill first.
 - Package folder: `$JOB_TRACKER_DATA/packages/<lead-id>/`. Write these names exactly:
   `posting.md`, `resume.tex`, `resume.pdf`, `cover-letter.md`, `answers.md`, `company-brief.md`,
-  `warm-intro.md`, `sources.md`.
+  `sources.md`. No contact search, intro note or email draft: the package is the application
+  alone.
 - Profile (read before writing anything):
   - `profile/knowledge-base/application-answers.md` — read first: the person's own answers to
     application questions, saved word for word by the submit skill, each with its question, date
@@ -47,7 +48,7 @@ below: nobody can answer you, so never stop to ask a question.
 
 1. Find the lead: `jobs list` and pick the id you were given. If your task says the card is
    already in Drafting (the board moved it when the build was asked for), do not move it,
-   wherever it is now: the person may have moved it since, and step 9 leaves it where they put
+   wherever it is now: the person may have moved it since, and step 8 leaves it where they put
    it. Otherwise run `jobs move <id> drafting --by package`.
 2. Get the posting. WebFetch its URL unless it is a LinkedIn or Indeed URL; for those, find the
    same role on the company's own careers page or ATS board instead. If the full posting cannot be
@@ -97,27 +98,22 @@ below: nobody can answer you, so never stop to ask a question.
 7. Company brief (`company-brief.md`): what they build and for whom, stage and funding, team size,
    stack, recent news, why it fits, risks and red flags (reviews, runway), and three sharp questions
    to ask. Link every claim's source.
-8. Warm intro (`warm-intro.md`): search Gmail for the company's name and email domain
-   (`search_threads`) and the knowledge base for people connected to it. List who might introduce
-   or refer the person and why. If one clear contact with an email address exists, create **one
-   Gmail draft** (`create_draft`, never send) with a short, specific ask, and record its draft id.
-   If there is none, say so; do not draft to a stranger.
-9. Register the package: `jobs package <id>` (add `--draft-id <gmail draft id>` when you drafted
-   one, `--redraft` when you rebuilt a package the person already saw). It renders the résumé
+8. Register the package: `jobs package <id>` (add `--redraft` when you rebuilt a package the
+   person already saw). It renders the résumé
    preview for the pane, writes `resume.diff` against the master, snapshots the draft for the
    learning loop and moves the card to Ready to apply — but only if the card is still in
    Drafting. The person keeps triaging the board while you build; if they moved the card
    elsewhere meanwhile (Archived, Passed or any other column), the files are still registered and
    the card stays where they put it. The output then has a `notice` and `column` says where the
    card is. That is not a failure: do not move the card yourself or retry.
-10. Reply briefly: what is in the package, any `NEEDS ANSWER` items and gaps, and "Review it in
-    /jobs → the card → Review." If step 9 printed a `notice`, say the package is saved and the
-    card stays in its column (name it) because they moved it during the build. Keep the first
-    line short and complete: the board shows it as a toast when the build ends.
+9. Reply briefly: what is in the package, any `NEEDS ANSWER` items and gaps, and "Review it in
+   /jobs → the card → Review." If step 8 printed a `notice`, say the package is saved and the
+   card stays in its column (name it) because they moved it during the build. Keep the first
+   line short and complete: the board shows it as a toast when the build ends.
 
 ## Rules
 
-- Never submit an application, send an email or message, or create an account.
+- Never submit an application, send an email or message, draft an email, or create an account.
 - Never invent, broaden or combine résumé facts. Generated packages are outputs, never evidence.
 - Do not modify anything under `profile/`. It changes only through the learn skill's approved
   proposals, with one exception that is not yours: the submit skill appends the person's own

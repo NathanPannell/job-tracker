@@ -196,7 +196,6 @@ const TAB_FILES: Record<
   cover: 'coverLetter',
   answers: 'answers',
   brief: 'brief',
-  intro: 'warmIntro',
 }
 
 /** Reads a lead's package for the viewer: the résumé strips and every text file. */
