@@ -30,6 +30,7 @@ import {
   CHROME_UNAVAILABLE,
   isChromeUnavailable,
   submitFollowUp,
+  isManualApply,
   submitBatchLeft,
   submitBatchRelay,
   submitRelay,
@@ -344,7 +345,7 @@ test('a prefill runs aside and never submits; its report goes to the conversatio
   assert.match(submitRelay(lead), /then submit it yourself once nothing is open for it/)
   assert.match(
     submitRelay(lead),
-    /If it needs my click \(a CAPTCHA, an agreement, a sign-in or a manual-apply note\), leave the final submit to me: I click it myself/,
+    /If it needs my click \(a CAPTCHA, an agreement or a sign-in\), leave the final submit to me: I click it myself/,
   )
   assert.equal(submitBatchRelay([lead]), submitRelay(lead))
   const batch = submitBatchRelay([lead, { id: 'beta-api', company: 'Beta', role: 'SRE' }])
@@ -361,10 +362,7 @@ test('a prefill runs aside and never submits; its report goes to the conversatio
   assert.match(next, /Once nothing is open for it, the skill fills it again and sends it/)
   assert.doesNotMatch(next, /do not\s+fill the form again/)
   assert.match(next, /Submit it yourself once nothing is open for it, as the skill's step 6 says/)
-  assert.match(
-    next,
-    /unless it needs my click \(a CAPTCHA, an agreement, a sign-in or a manual-apply/,
-  )
+  assert.match(next, /unless it needs my click \(a CAPTCHA, an agreement or a sign-in\)/)
   assert.doesNotMatch(next, /Never click the final submit/)
   assert.doesNotMatch(next, /checklist and click/)
   assert.ok(next.endsWith('<<<PREFILL REPORT\nTab: Acme — https://jobs.example\nPREFILL REPORT>>>'))
@@ -416,6 +414,13 @@ test('a prefill report asks each open question once and says once that the batch
   assert.ok(batch.endsWith('<<<PREFILL REPORT\nTab: Acme\nPREFILL REPORT>>>'))
   const here = submitFollowUp(lead, `${CHROME_UNAVAILABLE}: no browser`, others)
   assert.match(here, /do all of it here\. I approved these with it/)
+})
+
+test('a MANUAL APPLY ONLY note marks a lead for applying by hand', () => {
+  assert.equal(isManualApply({ notes: 'MANUAL APPLY ONLY: higher effort' }), true)
+  assert.equal(isManualApply({ notes: '  manual apply only' }), true)
+  assert.equal(isManualApply({ notes: 'Referral: ask about MANUAL APPLY ONLY later' }), false)
+  assert.equal(isManualApply({}), false)
 })
 
 test('a lead dropping out of its batch claims nothing about the others', () => {

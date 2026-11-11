@@ -56,6 +56,8 @@ import {
   stageTab,
   submitBatchLeft,
   submitBatchRelay,
+  isManualApply,
+  MANUAL_APPLY,
   submitFollowUp,
   submitRelay,
   submitTask,
@@ -324,10 +326,15 @@ const busyNote = (run: DraftRun) =>
  * Prefills an approved package's application in Chrome off the person's conversation: a
  * background subagent runs the submit skill's slow part and never submits. Its report goes to
  * the conversation when it ends (`finishDraft`), where the person answers what the record cannot
- * and clicks submit themself. Where the engine refuses the spawn, the conversation is asked to do
+ * and the conversation sends it, unless it needs the person's own click. A lead marked for applying
+ * by hand is never opened. Where the engine refuses the spawn, the conversation is asked to do
  * all of it.
  */
 async function submitApplication($: EngineInterface, lead: Lead) {
+  if (isManualApply(lead)) {
+    $.ui.toast(manualNote(lead))
+    return
+  }
   const started = await startPrefill($, lead)
   const label = `Prefilling the ${lead.company} application`
   if (started === 'spawned') {
@@ -382,7 +389,10 @@ async function startPrefill(
  * toast says what started; the leads whose spawn was refused go to the conversation in one
  * prompt, so it still asks once for the whole batch.
  */
-async function submitAll($: EngineInterface, leads: readonly Lead[]) {
+async function submitAll($: EngineInterface, approved: readonly Lead[]) {
+  // A lead marked for applying by hand is never opened, in a batch as alone.
+  const manual = approved.filter(isManualApply).length
+  const leads = approved.filter(one => !isManualApply(one))
   // One lead's failure is that lead's alone: it counts as refused, so the conversation asks.
   const settled = await Promise.allSettled(leads.map(lead => startPrefill($, lead)))
   const started = settled.map(one => (one.status === 'fulfilled' ? one.value : 'refused'))
@@ -393,6 +403,7 @@ async function submitAll($: EngineInterface, leads: readonly Lead[]) {
     spawned > 0 &&
       `Prefilling ${plural(spawned, 'application')} in Chrome in the background; Claude submits each once nothing is open, or says here what it needs from you.`,
     running > 0 && `${plural(running, 'application')} already underway.`,
+    manual > 0 && `${manual} marked ${MANUAL_APPLY} left for you to apply by hand.`,
   ].filter(Boolean)
   if (notes.length > 0) $.ui.toast(notes.join(' '))
   if (refused.length > 0) {
@@ -403,6 +414,10 @@ async function submitAll($: EngineInterface, leads: readonly Lead[]) {
     )
   }
 }
+
+/** What the person is told when they approve a lead marked for applying by hand. */
+const manualNote = (lead: Lead) =>
+  `${lead.company} is marked ${MANUAL_APPLY}: apply for it by hand; its package is ready.`
 
 const plural = (n: number, noun: string) => `${n} ${noun}${n === 1 ? '' : 's'}`
 

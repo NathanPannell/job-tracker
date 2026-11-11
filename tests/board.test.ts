@@ -2056,6 +2056,53 @@ describe('kanban', () => {
     expect(await ui.find({ key: 'submit-all' })).toBeUndefined()
   })
 
+  test('a lead marked MANUAL APPLY ONLY is never prefilled, alone or in a batch', async ($, on) => {
+    const ids = ['acme-api', 'beta-api', 'gamma-api']
+    const w = world(on, {
+      leads: ids.map(id =>
+        lead(id, {
+          column: 'ready',
+          ...(id === 'acme-api' ? { notes: 'MANUAL APPLY ONLY: apply with care by hand' } : {}),
+        }),
+      ),
+      applications: ids.map(leadId => ({
+        leadId,
+        dir: `packages/${leadId}`,
+        createdAt: '',
+        updatedAt: '',
+        files: {},
+        status: 'ready' as const,
+      })),
+    })
+    const prompts: string[] = []
+    on('prompt.submit', (_, e) => {
+      prompts.push(e.text)
+      return { text: e.text }
+    })
+    const toasts: string[] = []
+    on('ui.toast', (_, e) => {
+      toasts.push(e.text)
+      return { value: undefined }
+    })
+    on('turn.start', (_, e) => ({ turnId: e.turnId }))
+    on('turn.complete', (_, e) => ({ text: e.answer }))
+    await start($)
+    const ui = await $.ui.mount({ ...pane, surface: 'desktop' })
+    await ui.press({ key: 'submit:acme-api' })
+    expect(w.spawns).toHaveLength(0)
+    expect(prompts).toEqual([])
+    expect(toasts.at(-1)).toBe(
+      'acme is marked MANUAL APPLY ONLY: apply for it by hand; its package is ready.',
+    )
+    await ui.press({ key: 'submit-all' })
+    expect(w.spawns).toHaveLength(2)
+    expect(w.spawns.some(one => one.prompt.includes('lead acme-api'))).toBe(false)
+    expect(toasts.at(-1)).toBe(
+      'Prefilling 2 applications in Chrome in the background; Claude submits each once nothing is open, or says here what it needs from you. 1 marked MANUAL APPLY ONLY left for you to apply by hand.',
+    )
+    expect(w.leads().find(one => one.id === 'acme-api')?.column).toBe('ready')
+  })
+
   test('where no subagent can start, Approve and submit all asks the conversation once for the batch, queued until its turn', async ($, on) => {
     const ids = ['acme-api', 'beta-api', 'gamma-api']
     const w = world(on, {

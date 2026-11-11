@@ -2,8 +2,8 @@
 
 A job search that runs inside [Claude Code](https://code.claude.com). Scheduled agents find
 postings and score them against written preferences. One click builds a tailored application
-package, and an approved package is submitted for the person; only a CAPTCHA, a legal agreement or a
-sign-in waits for their own click. Their passes, edits and outcomes then
+package, and an approved package is submitted for the person; only a CAPTCHA, a legal agreement
+or a sign-in waits for their own click. Their passes, edits and outcomes then
 feed a weekly review that proposes changes to how the next postings are scored and written.
 
 It is a working personal tool, not a product. It is public as a worked example of agents carrying
@@ -90,9 +90,10 @@ flowchart LR
   the board can all land at once. `bin/lib/store.ts` takes a lock file, reads, applies a pure
   function and renames a temporary file over the old one. It recovers stale locks and retries the
   renames Windows refuses while a file is briefly held open.
-- **A code guard backs the human gate where an agent works unattended.** The submit skill leaves
-  the final click to the person. Background prefills also pass a guard (`hooks/lib/chrome.ts`) that limits them to
-  tabs they opened, requires an element ref for every click, reads each element first, and refuses
+- **A code guard backs the human gate where an agent works unattended.** The submit skill clicks
+  a final submit only in the person's conversation, for a lead they approved. Background prefills
+  also pass a guard (`hooks/lib/chrome.ts`) that limits them to tabs they opened, requires an
+  element ref for every click, reads each element first, and refuses
   a click on anything labelled or typed like a final submit. It exists because one prefill's clicks
   once landed in another's tab and sent an application nobody approved. The mod now also looks for
   a stray submit when a prefill ends, and raises it first in the conversation. Forms inside shadow

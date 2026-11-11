@@ -1442,6 +1442,14 @@ export function reviseRelay(title: string, task: string): string {
   ].join(' ')
 }
 
+/** The words that open a lead's notes when the person applies for it by hand, never the submit skill. */
+export const MANUAL_APPLY = 'MANUAL APPLY ONLY'
+
+/** Whether a lead is the person's to apply for by hand: its notes start with MANUAL_APPLY. */
+export function isManualApply(lead: { notes?: string }): boolean {
+  return (lead.notes ?? '').trimStart().toUpperCase().startsWith(MANUAL_APPLY)
+}
+
 /** The words that open a background prefill's report when Chrome could not be driven at all. */
 export const CHROME_UNAVAILABLE = 'CHROME UNAVAILABLE'
 
@@ -1449,7 +1457,7 @@ export const CHROME_UNAVAILABLE = 'CHROME UNAVAILABLE'
  * The task a background subagent gets to fill in an approved package's application in Chrome:
  * the slow part of the submit skill, off the person's conversation. It asks nothing and never
  * submits; its report goes to the conversation, which asks the person what the record cannot
- * answer and says when only their own click on submit is left.
+ * answer, then sends the application itself unless it needs the person's own click.
  */
 export function submitTask(lead: Named): string {
   return [
@@ -1469,14 +1477,14 @@ export function submitTask(lead: Named): string {
 
 /** What the person's conversation is asked when the pane could not start the prefill aside. */
 export function submitRelay(lead: Named): string {
-  return `I approved the package for lead ${lead.id} (${lead.company} — ${lead.role}) on the job board. Use the job-tracker:submit skill: prefill the application, ask me only what you cannot infer from the record, then submit it yourself once nothing is open for it, as its step 6 says. If it needs my click (a CAPTCHA, an agreement, a sign-in or a manual-apply note), leave the final submit to me: I click it myself and tell you here when it is done.`
+  return `I approved the package for lead ${lead.id} (${lead.company} — ${lead.role}) on the job board. Use the job-tracker:submit skill: prefill the application, ask me only what you cannot infer from the record, then submit it yourself once nothing is open for it, as its step 6 says. If it needs my click (a CAPTCHA, an agreement or a sign-in), leave the final submit to me: I click it myself and tell you here when it is done.`
 }
 
 /** What the conversation is asked when the pane could not start a batch's prefills aside. */
 export function submitBatchRelay(leads: readonly Named[]): string {
   if (leads.length === 1 && leads[0]) return submitRelay(leads[0])
   const listed = leads.map(one => `${one.company} — ${one.role} (lead ${one.id})`).join('; ')
-  return `I approved the packages for these leads on the job board together, as one batch: ${listed}. Use the job-tracker:submit skill for each: prefill every application, one at a time, here in this conversation and not in subagents (side-by-side prefills in one browser can act in each other's tabs), then ask me only what you cannot infer from the record, as its step 4 says, then submit each yourself once nothing is open for it, as its step 6 says. Any that needs my click (a CAPTCHA, an agreement, a sign-in or a manual-apply note) is mine: I click those myself and tell you here when they are done.`
+  return `I approved the packages for these leads on the job board together, as one batch: ${listed}. Use the job-tracker:submit skill for each: prefill every application, one at a time, here in this conversation and not in subagents (side-by-side prefills in one browser can act in each other's tabs), then ask me only what you cannot infer from the record, as its step 4 says, then submit each yourself once nothing is open for it, as its step 6 says. Any that needs my click (a CAPTCHA, an agreement or a sign-in) is mine: I click those myself and tell you here when they are done.`
 }
 
 /** Longest prefill report handed on to the conversation. */
@@ -1515,7 +1523,8 @@ export type BatchLead = Named & { isPrefilled: boolean }
 
 /**
  * Several approvals close together are one batch: each report names the others, and the replies
- * ask each question once and say once that the whole batch needs only the person's click.
+ * ask each question once, report each application sent in one line, and say once that those left
+ * for the person's click need only it.
  */
 function batchNote(others: readonly BatchLead[]): string {
   const listed = others.map(
@@ -1564,7 +1573,7 @@ export function submitFollowUp(
     'job-tracker:submit skill from step 4, using its report below. Its tab is disposable: do not',
     'refill or tend it now. Once nothing is open for it, the skill fills it again and sends it,',
     `as its step 6 says. ${batchNote(others)} Submit it yourself once nothing is open for it, as the skill's step 6 says,`,
-    'unless it needs my click (a CAPTCHA, an agreement, a sign-in or a manual-apply note): then I click it myself and tell you here when',
+    'unless it needs my click (a CAPTCHA, an agreement or a sign-in): then I click it myself and tell you here when',
     'it is done. If it stopped at a sign-in, CAPTCHA or agreement, hand that off to me as the skill',
     `says. ${fencedReport(report)}`,
   ].join(' ')

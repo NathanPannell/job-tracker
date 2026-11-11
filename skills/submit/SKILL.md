@@ -1,6 +1,6 @@
 ---
 name: submit
-description: Fill in and submit a job application from an approved package in Claude in Chrome, upload the résumé PDF, infer what the record implies, and ask the person a short numbered list of only what it cannot answer (saving each answer to the shared knowledge base so it is never asked again). Once nothing is open for an application, fill it in a fresh tab, click its final submit, confirm the sent page, move the card to Applied and report one line per lead. An application behind a CAPTCHA, an agreement, a sign-in or a manual-apply note is the person's to click: on their go fill those in one sitting and say once that they need only their click; when they say those are submitted, move the cards. Use when the person approves a package ("Approve and submit" on the job board, or "submit the application for <lead>"), and when they say applications are submitted.
+description: Fill in and submit a job application from an approved package in Claude in Chrome, upload the résumé PDF, infer what the record implies, and ask the person a short numbered list of only what it cannot answer (saving each answer to the shared knowledge base so it is never asked again). Once nothing is open for an application, fill it in a fresh tab, click its final submit, confirm the sent page, move the card to Applied and report one line per lead. A lead whose notes start "MANUAL APPLY ONLY" is never opened. An application behind a CAPTCHA, an agreement or a sign-in is the person's to click: on their go fill those in one sitting and say once that they need only their click; when they say those are submitted, move the cards. Use when the person approves a package ("Approve and submit" on the job board, or "submit the application for <lead>"), and when they say applications are submitted.
 ---
 
 # Submit
@@ -133,13 +133,14 @@ that lead; it waits for their word (step 7).
 
    Either way, work in the conversation itself, with no subagents:
    1. Work out which leads are still to fill (again, now, even if you did it before asking for the
-      go). Leave out a lead with a `STRAY SUBMIT DETECTED` report, one no longer in Ready to apply
-      (`jobs list --column ready`), one with a `packages/<id>/submission.md`, one whose old tab
-      reads as sent (get_page_text on each old tab of the batch), and one with a confirmation email
-      since its approval (Gmail, as in step 7, if connected). An old tab that does not answer, is
-      gone, or reads as a blank form proves nothing: a reloaded form can hide a sent one. Ask about
-      all such leads in one line before you fill them. Never fill or offer a lead that may be sent.
-      If no lead is left to fill, say so in one line and stop.
+      go). Leave out a lead marked "MANUAL APPLY ONLY", one with a `STRAY SUBMIT DETECTED` report,
+      one no longer in Ready to apply (`jobs list --column ready`), one with a
+      `packages/<id>/submission.md`, one whose old tab reads as sent (get_page_text on each old tab
+      of the batch), and one with a confirmation email since its approval (Gmail, as in step 7, if
+      connected). An old tab that does not answer, is gone, or reads as a blank form proves nothing:
+      a reloaded form can hide a sent one. Ask about all such leads in one line before you fill
+      them. Never fill or offer a lead that may be sent. If no lead is left to fill, say so in one
+      line and stop.
    2. Read what the fill needs for every lead you are about to fill, in one go: the files in "Before
       you start", and each prefill report's "Filled" list.
    3. Open one fresh tab per lead with tabs_create_mcp, then navigate them all to their application
@@ -185,14 +186,16 @@ that lead; it waits for their word (step 7).
         `packages/<id>/submission.md` saying you clicked submit and saw no confirmation (so no later
         fill touches the lead again), and give the lead its own line for the person to check.
 
-   Report what you sent in one message per turn, one line per lead, with no form contents:
+   Report what you sent in one message per turn, one line per lead, with no form contents. Where the
+   form sent a résumé other than `resume.pdf` (Wellfound's profile copy), say so on that lead's
+   line:
 
    ```markdown
    Submitted:
 
    - Acme — Backend Developer (confirmation shown)
    - Beta — SRE (confirmation shown)
-   - Delta — Data Engineer: no confirmation page or email yet; its tab is open for you to check
+   - Delta — Data Engineer: no confirmation yet; check your email before you submit it again
    ```
 
    For the leads that are the person's to click, once their sitting is done, say so once, in one
@@ -370,7 +373,7 @@ When the prompt says you run in the background, nobody can answer you:
   one-click apply, or on a submit-type button labelled as anything but a step (Next, Continue,
   Review), and a form_input on a button or link. deep_form's press refuses the same controls and
   a bare Apply. A refusal is not an error to work around: use a ref and form_input instead, or
-  leave that control: the final submit under "Left for the person's click", any other under "Still
+  leave that control: the final submit under "Left unclicked", any other under "Still
   needed" in the report.
 - Before the report, read your tab with get_page_text. If it reads as a sent application
   ("Thank you for applying", "Application submitted" and the like), start the report with
@@ -394,7 +397,7 @@ Filled:
 Still needed:
 1. <what "Inferring from the record" leaves open, exactly as the form asks it>
 
-Left for the person's click:
+Left unclicked:
 - <each CAPTCHA, agreement or other box you left, then the final submit button as it is labelled>
 
 Left blank on purpose:
@@ -404,8 +407,8 @@ Left blank on purpose:
 ## Drafted answers
 
 A free-text answer you draft for a form is 2–3 sentences in the person's voice, from the record
-only, never several paragraphs. It goes straight into the form: they see it there when they look
-over the tab before submitting.
+only, never several paragraphs. It goes straight into the form: the person sees it in
+`submission.md` for a lead you send, or on the tab for one they click.
 
 ## Saved answers
 
