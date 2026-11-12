@@ -8,6 +8,7 @@ import {
   appendEvent,
   archiveStale,
   approvedText,
+  clarifyChange,
   correctScore,
   decideChanges,
   emptyFeedback,
@@ -16,6 +17,8 @@ import {
   markMentioned,
   moveLead,
   patchLead,
+  reviseChange,
+  stageTab,
 } from '../hooks/lib/model.ts'
 import type {
   Application,
@@ -28,6 +31,7 @@ import type {
   MoveResult,
   Proposal,
   ProposalsFile,
+  Stage,
   StoredProposal,
 } from '../hooks/lib/model.ts'
 
@@ -51,6 +55,15 @@ export function lead(id: string, fields: Partial<Lead> = {}): Lead {
     history: [],
     ...fields,
   }
+}
+
+/** Presses through to a stage: its tab on the top row, then its button on the second. */
+export async function goTo(
+  ui: { press: (at: { key: string }) => Promise<unknown> },
+  stage: Stage,
+): Promise<void> {
+  await ui.press({ key: `tab:${stageTab(stage)}` })
+  await ui.press({ key: `stage:${stage}` })
 }
 
 export type World = {
@@ -146,7 +159,8 @@ export function world(
       case 'move': {
         const reason = rest[rest.indexOf('--reason') + 1]
         const passReason = rest.includes('--reason') ? reason : undefined
-        return commit(moveLead(file, id, second as Column, at, 'user', { passReason }))
+        const note = rest.includes('--note') ? rest[rest.indexOf('--note') + 1] : undefined
+        return commit(moveLead(file, id, second as Column, at, 'user', { passReason, note }))
       }
       case 'pass':
         return commit(moveLead(file, id, 'passed', at, 'user', { passReason: second }))
@@ -188,6 +202,18 @@ export function world(
           }
           put('proposals.json', decided.file)
           return { exitCode: 0, stdout: JSON.stringify({ id }), stderr: '' }
+        } catch (error) {
+          return { exitCode: 1, stdout: '', stderr: (error as Error).message }
+        }
+      }
+      case 'clarify':
+      case 'revise': {
+        const proposals: ProposalsFile = JSON.parse(files.get(`${DATA}/proposals.json`) ?? '{}')
+        try {
+          const input = JSON.parse(id)
+          const write = command === 'clarify' ? clarifyChange : reviseChange
+          put('proposals.json', write(proposals, input, at).file)
+          return { exitCode: 0, stdout: '{}', stderr: '' }
         } catch (error) {
           return { exitCode: 1, stdout: '', stderr: (error as Error).message }
         }

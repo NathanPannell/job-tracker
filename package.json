@@ -1,6 +1,6 @@
 {
   "name": "job-tracker",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "Claude Code mod: a job-search kanban, application packages and a learning loop.",
   "license": "MIT",

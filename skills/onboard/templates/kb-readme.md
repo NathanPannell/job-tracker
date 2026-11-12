@@ -27,4 +27,4 @@ came from are in `../sources/`.
 
 1. Read only the records relevant to the target role.
 2. Keep every number with its stated conditions and scope.
-3. Check `../UNANSWERED-QUESTIONS.md` before treating an ambiguous fact as settled.
+3. Check `../OPEN-QUESTIONS.md` before treating an ambiguous fact as settled.

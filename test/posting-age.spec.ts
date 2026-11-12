@@ -6,7 +6,7 @@ import {
   addLeads,
   ago,
   archiveStale,
-  columnLeads,
+  stageLeads,
   correctScore,
   emptyLeads,
   isStale,
@@ -65,7 +65,7 @@ test('a posting date parses or is unknown; the score never ages', () => {
   const old = lead({ id: 'old', company: 'Old', fitScore: 85, foundAt: daysAgo(30) })
   const fresh = lead({ id: 'fresh', company: 'Fresh', fitScore: 80 })
   assert.deepEqual(
-    columnLeads(board(fresh, old), 'new').map(one => one.id),
+    stageLeads(board(fresh, old), 'new').map(one => one.id),
     ['old', 'fresh'],
   )
   const named = leadsToMention(board(fresh, old), NOW)

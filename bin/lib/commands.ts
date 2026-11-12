@@ -20,6 +20,7 @@ import {
   archiveStale,
   byScore,
   checkProposal,
+  clarifyChange,
   checkSummary,
   COLUMN_TITLES,
   correctScore,
@@ -37,6 +38,8 @@ import {
   moveLead,
   newProposal,
   normalizeProposal,
+  noteUnclear,
+  reviseChange,
   patchLead,
 } from '../../hooks/lib/model.ts'
 import type {
@@ -51,8 +54,10 @@ import type {
   LeadPatch,
   MoveResult,
   PackageFiles,
+  ClarifyInput,
   Proposal,
   ProposalInput,
+  ReviseInput,
 } from '../../hooks/lib/model.ts'
 import { fetchBoards, isReachable } from './ats.ts'
 import type { Ats, Board, Fetch, Posting } from './ats.ts'
@@ -88,8 +93,8 @@ export function list(dir: string, { column, min, limit }: ListOptions = {}): Lea
     .slice(0, limit !== undefined ? Number(limit) : undefined)
 }
 
-export function summary(dir: string): Counts {
-  return counts(readData(dir, 'leads'))
+export function summary(dir: string, now = Date.now()): Counts {
+  return counts(readData(dir, 'leads'), now)
 }
 
 /** Everything scout should skip: what is already on the board, in any column. */
@@ -207,6 +212,11 @@ export function move(dir: string, id: string, column: string, options: MoveOptio
   )
 }
 
+/** What the sync skill could not settle from email; the card stays and the board names it. */
+export function unclear(dir: string, id: string, note: string) {
+  return transact(dir, data => commit(data, noteUnclear(data.leads, id, note, now()), id))
+}
+
 export function score(dir: string, id: string, correction: string) {
   if (correction !== 'too-high' && correction !== 'too-low') {
     throw new Error('A score correction is too-high or too-low')
@@ -311,7 +321,6 @@ const PACKAGE_FILES: Record<Exclude<keyof PackageFiles, 'preview'>, string> = {
   coverLetter: 'cover-letter.md',
   answers: 'answers.md',
   brief: 'company-brief.md',
-  warmIntro: 'warm-intro.md',
 }
 
 /** A unified diff of two files as `git diff --no-index` gives it, hunks only; '' when equal. */
@@ -350,14 +359,14 @@ function snapshotDraft(pkg: string): void {
   }
 }
 
-export type PackageOptions = { column?: string; draftId?: string; redraft?: boolean }
+export type PackageOptions = { column?: string; redraft?: boolean }
 
 /** The registered application, the column the card ended in, and why it stayed when it did. */
 export type PackageResult = Application & { column: Column; notice?: string }
 
 /**
  * Records a lead's package from the files in `packages/<id>/`, renders the résumé preview and
- * diff, snapshots the draft, and moves the card to Ready to review (or `column`).
+ * diff, snapshots the draft, and moves the card to Ready to apply (or `column`).
  *
  * The card moves only from Drafting, where the package skill put it when the build began. In any
  * other column the person (or another flow) moved it during the build, most often to Archived or
@@ -392,7 +401,6 @@ export function registerPackage(
     const stays = lead.column !== column && lead.column !== 'drafting'
     const ends = stays ? lead.column : column
     const existing = data.applications.applications.find(one => one.leadId === id)
-    const draftId = options.draftId ?? existing?.warmIntroDraftId
     const application: Application = {
       leadId: id,
       dir: `packages/${id}`,
@@ -401,7 +409,6 @@ export function registerPackage(
       files,
       status: ends === 'ready' ? 'ready' : (existing?.status ?? 'drafting'),
       ...(existing?.submittedAt ? { submittedAt: existing.submittedAt } : {}),
-      ...(draftId ? { warmIntroDraftId: draftId } : {}),
     }
     const moved: MoveResult =
       lead.column === ends ? { leads: data.leads } : moveLead(data.leads, id, ends, at, 'package')
@@ -485,12 +492,12 @@ export function submitted(dir: string, id: string) {
   })
 }
 
-export type { ProposalInput }
+export type { ClarifyInput, ProposalInput, ReviseInput }
 
 /**
  * Saves the learn skill's proposal: 3 to 10 changes (fewer with a reason), each pending on its
- * own. Saving under the id of a proposal with decided changes is refused, so a rerun of the
- * review never wipes the person's decisions.
+ * own. Saving under the id of a proposal with decided or clarified changes is refused, so a rerun
+ * of the review never wipes what the person did.
  */
 export function propose(dir: string, input: ProposalInput) {
   const problem = checkProposal(input)
@@ -499,8 +506,14 @@ export function propose(dir: string, input: ProposalInput) {
   const id = input.id ?? `proposal-${at.slice(0, 10)}`
   return transact<Proposal>(dir, data => {
     const existing = data.proposals.proposals.find(one => one.id === id)
-    if (existing && normalizeProposal(existing).changes.some(one => one.status !== 'pending')) {
+    const changes = existing ? normalizeProposal(existing).changes : []
+    if (changes.some(one => one.status !== 'pending')) {
       throw new Error(`Proposal ${id} already has decided changes; save this one under another id`)
+    }
+    if (changes.some(one => one.clarifications?.length)) {
+      throw new Error(
+        `Proposal ${id} already has clarified changes; save this one under another id`,
+      )
     }
     const entry = newProposal(input, id, at)
     return {
@@ -550,14 +563,40 @@ export function decide(dir: string, id: string, first: string, second?: string) 
   })
 }
 
+/**
+ * Keeps the person's clarification on a pending change, which stays open: the learn skill revises
+ * it (`revise`) and it comes back for review. Nothing reaches a profile file.
+ */
+export function clarify(dir: string, input: ClarifyInput) {
+  const at = now()
+  return transact(dir, data => {
+    const clarified = clarifyChange(data.proposals, input, at)
+    return { write: { proposals: clarified.file }, result: clarified.change }
+  })
+}
+
+/** Saves the learn skill's revision of a clarified change, pending again for the person. */
+export function revise(dir: string, input: ReviseInput) {
+  const at = now()
+  return transact(dir, data => {
+    const revised = reviseChange(data.proposals, input, at)
+    return { write: { proposals: revised.file }, result: revised.change }
+  })
+}
+
 export type PackageEdit = { leadId: string; file: string; diff: string }
 
-/** The person's edits to each drafted package: a diff per file changed since it was drafted. */
+/**
+ * The person's edits to each drafted package: a diff per file changed since it was drafted.
+ * Only files a package still has count; an old snapshot of a dropped file (`warm-intro.md`) does not.
+ */
 export function edits(dir: string): PackageEdit[] {
+  const drafted = new Set<string>(Object.values(PACKAGE_FILES))
   return readData(dir, 'applications').applications.flatMap(app => {
     const draft = join(dir, app.dir, '.draft')
     if (!existsSync(draft)) return []
     return readdirSync(draft).flatMap(name => {
+      if (!drafted.has(name)) return []
       const current = join(dir, app.dir, name)
       if (!existsSync(current)) return []
       const diff = diffFiles(join(draft, name), current, 1)

@@ -3,7 +3,13 @@
 import { parseArgs } from 'node:util'
 
 import * as commands from './lib/commands.ts'
-import type { FeedbackInput, ProposalInput, SummaryInput } from './lib/commands.ts'
+import type {
+  ClarifyInput,
+  FeedbackInput,
+  ProposalInput,
+  ReviseInput,
+  SummaryInput,
+} from './lib/commands.ts'
 import { ADD_MIN_SCORE } from '../hooks/lib/model.ts'
 import type { IncomingLead, LeadPatch } from '../hooks/lib/model.ts'
 import { gmailQuery, markGmailRead } from './lib/gmail.ts'
@@ -24,6 +30,8 @@ const USAGE = `jobs <command> [args] [--data <dir>]
                                          (or, undated, added then) to Archived, and mark Applied
                                          leads with no reply a month after submitting ghosted
   move <id> <column> [--reason r] [--by actor] [--note n]
+  unclear <id> <note>                    what email left unclear about a lead; the card stays and
+                                         the board names it for a week
   pass <id> <reason>
   score <id> too-high|too-low
   patch <id> <json|@file> [--by actor]   change fields of a lead
@@ -32,17 +40,22 @@ const USAGE = `jobs <command> [args] [--data <dir>]
                                          fill them
   mention <id>...                        mark leads as mentioned to the person
   feedback <json|@file>                  { leadId, kind, reason? }
-  package <id> [--column ready] [--draft-id id] [--redraft]
+  package <id> [--column ready] [--redraft]
                                          record packages/<id>/, render the résumé preview and diff
   preview <id>                           render a package's résumé preview again
   diff <id>                              the tailored résumé against the master
   submitted <id>                         the person submitted it: move to Applied
   propose <json|@file>                   add a learning proposal: 3-10 changes, each decided
                                          on its own (fewer than 3 needs a fewerReason)
-  decide <proposal-id> <change-id>|all approve|reject
-                                         approve (append to its profile file) or reject one
-                                         change (c1, c2, ... or 1, 2, ...), or all pending ones;
+  decide <proposal-id> <change-ids>|all approve|reject
+                                         approve (append to its profile file) or reject changes
+                                         (c1, 2 or a list, c1,c3), or all pending ones;
                                          decide <proposal-id> approve|reject decides all
+  clarify <json|@file>                   { proposal, change, text }: the person's words on a
+                                         pending change, which stays open until it is revised
+  revise <json|@file>                    { proposal, change, answers, text, title?, rationale?,
+                                         file? }: the change rewritten from the clarification
+                                         named by its at in answers, pending for the person
   edits                                  the person's edits to drafted packages, as diffs
   ats [--all]                            fetch the Greenhouse/Lever/Ashby boards in profile/ats-boards.json
   probe <slug>... [--company name]       which ATS (if any) has a public board under this slug
@@ -63,7 +76,6 @@ async function main(argv: string[]): Promise<unknown> {
       reason: { type: 'string' },
       by: { type: 'string' },
       note: { type: 'string' },
-      'draft-id': { type: 'string' },
       redraft: { type: 'boolean' },
       all: { type: 'boolean' },
       company: { type: 'string' },
@@ -92,6 +104,8 @@ async function main(argv: string[]): Promise<unknown> {
       return commands.archive(dir)
     case 'move':
       return commands.move(dir, need(args[0], 'id'), need(args[1], 'column'), values)
+    case 'unclear':
+      return commands.unclear(dir, need(args[0], 'id'), need(args[1], 'note'))
     case 'pass':
       return commands.move(dir, need(args[0], 'id'), 'passed', { reason: need(args[1], 'reason') })
     case 'score':
@@ -115,7 +129,6 @@ async function main(argv: string[]): Promise<unknown> {
     case 'package':
       return commands.registerPackage(dir, need(args[0], 'id'), {
         column: values.column,
-        draftId: values['draft-id'],
         redraft: values.redraft,
       })
     case 'preview':
@@ -128,6 +141,10 @@ async function main(argv: string[]): Promise<unknown> {
       return commands.propose(dir, commands.readJsonArg<ProposalInput>(args[0]))
     case 'decide':
       return commands.decide(dir, need(args[0], 'proposal id'), need(args[1], 'decision'), args[2])
+    case 'clarify':
+      return commands.clarify(dir, commands.readJsonArg<ClarifyInput>(args[0]))
+    case 'revise':
+      return commands.revise(dir, commands.readJsonArg<ReviseInput>(args[0]))
     case 'edits':
       return commands.edits(dir)
     case 'ats':

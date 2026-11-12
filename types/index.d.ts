@@ -12,13 +12,22 @@ export type Column =
   | 'passed'
   | 'archived'
 
+/** The board's top row: work to do, applications made, and what is settled. */
+export type BoardTab = 'active' | 'applications' | 'settled'
+
+/**
+ * A button of the board's second row: a column, or Ghosted, which is not stored: a ghosted lead sits
+ * in `archived`, and its last move says so (`isGhosted` in hooks/lib/model.ts).
+ */
+export type Stage = Column | 'ghosted'
+
 /** Who changed a lead; `tracker` is the board itself, e.g. archiving a lead left too long in New, or ghosting. */
 export type Actor = 'user' | 'scout' | 'package' | 'submit' | 'sync' | 'learn' | 'model' | 'tracker'
 
 export type HistoryEntry = {
   at: string
   by: Actor
-  /** `created`, `moved`, `scored`, `mentioned` or `note` (`snoozed` in older history). */
+  /** `created`, `moved`, `scored`, `mentioned`, `note` or `unclear` (`snoozed` in older history). */
   action: string
   /** Older entries may name `shortlisted`, a column the board no longer has. */
   from?: Column
@@ -85,7 +94,6 @@ export type PackageFiles = {
   coverLetter?: string
   answers?: string
   brief?: string
-  warmIntro?: string
   /** The résumé PDF as SVG pages, in order, for the pane. */
   preview?: string[]
 }
@@ -99,8 +107,6 @@ export type Application = {
   updatedAt: string
   files: PackageFiles
   submittedAt?: string
-  /** The Gmail draft of the warm-intro ask, when one was drafted. */
-  warmIntroDraftId?: string
   status: 'drafting' | 'ready' | 'submitted' | 'withdrawn'
 }
 
@@ -133,7 +139,20 @@ export type FeedbackFile = { version: 1; events: FeedbackEvent[] }
 
 export type ChangeStatus = 'pending' | 'approved' | 'rejected'
 
-/** One learning in a proposal, approved or rejected on its own. */
+/**
+ * What the person wrote on a pending change: neither a decision nor a learning. The learn skill
+ * revises the change with it (`jobs revise`) and reads it on later runs.
+ */
+export type Clarification = {
+  at: string
+  text: string
+  /** The change's text when they wrote it: what the clarification corrected. */
+  was: string
+  /** When the revision landed; until then the change cannot be approved. */
+  revisedAt?: string
+}
+
+/** One learning in a proposal, approved, rejected or clarified on its own. */
 export type ProposalChange = {
   /** `c1`, `c2`, ... in proposal order; a change saved before ids existed takes its place's. */
   id: string
@@ -145,6 +164,8 @@ export type ProposalChange = {
   /** A change saved before per-change decisions takes its proposal's status. */
   status: ChangeStatus
   decidedAt?: string
+  /** Oldest first; at most the last one is still waiting for its revision. */
+  clarifications?: Clarification[]
 }
 
 /**
@@ -184,7 +205,7 @@ export type JobBoard = {
   error: string | null
 }
 
-export type PackageTab = 'resume' | 'diff' | 'cover' | 'answers' | 'brief' | 'intro'
+export type PackageTab = 'resume' | 'diff' | 'cover' | 'answers' | 'brief'
 
 export type JobView =
   | { kind: 'board' }
@@ -212,11 +233,12 @@ export type SentPrompt = {
 
 /**
  * A package build the pane started as a background subagent. `agentId` is known once the engine
- * names the agent, at the latest when its run starts with `task`.
+ * names the agent, at the latest when its run starts with `task`. A revision's `leadId` is the
+ * change it revises (`clarifyKey`) and its `company` that change's title.
  */
 export type DraftRun = {
-  /** A package build (absent, from before prefills) or an application's background prefill. */
-  kind?: 'draft' | 'submit'
+  /** A package build (absent, from before prefills), a background prefill, or a revision. */
+  kind?: 'draft' | 'submit' | 'revise'
   /** A prefill whose report went to the conversation, which is asking and submitting now. */
   isHandedOn?: true
   agentId?: string
@@ -251,9 +273,10 @@ declare module 'claude-code' {
       board: JobBoard
       view: JobView
       pkg: JobPackage | null
-      showClosed: boolean
-      /** The board's selected stage tab; null until the person picks one. */
-      stage: Column | null
+      /** The board's top-row tab; each opening starts on Active. */
+      boardTab: BoardTab
+      /** The tab's selected stage; null until the person picks one. */
+      stage: Stage | null
       /** How many cards the selected stage shows (grows by ten with "Show more"). */
       shown: number
       /** Leads the nudge named in this session's first prompt, marked when the turn ends. */
@@ -265,6 +288,8 @@ declare module 'claude-code' {
       busy: string | null
       /** The lead whose pass reasons are open, on its card or its own page; null when none. */
       passing: string | null
+      /** The change whose clarification field is open (`clarifyKey`); null when none. */
+      clarifying: string | null
       /** True while a main-loop turn runs: a prompt sent now waits for it to end. */
       turning: boolean
       /** Prompts the pane sent whose turn has not started yet. */

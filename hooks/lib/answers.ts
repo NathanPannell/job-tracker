@@ -226,27 +226,41 @@ export function parseQuestions(markdown: string): Question[] {
   return distinct.map(one => ({ ...one, keys: one.keys.filter(once) }))
 }
 
-/** The entries of the saved answers that hold an answer, on the `Answer:` line or quoted below. */
+/**
+ * What retires an entry (the latest answer to its question is a later entry): a bullet line that
+ * opens with Superseded, or the word in its heading.
+ */
+const SUPERSEDED = /^[ \t]*[-*][ \t]+[*_]*Superseded\b/im
+const SUPERSEDED_HEADING = /\bsuperseded\b/i
+
+/** A wording line, `- Also asked as: <wording>`, bold or indented as a sub-item. */
+const ALIAS = /^[ \t]*[-*][ \t]+[*_]*Also asked as:?[*_]*:?[ \t]*(\S.*)$/gim
+
+/**
+ * The entries of the saved answers that hold an answer, on the `Answer:` line or quoted below,
+ * one per wording: the heading and each `- Also asked as:` line. An entry marked Superseded
+ * answers nothing.
+ */
 export function parseSaved(markdown: string): SavedAnswer[] {
   return markdown
     .split(/^## /m)
     .slice(1)
     .flatMap(entry => {
       if (!/^- Answer:[ \t]*(?:\S|\r?\n\s*>\s*\S)/m.test(entry)) return []
+      const heading = /^.*/.exec(entry)?.[0] ?? ''
+      if (SUPERSEDED.test(entry) || SUPERSEDED_HEADING.test(heading)) return []
       const scope = /^- Scope:\s*(.*)$/m.exec(entry)?.[1] ?? ''
       const only = /^(.+?)[\s-]+only\b/i.exec(scope)?.[1] ?? ''
       const leadId = /^- Asked by:.*\(`([^`]+)`\)/m.exec(entry)?.[1]
-      const question = plain(/^.*/.exec(entry)?.[0] ?? '')
-      return [
-        {
-          key: wording(question),
-          detail: beyond(question),
-          ...(leadId ? { leadId } : {}),
-          ...(/^any application\s*(?:\(|$)/i.test(scope)
-            ? {}
-            : { companies: only.split('/').map(key).filter(Boolean) }),
-        },
-      ]
+      const aliases = [...entry.matchAll(ALIAS)].map(m => m[1] ?? '')
+      return [heading, ...aliases].map(plain).map(question => ({
+        key: wording(question),
+        detail: beyond(question),
+        ...(leadId ? { leadId } : {}),
+        ...(/^any application\s*(?:\(|$)/i.test(scope)
+          ? {}
+          : { companies: only.split('/').map(key).filter(Boolean) }),
+      }))
     })
 }
 

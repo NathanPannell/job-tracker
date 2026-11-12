@@ -2,7 +2,7 @@ import { describe, expect, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 
 import type { Lead } from '../hooks/lib/model.ts'
-import { DATA, lead, PANE_PROPS, world } from './world.ts'
+import { DATA, goTo, lead, PANE_PROPS, world } from './world.ts'
 
 const pane = {
   plugin: 'job-tracker',
@@ -119,7 +119,7 @@ describe('ready notes', () => {
     )
     await start($)
     const ui = await $.ui.mount({ ...pane, surface: 'desktop' })
-    expect(await ui.find({ key: 'tab:ready', text: /Ready to review 1/ })).toBeDefined()
+    expect(await ui.find({ key: 'stage:ready', text: /Ready to apply 1/ })).toBeDefined()
     expect(await notes(ui)).toEqual([])
   })
 
@@ -134,7 +134,7 @@ describe('ready notes', () => {
     )
     await start($)
     const ui = await $.ui.mount({ ...pane, surface: 'desktop' })
-    await ui.press({ key: 'tab:applied' })
+    await goTo(ui, 'applied')
     expect(await ui.find({ key: 'interview:acme-api' })).toBeDefined()
     expect(await notes(ui)).toEqual([])
   })

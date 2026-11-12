@@ -2,7 +2,8 @@
 
 Written by the onboard skill on <YYYY-MM-DD> from the person's own answers. Anything they did not
 say is flagged in `OPEN-QUESTIONS.md` instead of guessed. The `learn` skill proposes changes to this
-file; only approved proposals are appended.
+file; only approved proposals are appended. `learnings.md` holds what their feedback has taught
+since: scoring adjustments that apply on top of this file, and how packages are written.
 
 ## Who
 
@@ -17,7 +18,20 @@ Not interested: <titles they would not take>.
 
 ## Level
 
-<Level they want, how far they would stretch, and which titles or year counts are out of reach.>
+<Years of experience they have, and the titles and year counts that fit.>
+
+Screens filter on level first, so a role is only worth applying to when the person meets what it
+asks for:
+
+- A stated minimum above their years is a dealbreaker, and so is a title above their level
+  (Senior, Staff, Lead, Principal; for a new grad also Engineer II, Intermediate or Level III,
+  unless the posting asks for no more years than they have).
+- An unstated level counts as fitting only when the title is plain (Software Engineer,
+  Developer) or names their level.
+- A required degree they do not hold is a dealbreaker, and so is a yes/no knockout question they
+  would have to answer No.
+- A core technology the posting requires and they have never used caps the score at 60.
+  "Nice to have" items do not count.
 
 ## Location
 
@@ -32,7 +46,9 @@ Not interested: <titles they would not take>.
 
 <Size, stage, type of company they want.>
 
-## Industries (bonus, not required)
+## Industries (tie-breaker, not scored)
+
+Used to pick between two leads with the same score, and named in `roleHighlights` when they match.
 
 - <Industry>
 
@@ -44,25 +60,23 @@ Floor <amount and currency>. Target <amount and currency>.
 
 - Posted pay entirely below <floor>.
 - <Location that does not work.>
-- <Level that does not work.>
+- The level rules above.
 - <Kinds of work they refuse.>
 
 ## Scoring rubric (0–100)
 
-Start from 50 and adjust; write the reason in one line naming the two or three biggest factors.
+The score is the person's chance of getting an interview, not how much they would like the job:
+would a screener holding this posting and their résumé pass them on? Start from 50 and adjust;
+write the reason in one line naming the two or three biggest factors.
 
 | Factor | Adjustment |
 | --- | --- |
-| <Core work they most want> | +15 |
-| <Second kind of work they want> | +10 |
-| <Best location setup> | +15; <next best> +8; <acceptable> +0 |
-| <Right level> | +10; <one step off> +5; <stretch> −15; <out of reach> −30 |
-| <Company type they prefer> | +8 |
-| <Industries they love> | +7 |
-| Stack overlap (<their real stack>) | up to +8 |
-| Posted pay at or above <target> | +4; straddles the floor −5; below the floor → dealbreaker |
-| <Work they would rather avoid> | −10 |
-| <Company type they avoid> | −15 |
+| Level asked | <their level, or plain title with none stated> +15; <one step up, within their years> +5; beyond their years → dealbreaker |
+| Main stack is one they have shipped (<their real stack>) | all of it +12; some +5; mostly one they have not used −12 |
+| Day-to-day work matches their record (<the work they have evidence for>) | +10; partly +3; specialised work they have no evidence for −15 |
+| Applicant pool | <best location setup> +15; <next best> +8; <acceptable> +3 |
+| Competition | famous brand drawing thousands of applicants −10; small or local company +5 |
+| Domain they have evidence for (<domains>) | +4 |
 
-Thresholds: drop below 70; 70–74 worth a look; 75–89 strong; 90+ apply now (push notification).
-`learnings.md` adjusts this rubric with what their feedback has taught; read it on every run.
+Thresholds: below 70 it does not go on the board; 70–79 a fair shot; 80–89 a good shot; 90+ apply
+today (push notification). `learnings.md` adjusts this rubric; read it on every run.

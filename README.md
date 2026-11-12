@@ -2,9 +2,10 @@
 
 A job search that runs inside [Claude Code](https://code.claude.com). Scheduled agents find
 postings and score them against written preferences. One click builds a tailored application
-package. The final submit is held for the person's yes in chat. The person's passes, edits and
-outcomes then feed a weekly review that proposes changes to how the next postings are scored and
-written.
+package, and an approved package is submitted for the person; only a CAPTCHA, a legal agreement
+or a sign-in waits for their own click, and a lead marked for manual applying is theirs alone.
+Their passes, edits and outcomes then feed a weekly review that proposes changes to how the next
+postings are scored and written.
 
 It is a working personal tool, not a product. It is public as a worked example of agents carrying
 a messy, real workflow: they do the reading and the drafting, one small CLI owns the state, and a
@@ -28,19 +29,22 @@ Built on Claude Code. Not affiliated with or endorsed by Anthropic.
   decay with age; a New lead is archived once its posting is over 14 days old instead. The person
   can mark a score too high or too low on the lead's page.
 - **Package** runs in a background subagent. It builds a résumé from approved wording only, with a
-  source line for every bullet, then a cover letter, answers to the posting's questions, a company
-  brief and a warm-intro search. A warm intro can become a Gmail draft, never a sent email. The
-  person reviews each file on the board.
-- **Submit** starts with a background subagent that fills in the form in Chrome and uploads the
-  PDF. The conversation then asks, in one message, for anything the record does not answer, shows
-  what was entered and asks whether to submit. Each answer is saved word for word, so a question
-  answered once is not asked again where that answer applies. Sign-ins, passwords, CAPTCHAs and
-  agreements go back to the person.
-- **Sync** reads Gmail and Calendar for replies, rejections, interviews and offers, and proposes
-  moves in a table. No card moves until the person confirms.
+  source line for every bullet, then a cover letter, answers to the posting's questions and a
+  company brief. The person reviews each file on the board.
+- **Submit** starts with a background subagent that fills in the form in Chrome from the record,
+  drafted answers included, and uploads the PDF. The conversation then asks a short numbered list
+  of only what the record cannot answer, fills each form again in a fresh tab, clicks its final
+  submit, confirms the sent page and moves the card to Applied. Each answer is saved as the text
+  to enter, one per question, so a question answered once is not asked again. Sign-ins,
+  passwords, CAPTCHAs and agreements go back to the person for their own click.
+- **Sync** runs on a schedule. It reads Gmail and Calendar for replies, and moves the card itself
+  for a clear rejection, interview request or offer. Rejections are filed quietly; interviews,
+  offers and anything unclear (whose card stays where it is) are named on the board for a week. It
+  never sends, drafts, labels or deletes email.
 - **Learn** runs weekly. It reads passes, score corrections, edits to drafted packages and outcomes
   by source, and proposes up to ten small changes, each backed by at least two events. Each change
-  is approved or rejected on its own.
+  is approved or rejected on its own, or clarified: you type what should change, and it comes back
+  revised for review.
 
 An application with no reply a month after it was submitted is marked ghosted on its own, and a
 late reply still moves the card on.
@@ -87,9 +91,10 @@ flowchart LR
   the board can all land at once. `bin/lib/store.ts` takes a lock file, reads, applies a pure
   function and renames a temporary file over the old one. It recovers stale locks and retries the
   renames Windows refuses while a file is briefly held open.
-- **A code guard backs the human gate where an agent works unattended.** The submit skill stops and
-  asks in chat. Background prefills also pass a guard (`hooks/lib/chrome.ts`) that limits them to
-  tabs they opened, requires an element ref for every click, reads each element first, and refuses
+- **A code guard backs the human gate where an agent works unattended.** The submit skill clicks
+  a final submit only in the person's conversation, for a lead they approved. Background prefills
+  also pass a guard (`hooks/lib/chrome.ts`) that limits them to tabs they opened, requires an
+  element ref for every click, reads each element first, and refuses
   a click on anything labelled or typed like a final submit. It exists because one prefill's clicks
   once landed in another's tab and sent an application nobody approved. The mod now also looks for
   a stray submit when a prefill ends, and raises it first in the conversation. Forms inside shadow

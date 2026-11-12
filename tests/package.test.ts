@@ -61,6 +61,27 @@ describe('package viewer', () => {
     expect(await ui.find({ key: 'tab:answers' })).toBeUndefined()
   })
 
+  test('an old package with a warm-intro note loads without a warm-intro tab', async ($, on) => {
+    // Recorded before warm intros were dropped: the role stays in applications.json and on disk.
+    const old = {
+      ...seed,
+      applications: seed.applications.map(app => ({
+        ...app,
+        files: { ...app.files, warmIntro: 'warm-intro.md' },
+        warmIntroDraftId: 'r-1',
+      })),
+    }
+    world(on, old, { ...files, [`${pkgDir}/warm-intro.md`]: '# Warm intro\n\nAsk Sam.' })
+    await $.session.start({ cwd: '.', surface: 'desktop', isInteractive: true })
+    const ui = await $.ui.mount({ ...pane, surface: 'desktop' })
+    await ui.press({ key: 'open:acme-api' })
+    await ui.press({ key: 'review' })
+    expect(await ui.findAll({ type: 'Svg' })).toHaveLength(2)
+    expect(await ui.find({ key: 'tab:brief' })).toBeDefined()
+    expect(await ui.find({ key: 'tab:intro' })).toBeUndefined()
+    expect(await ui.find({ text: /Warm intro|Ask Sam/ })).toBeUndefined()
+  })
+
   test('the terminal, which has no Svg, offers Open PDF instead', async ($, on) => {
     world(on, seed, files)
     await $.session.start({ cwd: '.', surface: 'terminal', isInteractive: true })

@@ -368,6 +368,11 @@ test('a stray submit opens the report, and the conversation is told to say so fi
   const next = submitFollowUp(lead, report)
   assert.match(next, /^Before anything else: the background prefill/)
   assert.match(next, /Do not click, fill or submit anything/)
+  // Sending what is open-free is for the batch's other leads, never this one.
+  assert.match(
+    next,
+    /What follows about sending applications is for the other leads only, never this one\./,
+  )
   assert.ok(next.includes(`<<<PREFILL REPORT\n${report}\nPREFILL REPORT>>>`))
   // The prefill's own task names the rules the guard enforces.
   assert.match(submitTask(lead), /tabs_create_mcp, pass its tabId on every call/)

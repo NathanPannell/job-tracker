@@ -39,18 +39,30 @@ import type { RunStep } from './lib/deep-form.ts'
 import { act, dataDir, EMPTY_BOARD, jobs, loadPackage, openFile, PANE, refresh } from './lib/io.ts'
 import {
   bandText,
+  clarifyKey,
   counts,
   draftRelay,
   draftTask,
+  GHOSTED_REASON,
+  isApprovable,
   isColumn,
+  isGhosted,
   leadsToMention,
   nudgeContext,
+  openClarification,
+  reviseRelay,
+  reviseTask,
+  stageOf,
+  stageTab,
+  submitBatchLeft,
   submitBatchRelay,
+  isManualApply,
+  MANUAL_APPLY,
   submitFollowUp,
   submitRelay,
   submitTask,
 } from './lib/model.ts'
-import type { BatchLead, Column, Lead } from './lib/model.ts'
+import type { BatchLead, BoardTab, Column, Lead, Stage } from './lib/model.ts'
 import { boardView, leadView, packageView, PAGE, proposalsView } from './views.tsx'
 import type { Actions, ViewContext } from './views.tsx'
 
@@ -58,8 +70,8 @@ import type { Actions, ViewContext } from './views.tsx'
 const board = atom({ plugin: 'job-tracker', key: 'board' } as const, EMPTY_BOARD)
 const view = atom({ plugin: 'job-tracker', key: 'view' } as const, { kind: 'board' } as JobView)
 const pkg = atom({ plugin: 'job-tracker', key: 'pkg' } as const, null as JobPackage | null)
-const showClosed = atom({ plugin: 'job-tracker', key: 'showClosed' } as const, false)
-const stage = atom({ plugin: 'job-tracker', key: 'stage' } as const, null as Column | null)
+const boardTab = atom({ plugin: 'job-tracker', key: 'boardTab' } as const, 'active' as BoardTab)
+const stage = atom({ plugin: 'job-tracker', key: 'stage' } as const, null as Stage | null)
 const shown = atom({ plugin: 'job-tracker', key: 'shown' } as const, PAGE)
 const pending = atom({ plugin: 'job-tracker', key: 'pending' } as const, [] as string[])
 const pendingTurn = atom(
@@ -69,6 +81,10 @@ const pendingTurn = atom(
 const nudged = atom({ plugin: 'job-tracker', key: 'nudged' } as const, false)
 const busy = atom({ plugin: 'job-tracker', key: 'busy' } as const, null as string | null)
 const passing = atom({ plugin: 'job-tracker', key: 'passing' } as const, null as string | null)
+const clarifying = atom(
+  { plugin: 'job-tracker', key: 'clarifying' } as const,
+  null as string | null,
+)
 const turning = atom({ plugin: 'job-tracker', key: 'turning' } as const, false)
 const sent = atom({ plugin: 'job-tracker', key: 'sent' } as const, [] as SentPrompt[])
 const drafts = atom({ plugin: 'job-tracker', key: 'drafts' } as const, [] as DraftRun[])
@@ -90,9 +106,17 @@ const isJobPrompt = (text: string) => /job-tracker|\/jobs\b/i.test(text)
 
 const openPane = ($: EngineInterface) => $.ui.open({ id: PANE, title: 'Jobs' })
 
+/** Puts the board back on Active: every opening starts there, wherever the last visit ended. */
+async function resetBoard($: EngineInterface) {
+  await update($, boardTab, () => 'active' as const)
+  await update($, stage, () => null)
+  await update($, shown, () => PAGE)
+}
+
 async function show($: EngineInterface, next: JobView) {
   // Reasons opened on a card stay with that card, not with the page the person goes to.
   await update($, passing, () => null)
+  await update($, clarifying, () => null)
   await update($, view, () => next)
   if (next.kind === 'package') await loadPackage($, next.id)
 }
@@ -200,7 +224,8 @@ async function draftPackage(
     await release()
     if (lead.column === 'drafting') return
     const reason = lead.column === 'passed' ? ['--reason', lead.passReason ?? 'Not interested'] : []
-    await act($, 'Undoing the move', ['move', lead.id, lead.column, ...reason])
+    const note = isGhosted(lead) ? ['--note', GHOSTED_REASON] : []
+    await act($, 'Undoing the move', ['move', lead.id, lead.column, ...reason, ...note])
   }
   const label = `Drafting the ${lead.company} package`
   let refused: string
@@ -232,6 +257,48 @@ async function draftPackage(
 }
 
 /**
+ * Revises a clarified change off the person's conversation: a background subagent follows the
+ * learn skill and the revision shows on the board for review again. Where the engine refuses the
+ * spawn, the conversation is asked to start the subagent instead.
+ */
+async function reviseClarified($: EngineInterface, proposalId: string, changeId: string) {
+  // Read afresh: its revision may have landed since the page drew.
+  const proposal = (await refresh($, false)).proposals.find(one => one.id === proposalId)
+  const change = proposal?.changes.find(one => one.id === changeId)
+  if (!change || !openClarification(change)) return
+  const task = reviseTask(proposalId, change)
+  const running = await claimRun($, {
+    kind: 'revise',
+    leadId: clarifyKey(proposalId, changeId),
+    company: change.title,
+    task,
+    at: await $.clock.now(),
+  })
+  if (running) {
+    $.ui.toast(busyNote(running))
+    return
+  }
+  const label = `Revising "${change.title}"`
+  try {
+    const spawned = await $.agent.spawn({
+      prompt: task,
+      description: `Revise ${changeId} of ${proposalId}`,
+      subagentType: 'general-purpose',
+    })
+    if (spawned.deny === undefined) {
+      if (spawned.agentId) await startDraft($, spawned.agentId, task)
+      $.ui.toast(`${label} in the background; it comes back here for review.`)
+      return
+    }
+  } catch {
+    // the conversation starts it instead
+  }
+  if (!(await sendPrompt($, reviseRelay(change.title, task), label))) {
+    await update($, drafts, list => list.filter(one => one.task !== task))
+  }
+}
+
+/**
  * Claims a lead for one background run, before anything slow, so a second press or tool call
  * meanwhile starts nothing: answers the run already going for that lead, if there is one.
  */
@@ -248,22 +315,32 @@ async function claimRun($: EngineInterface, run: DraftRun): Promise<DraftRun | u
 /** What a press says when the lead already has a background run going. */
 const busyNote = (run: DraftRun) =>
   run.isHandedOn
-    ? `The ${run.company} application is prefilled; Claude asks about it in the conversation.`
-    : run.kind === 'submit'
-      ? `The ${run.company} application is already being prefilled.`
-      : `The ${run.company} package is already being drafted.`
+    ? `The ${run.company} application is prefilled; Claude picks it up in the conversation.`
+    : run.kind === 'revise'
+      ? `"${run.company}" is already being revised.`
+      : run.kind === 'submit'
+        ? `The ${run.company} application is already being prefilled.`
+        : `The ${run.company} package is already being drafted.`
 
 /**
  * Prefills an approved package's application in Chrome off the person's conversation: a
  * background subagent runs the submit skill's slow part and never submits. Its report goes to
- * the conversation when it ends (`finishDraft`), where the person answers what is missing and
- * says yes. Where the engine refuses the spawn, the conversation is asked to do all of it.
+ * the conversation when it ends (`finishDraft`), where the person answers what the record cannot
+ * and the conversation sends it, unless it needs the person's own click. A lead marked for applying
+ * by hand is never opened. Where the engine refuses the spawn, the conversation is asked to do
+ * all of it.
  */
 async function submitApplication($: EngineInterface, lead: Lead) {
+  if (isManualApply(lead)) {
+    $.ui.toast(manualNote(lead))
+    return
+  }
   const started = await startPrefill($, lead)
   const label = `Prefilling the ${lead.company} application`
   if (started === 'spawned') {
-    $.ui.toast(`${label} in Chrome in the background; Claude asks here before submitting.`)
+    $.ui.toast(
+      `${label} in Chrome in the background; Claude submits it once nothing is open, or says here what it needs from you.`,
+    )
   } else if (started === 'refused') {
     await sendPrompt($, submitRelay(lead), label)
   } else {
@@ -312,7 +389,10 @@ async function startPrefill(
  * toast says what started; the leads whose spawn was refused go to the conversation in one
  * prompt, so it still asks once for the whole batch.
  */
-async function submitAll($: EngineInterface, leads: readonly Lead[]) {
+async function submitAll($: EngineInterface, approved: readonly Lead[]) {
+  // A lead marked for applying by hand is never opened, in a batch as alone.
+  const manual = approved.filter(isManualApply).length
+  const leads = approved.filter(one => !isManualApply(one))
   // One lead's failure is that lead's alone: it counts as refused, so the conversation asks.
   const settled = await Promise.allSettled(leads.map(lead => startPrefill($, lead)))
   const started = settled.map(one => (one.status === 'fulfilled' ? one.value : 'refused'))
@@ -321,8 +401,9 @@ async function submitAll($: EngineInterface, leads: readonly Lead[]) {
   const refused = leads.filter((_, n) => started[n] === 'refused')
   const notes = [
     spawned > 0 &&
-      `Prefilling ${plural(spawned, 'application')} in Chrome in the background; Claude asks here once for the batch before submitting.`,
+      `Prefilling ${plural(spawned, 'application')} in Chrome in the background; Claude submits each once nothing is open, or says here what it needs from you.`,
     running > 0 && `${plural(running, 'application')} already underway.`,
+    manual > 0 && `${manual} marked ${MANUAL_APPLY} left for you to apply by hand.`,
   ].filter(Boolean)
   if (notes.length > 0) $.ui.toast(notes.join(' '))
   if (refused.length > 0) {
@@ -333,6 +414,10 @@ async function submitAll($: EngineInterface, leads: readonly Lead[]) {
     )
   }
 }
+
+/** What the person is told when they approve a lead marked for applying by hand. */
+const manualNote = (lead: Lead) =>
+  `${lead.company} is marked ${MANUAL_APPLY}: apply for it by hand; its package is ready.`
 
 const plural = (n: number, noun: string) => `${n} ${noun}${n === 1 ? '' : 's'}`
 
@@ -357,7 +442,7 @@ async function startDraft($: EngineInterface, agentId: string, text: string) {
 
 /**
  * The other applications approved alongside a lead and not submitted yet: prefills still running
- * and prefilled ones the conversation is asking about, whose cards are still in Ready to review.
+ * and prefilled ones waiting in the conversation, whose cards are still in Ready to apply.
  */
 async function batchOf($: EngineInterface, leadId: string, at: number): Promise<BatchLead[]> {
   const leads = (await read($, board)).leads
@@ -372,7 +457,7 @@ async function batchOf($: EngineInterface, leadId: string, at: number): Promise<
 
 /**
  * A background run's subagent ended. A package build: the board shows where its card went, a
- * toast says how. A prefill: its report goes to the conversation, which asks before submitting.
+ * toast says how. A prefill: its report goes to the conversation, which asks what is left.
  */
 async function finishDraft($: EngineInterface, agentId: string, answer: string, reason: string) {
   const run = (await read($, drafts)).find(one => one.agentId === agentId)
@@ -389,8 +474,10 @@ async function finishDraft($: EngineInterface, agentId: string, answer: string, 
     return
   }
   const report = stray ? `${stray}\n\n${answer}` : answer
+  const isStray = stray !== undefined || isStraySubmit(answer)
   // A prefill's lead is handed on in the same write that ends its run, so it stays claimed
-  // throughout and a batch member ending meanwhile still finds it (`batchOf`).
+  // throughout and a batch member ending meanwhile still finds it (`batchOf`). One that stopped
+  // has nothing to hand on, and leaves in that write, so nothing takes it for prefilled.
   const handedOn: DraftRun = {
     kind: 'submit',
     leadId: run.leadId,
@@ -401,16 +488,43 @@ async function finishDraft($: EngineInterface, agentId: string, answer: string, 
   }
   await update($, drafts, list => [
     ...list.filter(one => one.agentId !== agentId),
-    ...(run.kind === 'submit' ? [handedOn] : []),
+    ...(run.kind === 'submit' && (reason === 'answer' || isStray) ? [handedOn] : []),
   ])
   await refresh($)
+  if (run.kind === 'revise') {
+    const found = (await read($, board)).proposals
+      .flatMap(proposal => proposal.changes.map(change => ({ proposal, change })))
+      .find(({ proposal, change }) => clarifyKey(proposal.id, change.id) === run.leadId)
+    // Decided while it ran, the change has nothing left to come back for.
+    if (found?.change.status !== 'pending') return
+    const open = openClarification(found.change)
+    // Clarified again after this run started: those words were claimed by it, so they get a run.
+    if (open && Date.parse(open.at) > run.at) {
+      await reviseClarified($, found.proposal.id, found.change.id)
+      return
+    }
+    const why = reason === 'answer' ? '' : ` (${reason})`
+    $.ui.toast(
+      open
+        ? `"${run.company}" was not revised${why}; Revise now starts it again.`
+        : `"${run.company}" is revised and back for review under Learning proposals.`,
+    )
+    return
+  }
   if (run.kind === 'submit') {
     const release = () => update($, drafts, list => list.filter(one => one.task !== handedOn.task))
     const lead = (await read($, board)).leads.find(one => one.id === run.leadId)
-    if (stray !== undefined || isStraySubmit(answer)) {
+    const named = lead ?? { id: run.leadId, company: run.company, role: 'the approved role' }
+    // A conversation already holding a report of this batch may be told this lead's is coming, and
+    // waits on it before saying the batch is ready, so a lead that drops out says so.
+    const settle = async () => {
+      const others = await batchOf($, run.leadId, await $.clock.now())
+      if (!others.some(one => one.isPrefilled)) return
+      await sendPrompt($, submitBatchLeft(named), `Dropping the ${run.company} application`)
+    }
+    if (isStray) {
       // Said first, whatever else happened. The lead stays claimed, even when the conversation
       // cannot be told, so nothing starts on it again before the person has looked.
-      const named = lead ?? { id: run.leadId, company: run.company, role: 'the approved role' }
       const others = await batchOf($, run.leadId, await $.clock.now())
       const label = `Reporting the ${run.company} application`
       const isTold = await sendPrompt($, submitFollowUp(named, report, others), label)
@@ -420,22 +534,26 @@ async function finishDraft($: EngineInterface, agentId: string, answer: string, 
           : `The ${run.company} application looks submitted, but nobody approved a submit; check its tab in Chrome.`,
       )
     } else if (reason !== 'answer') {
-      await release()
       $.ui.toast(
         `The ${run.company} application prefill stopped (${reason}); Approve and submit starts it again.`,
       )
+      await settle()
     } else if (lead?.column !== 'ready') {
       await release()
       $.ui.toast(
-        `The ${run.company} application was prefilled, but its card left Ready to review meanwhile; nothing was sent.`,
+        `The ${run.company} application was prefilled, but its card left Ready to apply meanwhile; nothing was sent.`,
       )
+      await settle()
     } else {
-      // The lead stays claimed while the conversation asks and submits, so neither a second
-      // prefill nor a redraft (a new résumé under the uploaded one) starts meanwhile.
+      // The lead stays claimed while the conversation asks and the person submits, so neither a
+      // second prefill nor a redraft (a new résumé under the uploaded one) starts meanwhile.
       const others = await batchOf($, run.leadId, await $.clock.now())
       const label = `Finishing the ${run.company} application`
       // It never reached the conversation, so nothing is asking: the lead is free again.
-      if (!(await sendPrompt($, submitFollowUp(lead, answer, others), label))) await release()
+      if (!(await sendPrompt($, submitFollowUp(lead, answer, others), label))) {
+        await release()
+        await settle()
+      }
     }
     return
   }
@@ -520,7 +638,7 @@ async function guardChrome(
       .catch(() => undefined)
     const shown = element && !element.isError ? textOf(element) : ''
     if (kind === 'click' && isSubmitControl(shown)) {
-      return `${ref} looks like it submits, sends or confirms, or could not be read; a background prefill never clicks it. Leave it for the conversation, which asks the person first.`
+      return `${ref} looks like it submits, sends or confirms, or could not be read; a background prefill never clicks it. Leave it for the conversation.`
     }
     if (kind === 'select' && !isTextField(shown)) {
       return `${ref} is not a text field; a background prefill double- or triple-clicks only to select text in one (a button could change between the clicks).`
@@ -580,28 +698,34 @@ async function keepTab($: EngineInterface, agentId: string, call: ChromeCall, te
 async function leave($: EngineInterface, lead: Lead) {
   const at = await read($, view)
   if ((at.kind !== 'lead' && at.kind !== 'package') || at.id !== lead.id) return
-  if ((await read($, stage)) !== lead.column) {
-    await update($, stage, () => lead.column)
+  const from = stageOf(lead)
+  if ((await read($, stage)) !== from) {
+    await update($, boardTab, () => stageTab(from))
+    await update($, stage, () => from)
     await update($, shown, () => PAGE)
   }
   await show($, { kind: 'board' })
 }
 
 function actions($: EngineInterface): Actions {
-  const move = (lead: Lead, to: Column) =>
-    void act($, `Moving ${lead.company}`, ['move', lead.id, to]).then(result =>
-      result.ok ? leave($, lead) : undefined,
-    )
+  const move = (lead: Lead, to: Column, note?: string) =>
+    void act($, `Moving ${lead.company}`, [
+      'move',
+      lead.id,
+      to,
+      ...(note ? ['--note', note] : []),
+    ]).then(result => (result.ok ? leave($, lead) : undefined))
   return {
     open: id => void show($, { kind: 'lead', id }),
     board: () => void show($, { kind: 'board' }),
-    proposals: () => void show($, { kind: 'proposals' }),
+    // Refreshed on opening: a revision lands whenever its run saves it, in any session.
+    proposals: () => void show($, { kind: 'proposals' }).then(() => refresh($, false)),
     refresh: () => void refresh($),
-    toggleClosed: () =>
-      void update($, showClosed, value => !value)
+    tab: next =>
+      void update($, boardTab, () => next)
         .then(() => update($, stage, () => null))
         .then(() => update($, shown, () => PAGE)),
-    tab: column => void update($, stage, () => column).then(() => update($, shown, () => PAGE)),
+    stage: next => void update($, stage, () => next).then(() => update($, shown, () => PAGE)),
     more: () => void update($, shown, count => count + PAGE),
     move,
     outcome: (lead, to, reason) =>
@@ -653,17 +777,40 @@ function actions($: EngineInterface): Actions {
         // change's text is appended once.
         const proposal = (await read($, board)).proposals.find(one => one.id === id)
         const open = proposal?.changes.filter(
-          one => one.status === 'pending' && (changeId === 'all' || one.id === changeId),
+          one =>
+            one.status === 'pending' &&
+            (changeId === 'all' || one.id === changeId) &&
+            (decision === 'reject' || isApprovable(one)),
         )
         if (!open?.length) return
         const what = changeId === 'all' ? `${open.length} learnings` : `"${open[0]?.title}"`
+        // The ids the page drew, not `all`: a revision that landed since must not be approved
+        // unseen, and the CLI would take it as no longer waiting.
         await act($, `${decision === 'approve' ? 'Approving' : 'Rejecting'} ${what}`, [
           'decide',
           id,
-          changeId,
+          open.map(one => one.id).join(','),
           decision,
         ])
       })(),
+    // Opens the field on the change; a second press closes it. It writes nothing.
+    askClarify: (id, changeId) => {
+      const key = clarifyKey(id, changeId)
+      void update($, clarifying, open => (open === key ? null : key))
+    },
+    clarify: (id, changeId, text) =>
+      void (async () => {
+        // JSON, so words that start with a dash or hold a newline reach the CLI as they are.
+        const saved = await act($, 'Saving the clarification', [
+          'clarify',
+          JSON.stringify({ proposal: id, change: changeId, text }),
+        ])
+        if (!saved.ok) return
+        const key = clarifyKey(id, changeId)
+        await update($, clarifying, open => (open === key ? null : open))
+        await reviseClarified($, id, changeId)
+      })(),
+    revise: (id, changeId) => void reviseClarified($, id, changeId),
   }
 }
 
@@ -751,7 +898,7 @@ export const register: Register = on => {
     await $.tool.register({
       name: 'draft_package',
       description:
-        "Starts building the application package for one lead on the person's job board in a background subagent and moves its card to Drafting; returns at once, and the card moves to Ready to review when the build ends. Use it whenever the person asks in this conversation to draft, build or redraft a package, instead of running the job-tracker:package skill here: a build takes several minutes and would hold the conversation.",
+        "Starts building the application package for one lead on the person's job board in a background subagent and moves its card to Drafting; returns at once, and the card moves to Ready to apply when the build ends. Use it whenever the person asks in this conversation to draft, build or redraft a package, instead of running the job-tracker:package skill here: a build takes several minutes and would hold the conversation.",
       inputSchema: {
         type: 'object',
         required: ['leadId'],
@@ -791,9 +938,10 @@ export const register: Register = on => {
 
   on('command.run', { command: 'jobs' }, async $ => {
     await refresh($)
+    await resetBoard($)
     await show($, { kind: 'board' })
     const opened = await openPane($)
-    const c = counts({ version: 1, leads: (await read($, board)).leads })
+    const c = counts({ version: 1, leads: (await read($, board)).leads }, await $.clock.now())
     return {
       text: opened.isPlaced
         ? `Opened the job board: ${bandText(c) ?? 'nothing new'}.`
@@ -815,6 +963,7 @@ export const register: Register = on => {
             ? { kind: 'proposals' }
             : { kind: 'board' }
     await refresh($)
+    await resetBoard($)
     await show($, target)
     const opened = await openPane($)
     // A pane whose tree the surface refused is closed again; give the first draw a moment.
@@ -960,7 +1109,7 @@ export const register: Register = on => {
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     if (e.props.hasSurvey) return next(e)
     const current = await read($, board)
-    const text = bandText(counts({ version: 1, leads: current.leads }))
+    const text = bandText(counts({ version: 1, leads: current.leads }, await $.clock.now()))
     if (!text) return next(e)
     const { Box, Button, Text } = $.ui.resolve(e)
     const isReadOnly = e.surface === 'mobile'
@@ -973,7 +1122,15 @@ export const register: Register = on => {
           {isReadOnly ? (
             <Text>{`● ${text}`}</Text>
           ) : (
-            <Button key="open-jobs" plain onPress={() => void openPane($)}>
+            <Button
+              key="open-jobs"
+              plain
+              onPress={() =>
+                void resetBoard($)
+                  .then(() => show($, { kind: 'board' }))
+                  .then(() => openPane($))
+              }
+            >
               <Text color="claude">●</Text> {text} <Text dimColor>· /jobs</Text>
             </Button>
           )}
@@ -1054,8 +1211,7 @@ function paneFailure($: EngineInterface, e: RenderInput<'Pane'>, why: string) {
           label="Back to the board"
           onPress={() =>
             void show($, { kind: 'board' })
-              .then(() => update($, stage, () => null))
-              .then(() => update($, shown, () => PAGE))
+              .then(() => resetBoard($))
               .then(() => refresh($))
           }
         />
@@ -1072,6 +1228,9 @@ async function drawPane($: EngineInterface, e: RenderInput<'Pane'>) {
   const isReadOnly = e.surface === 'mobile'
   const now = await $.clock.now()
   const all = actions($)
+  const revising = (await read($, drafts)).filter(
+    one => one.kind === 'revise' && now - one.at < DRAFT_FOR_MS,
+  )
   const ctx: ViewContext = {
     el,
     surface: e.surface,
@@ -1080,6 +1239,8 @@ async function drawPane($: EngineInterface, e: RenderInput<'Pane'>) {
     columns: e.props.bodyColumns,
     busy: await read($, busy),
     passing: await read($, passing),
+    clarifying: await read($, clarifying),
+    revising: revising.map(one => one.leadId),
     queued: (await read($, sent)).filter(one => isLive(one, now)).map(one => one.label),
     act: isReadOnly ? undefined : all,
     nav: {
@@ -1088,6 +1249,7 @@ async function drawPane($: EngineInterface, e: RenderInput<'Pane'>) {
       proposals: all.proposals,
       review: all.review,
       tab: all.tab,
+      stage: all.stage,
       more: all.more,
     },
   }
@@ -1095,7 +1257,7 @@ async function drawPane($: EngineInterface, e: RenderInput<'Pane'>) {
   if (at.kind === 'package') return packageView(ctx, at.id, at.tab, await read($, pkg))
   if (at.kind === 'proposals') return proposalsView(ctx)
   return boardView(ctx, {
-    showClosed: await read($, showClosed),
+    tab: await read($, boardTab),
     stage: await read($, stage),
     shown: await read($, shown),
   })
