@@ -59,7 +59,7 @@ revise one change does only that, then stops: no funnel, no new proposal.
 2. Patterns, each needing at least two events (say how many): clustered pass reasons, score
    corrections by kind and source, low-scored leads the person moved forward, and edits to
    packages (what they cut, added or reworded). A move into Rejected is the company's decision,
-   never a lead moved forward.
+   never a lead moved forward, and one from Archived is no new outcome.
 3. Write 3 to 10 changes. Each is one small learning that stands alone: it makes sense whether or
    not any other change is approved, never refers to another, and never merges two rules. Each
    has a target file (`learnings.md` for scoring and writing adjustments, `preferences.md` only

@@ -133,15 +133,16 @@ Ask the questions that come up on most forms, and any others their situation rai
 2. City, region, postal code, country.
 3. Work authorization and sponsorship, as they would answer on a form.
 4. Earliest start date or notice period.
-5. Salary expectation for roles with no posted range.
+5. Salary expectation: what to enter when a posting gives a range (for example, its midpoint),
+   and the figure for roles with no posted range.
 6. Pronouns, and whether to answer optional demographic questions or leave them blank.
 7. May companies contact them about future openings?
 8. Willing to do background checks and in-person interviews?
 
 Write `profile/knowledge-base/application-answers.md` from `kb-answers.md`, one entry per question
 in the format the submit skill uses, each answer written as the text to enter on a form, with
-`Asked by: onboarding` and `Scope: any application`. For salary, record a rule the forms can
-follow (for example, the midpoint of the posted range) and a figure for when no range is posted.
+`Asked by: onboarding` and `Scope: any application`. For salary, record both of their answers to
+question 5 in one entry.
 
 ### 7. Where to look
 

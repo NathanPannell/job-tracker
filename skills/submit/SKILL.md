@@ -21,7 +21,7 @@ other legal agreement, a sign-in, and a lead marked for manual applying.
   manual, and leave its card where it is.
 - Read first `profile/knowledge-base/application-answers.md` (see "Saved answers"; it may not
   exist yet), then `profile/learnings.md`, `profile/preferences.md`, `profile/voice.md` when it
-  exists, `packages/<id>/answers.md`, `cover-letter.md`, `posting.md`, and the identity and links
+  exists, `packages/<id>/answers.md`, `cover-letter.md`, `company-brief.md`, `posting.md`, and the identity and links
   in `profile/knowledge-base/profile.md`. The rest of `profile/knowledge-base/` is the
   record too: read what a question calls for.
 
@@ -444,11 +444,13 @@ For each answer the person gives, add one entry at the end:
 - Scope is `<Company> only` for a question about that company or role ("Why do you want to work
   at <Company>?", "Who referred you?"), and `any application` for a fact about the person. One
   reply to a `<Company> only` question several companies asked gets one entry per company.
-- The latest entry for a question wins. When an answer replaces an earlier one, move the earlier
-  entry to `profile/archive/application-answers-history.md` (create it if missing). When the same
-  question already has an entry under other wording, add the new wording to it as an
-  `- Also asked as: <wording>` line rather than a second entry. An entry marked Superseded is
-  never used.
+- One wording per line, in exactly this form, under the entry's `Answer`:
+  `- Also asked as: <wording>`. When a question already has an entry under other wording and the
+  person's answer is the same, add the new wording to that entry rather than a second entry.
+- The latest entry for a question wins. When a new answer differs from a saved one, write a new
+  entry carrying both wordings (the old heading as an `Also asked as` line) and move the old entry
+  to `profile/archive/application-answers-history.md` (create it if missing). An entry whose
+  heading says Superseded, or with a line `- Superseded <date>: <why>`, is never used.
 
 ## Rules
 

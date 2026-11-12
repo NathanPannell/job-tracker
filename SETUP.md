@@ -66,7 +66,8 @@ types of the JSON files are in `types/index.d.ts`.
   Each card shows a fit badge (green 90+, amber 75–89, grey below), company and role, its age,
   source and location, and a one-line tagline, then its stage's next steps as buttons. Company
   decisions (Got interview, Got offer, Rejected, Ghosted, Accepted, Declined) move the card and
-  record an outcome for the weekly review. A moved card offers "Back to <where it was>". Click a
+  record an outcome for the weekly review. A rejected, archived or passed card offers "Back to
+  <where it was>" to undo a mis-click. Click a
   card's name for its page, with Pass, Archive, Draft package and score feedback.
 - **Ready notes.** A Ready card with a package says `Ready to submit` or `2 answers needed`: the
   `NEEDS ANSWER` questions in its `answers.md` that `application-answers.md` does not answer (by

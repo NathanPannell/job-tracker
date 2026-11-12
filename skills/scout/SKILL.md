@@ -25,7 +25,9 @@ board. You never apply, email anyone, create accounts, or log into job sites.
 1. Run `jobs init`, then `jobs seen` and keep the list: anything already on the board, in any
    column, is not new. Note today's date and time.
 2. Launch one subagent per source below, **all in one message so they run in parallel**. Give each
-   the preferences summary (roles, level, location, dealbreakers) and the seen list, and ask for
+   the preferences summary (roles, level, location, dealbreakers), the seen list and the full CLI
+   command for any `jobs` call it makes (`node "$JOB_TRACKER_HOME/bin/jobs.ts" ats`, `... probe`,
+   `... gmail query`), and ask for
    JSON only: an array of `{ company, role, url, location, comp, source, description, postedAt }`,
    `description` being at most 1500 characters of the posting's own words about the company and
    what sets the role apart (team, stack, years asked, comp, setup). Tell each: do not apply, do not

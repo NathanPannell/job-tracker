@@ -226,8 +226,15 @@ export function parseQuestions(markdown: string): Question[] {
   return distinct.map(one => ({ ...one, keys: one.keys.filter(once) }))
 }
 
-/** A line that retires an entry: the latest answer to its question is a later entry. */
+/**
+ * What retires an entry (the latest answer to its question is a later entry): a bullet line that
+ * opens with Superseded, or the word in its heading.
+ */
 const SUPERSEDED = /^-\s*[*_]*Superseded\b/im
+const SUPERSEDED_HEADING = /\bsuperseded\b/i
+
+/** A wording line, `- Also asked as: <wording>`, bold or indented as a sub-item. */
+const ALIAS = /^[ \t]*[-*][ \t]+[*_]*Also asked as:?[*_]*:?[ \t]*(\S.*)$/gim
 
 /**
  * The entries of the saved answers that hold an answer, on the `Answer:` line or quoted below,
@@ -240,12 +247,12 @@ export function parseSaved(markdown: string): SavedAnswer[] {
     .slice(1)
     .flatMap(entry => {
       if (!/^- Answer:[ \t]*(?:\S|\r?\n\s*>\s*\S)/m.test(entry)) return []
-      if (SUPERSEDED.test(entry)) return []
+      const heading = /^.*/.exec(entry)?.[0] ?? ''
+      if (SUPERSEDED.test(entry) || SUPERSEDED_HEADING.test(heading)) return []
       const scope = /^- Scope:\s*(.*)$/m.exec(entry)?.[1] ?? ''
       const only = /^(.+?)[\s-]+only\b/i.exec(scope)?.[1] ?? ''
       const leadId = /^- Asked by:.*\(`([^`]+)`\)/m.exec(entry)?.[1]
-      const heading = /^.*/.exec(entry)?.[0] ?? ''
-      const aliases = [...entry.matchAll(/^- Also asked as:[ \t]*(\S.*)$/gm)].map(m => m[1] ?? '')
+      const aliases = [...entry.matchAll(ALIAS)].map(m => m[1] ?? '')
       return [heading, ...aliases].map(plain).map(question => ({
         key: wording(question),
         detail: beyond(question),

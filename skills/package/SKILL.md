@@ -72,8 +72,8 @@ lead already has a package). If you are that subagent, carry on below and never 
    - First look each up in `application-answers.md` (its heading or an `Also asked as` line). Where
      the same question, or one asking for the same fact, is answered and its scope covers this
      application, use that answer word for word. An entry marked Superseded is never used.
-   - Salary is always on record there: follow its rule (for example, the midpoint of the posted
-     range), never leave it open.
+   - Salary: follow the salary entry's rule there (for example, the midpoint of the posted
+     range); never take a figure from anywhere else. With no salary entry, it is an open question.
    - Draft free-text answers ("Why us?", "Tell us about a project") from the record in 2–3
      sentences in the person's voice.
    - Where nothing on record answers a question (a disclosure, a referrer, a fact the record does

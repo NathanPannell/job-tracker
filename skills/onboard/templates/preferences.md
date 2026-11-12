@@ -2,7 +2,8 @@
 
 Written by the onboard skill on <YYYY-MM-DD> from the person's own answers. Anything they did not
 say is flagged in `OPEN-QUESTIONS.md` instead of guessed. The `learn` skill proposes changes to this
-file; only approved proposals are appended. `learnings.md` holds how packages are written.
+file; only approved proposals are appended. `learnings.md` holds what their feedback has taught
+since: scoring adjustments that apply on top of this file, and how packages are written.
 
 ## Who
 

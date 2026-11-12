@@ -502,6 +502,26 @@ describe('questions the saved answers already answer', () => {
     // A word in an answer is not the marker.
     const prose = '## Why us?\n\n- Answer: Superseded tools bore me.\n- Scope: any application\n'
     assert.equal(parseSaved(prose).length, 1)
+    // Marked in the heading, by hand.
+    const heading =
+      '## What is your salary expectation? (Superseded)\n\n- Answer: 200000\n- Scope: any application\n'
+    assert.deepEqual(parseSaved(heading), [])
+  })
+
+  test('an "Also asked as" line counts bold or indented, one wording per line', () => {
+    const bold = parseSaved(
+      '## Desired salary\n\n- Answer: 1\n- **Also asked as:** What is your salary expectation?\n- Scope: any application\n',
+    )
+    assert.deepEqual(openQuestions(ask, bold, lead), [])
+    const indented = parseSaved(
+      '## Desired salary\n\n- Answer: 1\n  - Also asked as: What is your salary expectation?\n- Scope: any application\n',
+    )
+    assert.deepEqual(openQuestions(ask, indented, lead), [])
+    // Inside a quoted answer it is part of the answer, not a wording.
+    const quoted = parseSaved(
+      '## Desired salary\n\n- Answer:\n\n  > - Also asked as: What is your salary expectation?\n- Scope: any application\n',
+    )
+    assert.equal(openQuestions(ask, quoted, lead).length, 1)
   })
 
   test('each "Also asked as" wording is answered by the same entry', () => {
