@@ -33,10 +33,10 @@ Built on Claude Code. Not affiliated with or endorsed by Anthropic.
   company brief. The person reviews each file on the board.
 - **Submit** starts with a background subagent that fills in the form in Chrome from the record,
   drafted answers included, and uploads the PDF. The conversation then asks a short numbered list
-  of only what the record cannot answer, and says once when every application needs only the
-  person's click. They submit in Chrome and say so, which moves the cards to Applied. Each answer
-  is saved word for word, so a question answered once is not asked again where that answer applies.
-  Sign-ins, passwords, CAPTCHAs and agreements go back to the person.
+  of only what the record cannot answer, fills each form again in a fresh tab, clicks its final
+  submit, confirms the sent page and moves the card to Applied. Each answer is saved as the text
+  to enter, one per question, so a question answered once is not asked again. Sign-ins,
+  passwords, CAPTCHAs and agreements go back to the person for their own click.
 - **Sync** runs on a schedule. It reads Gmail and Calendar for replies, and moves the card itself
   for a clear rejection, interview request or offer. Rejections are filed quietly; interviews,
   offers and anything unclear (whose card stays where it is) are named on the board for a week. It

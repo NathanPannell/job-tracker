@@ -1,13 +1,12 @@
 # Application answers
 
-The person's own answers to application questions, saved word for word by the submit skill.
-The package and submit skills read this file first and never ask a question answered here
-again; for a question answered more than once, the latest entry wins. Edit or delete entries
-by hand as answers change.
+The person's answers to application questions: one current answer per question, written as the
+text to enter on the form. The package and submit skills read this file first and never ask a
+question answered here again.
 
 ## <The question>
 
-- Answer: <exactly what the person wrote>
+- Answer: <the text to enter>
 - Date: <YYYY-MM-DD>
 - Asked by: onboarding
 - Scope: any application

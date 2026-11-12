@@ -226,27 +226,34 @@ export function parseQuestions(markdown: string): Question[] {
   return distinct.map(one => ({ ...one, keys: one.keys.filter(once) }))
 }
 
-/** The entries of the saved answers that hold an answer, on the `Answer:` line or quoted below. */
+/** A line that retires an entry: the latest answer to its question is a later entry. */
+const SUPERSEDED = /^-\s*[*_]*Superseded\b/im
+
+/**
+ * The entries of the saved answers that hold an answer, on the `Answer:` line or quoted below,
+ * one per wording: the heading and each `- Also asked as:` line. An entry marked Superseded
+ * answers nothing.
+ */
 export function parseSaved(markdown: string): SavedAnswer[] {
   return markdown
     .split(/^## /m)
     .slice(1)
     .flatMap(entry => {
       if (!/^- Answer:[ \t]*(?:\S|\r?\n\s*>\s*\S)/m.test(entry)) return []
+      if (SUPERSEDED.test(entry)) return []
       const scope = /^- Scope:\s*(.*)$/m.exec(entry)?.[1] ?? ''
       const only = /^(.+?)[\s-]+only\b/i.exec(scope)?.[1] ?? ''
       const leadId = /^- Asked by:.*\(`([^`]+)`\)/m.exec(entry)?.[1]
-      const question = plain(/^.*/.exec(entry)?.[0] ?? '')
-      return [
-        {
-          key: wording(question),
-          detail: beyond(question),
-          ...(leadId ? { leadId } : {}),
-          ...(/^any application\s*(?:\(|$)/i.test(scope)
-            ? {}
-            : { companies: only.split('/').map(key).filter(Boolean) }),
-        },
-      ]
+      const heading = /^.*/.exec(entry)?.[0] ?? ''
+      const aliases = [...entry.matchAll(/^- Also asked as:[ \t]*(\S.*)$/gm)].map(m => m[1] ?? '')
+      return [heading, ...aliases].map(plain).map(question => ({
+        key: wording(question),
+        detail: beyond(question),
+        ...(leadId ? { leadId } : {}),
+        ...(/^any application\s*(?:\(|$)/i.test(scope)
+          ? {}
+          : { companies: only.split('/').map(key).filter(Boolean) }),
+      }))
     })
 }
 

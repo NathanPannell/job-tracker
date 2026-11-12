@@ -494,6 +494,30 @@ describe('questions the saved answers already answer', () => {
     assert.deepEqual(openQuestions('NEEDS ANSWER: Why us?\n', saved, lead), [])
   })
 
+  test('an entry marked Superseded answers nothing', () => {
+    const old =
+      "## What is your salary expectation?\n\n- **Superseded 2026-11-12** by the later entry. Don't use this answer.\n- Answer: 200000\n- Scope: any application\n"
+    assert.deepEqual(parseSaved(old), [])
+    assert.equal(openQuestions(ask, parseSaved(old), lead).length, 1)
+    // A word in an answer is not the marker.
+    const prose = '## Why us?\n\n- Answer: Superseded tools bore me.\n- Scope: any application\n'
+    assert.equal(parseSaved(prose).length, 1)
+  })
+
+  test('each "Also asked as" wording is answered by the same entry', () => {
+    const saved = parseSaved(
+      '## Desired salary\n\n- Answer: CAD 80,000\n- Also asked as: What is your salary expectation?\n- Also asked as: Expected compensation\n- Scope: any application\n',
+    )
+    assert.equal(saved.length, 3)
+    assert.deepEqual(openQuestions(ask, saved, lead), [])
+    assert.deepEqual(openQuestions('NEEDS ANSWER: Expected compensation\n', saved, lead), [])
+    assert.deepEqual(openQuestions('NEEDS ANSWER: Desired salary\n', saved, lead), [])
+    const scoped = parseSaved(
+      '## Desired salary\n\n- Answer: 1\n- Also asked as: What is your salary expectation?\n- Scope: Beta only\n',
+    )
+    assert.equal(openQuestions(ask, scoped, lead).length, 1)
+  })
+
   test('no saved answers leaves every question open', () => {
     assert.deepEqual(parseSaved(''), [])
     assert.deepEqual(openQuestions(ask, [], lead), ['What is your salary expectation?'])

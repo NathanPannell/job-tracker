@@ -18,7 +18,7 @@ applications. Nothing goes in that did not come from the person or from a docume
 - Run `jobs init`, then read `profile/onboarding-progress.md`. If it exists, say which stages are
   done and carry on from the first that is not. If it does not and they are adding to an existing record, go to
   "Adding to the record later" below. Otherwise create it with one checkbox per stage below, and
-  copy `unanswered-questions.md` to `profile/UNANSWERED-QUESTIONS.md` if that file is missing.
+  copy `open-questions.md` to `profile/OPEN-QUESTIONS.md` if that file is missing.
 - Run in the person's own conversation, never in a subagent: this is an interview.
 
 ## How to run the interview
@@ -31,7 +31,8 @@ applications. Nothing goes in that did not come from the person or from a docume
   loses nothing.
 - Never overwrite a file with real content. If a profile file already exists, read it, ask only
   what it lacks, and add to it.
-- A fact the person skips goes in `UNANSWERED-QUESTIONS.md`, not into a guess. Take "I think" and
+- A fact the person skips goes under "Facts not yet known" in `OPEN-QUESTIONS.md`, not into a
+  guess. Take "I think" and
   "roughly" as they are, and record the hedge.
 - Keep their words. Tidy grammar in a résumé bullet; never strengthen a claim, round a number up or
   turn "helped with" into "led".
@@ -87,12 +88,13 @@ Ask, over one or two messages:
 5. Pay floor and target, with currency.
 6. Company size and stage, industries they love or avoid, and hard dealbreakers.
 
-Write `profile/preferences.md` from `preferences.md`. Fill the rubric's factors from their answers
-so a role they would jump at scores 90 or more and a role they would ignore falls under 70; read
-two imagined postings back to them with scores and adjust if either surprises them. If they live outside Canada, keep the
-`ATS filter: outside Canada` line under Location, because without it scout only sees board
-postings workable from Canada. Copy `learnings.md` as it is, and put defaults you assumed in `profile/OPEN-QUESTIONS.md` from
-`open-questions.md`.
+Write `profile/preferences.md` from `preferences.md`. The score is their chance of an interview,
+so fill the rubric so a role they fully qualify for scores 80 or more and one asking more than
+they have drops below 40; read two imagined postings back to them with scores and adjust if either
+surprises them. If they live outside Canada, keep the `ATS filter: outside Canada` line under
+Location, because without it scout only sees board postings workable from Canada. Copy
+`learnings.md` as it is, and put defaults you assumed under "Defaults in force" in
+`profile/OPEN-QUESTIONS.md`.
 
 ### 4. Depth
 
@@ -136,9 +138,10 @@ Ask the questions that come up on most forms, and any others their situation rai
 7. May companies contact them about future openings?
 8. Willing to do background checks and in-person interviews?
 
-Write `profile/knowledge-base/application-answers.md` from `kb-answers.md`, one entry per answer
-in the format the submit skill uses, word for word, with `Asked by: onboarding` and
-`Scope: any application`.
+Write `profile/knowledge-base/application-answers.md` from `kb-answers.md`, one entry per question
+in the format the submit skill uses, each answer written as the text to enter on a form, with
+`Asked by: onboarding` and `Scope: any application`. For salary, record a rule the forms can
+follow (for example, the midpoint of the posted range) and a figure for when no range is posted.
 
 ### 7. Where to look
 
@@ -174,12 +177,12 @@ the PDF is, and ask whether the look and the wording are right. Delete the tempo
 
 ### 9. Finish
 
-1. Read `profile/UNANSWERED-QUESTIONS.md` and confirm everything skipped is in it.
+1. Read `profile/OPEN-QUESTIONS.md` and confirm everything skipped is in it.
 2. Check that these exist under `profile/` and have no `<placeholder>` left: `preferences.md`,
    `learnings.md`, `target-companies.md`, `voice.md`, `cover-letter-prompts.md`,
    `master-resume.tex`, `resume-format-template.tex`, `resume-generation-rules.md`,
-   `OPEN-QUESTIONS.md`, `UNANSWERED-QUESTIONS.md`, `knowledge-base/README.md`,
-   `knowledge-base/profile.md`, `knowledge-base/application-answers.md`.
+   `OPEN-QUESTIONS.md`, `knowledge-base/README.md`, `knowledge-base/profile.md`,
+   `knowledge-base/application-answers.md`.
 3. If `$JOB_TRACKER_HOME/INSTALL.md` still has steps left for this person (job alerts, the
    schedule), do them now by following its "After onboarding" section.
 4. Reply with what the record now holds, what is still unanswered, and the next step: "Use the

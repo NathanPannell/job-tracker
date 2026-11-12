@@ -241,8 +241,7 @@ Then report what was installed, what was skipped, and anything still waiting on 
   It never accepts terms or another legal agreement. The one kind of consent it gives for the
   person is a data-processing acknowledgment or a box letting a company keep in contact, when their
   own saved answer in `application-answers.md` covers it. The rest come back to the person.
-  Inferred and drafted answers go into the form without asking, so review each form before
-  submitting: when several prefills share one Chrome window, stay alert for a submitted tab and
-  check for a confirmation email.
+  Inferred and drafted answers go into the form without asking; each sent form's contents are
+  saved in its package's `submission.md`, so read those after a batch.
 - **Uninstalling.** Delete the scheduled tasks, remove the four `env` keys and delete the
   `job-tracker` folder. `data/` is the person's to keep or delete.
