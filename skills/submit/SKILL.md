@@ -1,6 +1,6 @@
 ---
 name: submit
-description: Fill in and submit a job application from an approved package in Claude in Chrome, upload the résumé PDF, infer what the record implies, and ask the person a short numbered list of only what it cannot answer (saving each answer to the shared knowledge base so it is never asked again). Once nothing is open for an application, fill it in a fresh tab, click its final submit, confirm the sent page, move the card to Applied and report one line per lead. A lead whose notes start "MANUAL APPLY ONLY" is never opened. An application behind a CAPTCHA, an agreement or a sign-in is the person's to click: on their go fill those in one sitting and say once that they need only their click; when they say those are submitted, move the cards. Use when the person approves a package ("Approve and submit" on the job board, or "submit the application for <lead>"), and when they say applications are submitted.
+description: Fill in and submit a job application from an approved package in Claude in Chrome — upload the résumé, fill what the record answers or implies, ask the person a short numbered list of only what it cannot (saving each answer so it is never asked again), then submit, confirm the sent page and move the card to Applied. An application behind a CAPTCHA, an agreement or a sign-in, or a lead marked "MANUAL APPLY ONLY", is left for the person's own click. Use when the person approves a package ("Approve and submit" on the job board, or "submit the application for <lead>"), and when they say applications are submitted.
 ---
 
 # Submit
@@ -19,10 +19,10 @@ other legal agreement, a sign-in, and a lead marked for manual applying.
 - A lead whose notes on the board start "MANUAL APPLY ONLY" is the person's to apply for by hand: do
   not open or fill its form. If it was approved, alone or in a batch, say in one line that it is
   manual, and leave its card where it is.
-- Read first `profile/knowledge-base/application-answers.md` (see "Saved answers" below; it may not
-  exist yet), then `profile/learnings.md`, `profile/preferences.md`, `profile/voice.md`,
-  `packages/<id>/answers.md`, `cover-letter.md`, `company-brief.md`, `posting.md`, and the identity
-  and links in `profile/knowledge-base/profile.md`. The rest of `profile/knowledge-base/` is the
+- Read first `profile/knowledge-base/application-answers.md` (see "Saved answers"; it may not
+  exist yet), then `profile/learnings.md`, `profile/preferences.md`, `profile/voice.md` when it
+  exists, `packages/<id>/answers.md`, `cover-letter.md`, `company-brief.md`, `posting.md`, and the identity and links
+  in `profile/knowledge-base/profile.md`. The rest of `profile/knowledge-base/` is the
   record too: read what a question calls for.
 
 ## Where it runs
@@ -76,7 +76,7 @@ that lead; it waits for their word (step 7).
 3. Read the whole form, every page of it, before asking anything. Fill every field the record
    answers: name, email, phone, location, links, work authorization (only as recorded), the cover
    letter, each question in `answers.md`, and each answer in `application-answers.md` whose question
-   matches and whose scope covers this application (the latest entry wins). What the record does not
+   (heading or `Also asked as` line) matches and whose scope covers this application. What the record does not
    state, work out from it and fill in: see "Inferring from the record" below. Tick each
    data-processing and keep-in-contact box such an answer covers, with no need to ask: see "Consent
    boxes" below. Upload `packages/<id>/resume.pdf` with file_upload. Leave optional demographic or
@@ -191,9 +191,9 @@ that lead; it waits for their word (step 7).
         `packages/<id>/submission.md` saying you clicked submit and saw no confirmation (so no later
         fill touches the lead again), and give the lead its own line for the person to check.
 
-   Report what you sent in one message per turn, one line per lead, with no form contents. Where the
-   form sent a résumé other than `resume.pdf` (Wellfound's profile copy), say so on that lead's
-   line:
+   Report what you sent in one message per turn, one line per lead, with no form contents. In this
+   report and the one below, where the form sends a résumé other than `resume.pdf` (Wellfound's
+   profile copy), say so on that lead's line:
 
    ```markdown
    Submitted:
@@ -207,8 +207,7 @@ that lead; it waits for their word (step 7).
    message, with no checklist and no form contents. Never tell the person a lead needs a click while
    a required field on it is blank (one that will not hold is its own line: what is blank, for them
    to fill), or when its tab reads as sent or it has a `STRAY SUBMIT DETECTED` report; a lead
-   waiting on a hand-off gets its own line after the list. Where the form sends a résumé other than
-   `resume.pdf` (Wellfound's profile copy), say so on that lead's line.
+   waiting on a hand-off gets its own line after the list.
 
    ```markdown
    All 3 are filled and need only your click:
@@ -247,10 +246,14 @@ to where only a CAPTCHA or agreement is left for them. Before a question reaches
 from everything in the record, `NEEDS ANSWER:` lines in `answers.md` included:
 
 - Work it out where the record implies it: years with a skill from the dates in the experience
-  records, a salary expectation from the target in `preferences.md`, relocation or hybrid from its
-  location section, "how did you hear about us" from the lead's source.
-- Write free text ("Why this company?", "Tell us about a project") as in "Drafted answers" and put
-  it in the form. It needs no acceptance from the person.
+  records, relocation or hybrid from the location section of `preferences.md`, "how did you hear
+  about us" from the lead's source. Salary comes from the latest salary entry in
+  `application-answers.md` (its rule, such as the midpoint of the posted range rounded to 5,000,
+  or its fixed figure when the posting gives no range), never from `preferences.md`.
+- Write free text ("Why this company?", "Tell us about a project") yourself and put it in the
+  form, with no need for the person's acceptance: 2–3 sentences in the person's voice, from the
+  record only. The person sees it in `submission.md` for a lead you send, or on the tab for one
+  they click.
 - Take the closest honest option where a required choice has no exact match.
 - Leave an optional question blank rather than ask it, and note it under "Left blank on purpose".
 
@@ -409,63 +412,59 @@ Left blank on purpose:
 - <field>: <why, e.g. optional self-identification>
 ```
 
-## Drafted answers
-
-A free-text answer you draft for a form is 2–3 sentences in the person's voice, from the record
-only, never several paragraphs. It goes straight into the form: the person sees it in
-`submission.md` for a lead you send, or on the tab for one they click.
-
 ## Saved answers
 
-`$JOB_TRACKER_DATA/profile/knowledge-base/application-answers.md` is the shared record of what
-the person has answered on applications. Both this skill and package read it first, so a
-question answered once is never asked again. It is the one file under `profile/` this skill
-writes, and only by appending what the person said. If it does not exist, create it with this
+`$JOB_TRACKER_DATA/profile/knowledge-base/application-answers.md` holds one current answer per
+question. This skill and package read it first, so a question answered once is never asked again.
+It is the one file under `profile/` this skill writes. If it does not exist, create it with this
 header:
 
 ```markdown
 # Application answers
 
-The person's own answers to application questions, saved word for word by the submit skill.
-The package and submit skills read this file first and never ask a question answered here
-again; for a question answered more than once, the latest entry wins. Edit or delete entries
-by hand as answers change.
+The person's answers to application questions: one current answer per question, written as the
+text to enter on the form (for salary, the rule that gives it). The package and submit skills
+read this file first and never ask a question answered here again.
 ```
 
-Append one entry per answer, at the end of the file:
+For each answer the person gives, add one entry at the end:
 
 ```markdown
 ## <the question, as the form or answers.md asked it>
 
-- Answer: <exactly what the person wrote, verbatim; quote it in a block if it is multi-line>
+- Answer: <the text to enter; a multi-line answer goes in a quoted block below this line>
 - Date: <YYYY-MM-DD>
 - Asked by: <Company> — <Role> (`<lead-id>`)
 - Scope: any application | <Company> only
 ```
 
-Scope is `<Company> only` when the question is about that company or role ("Why do you want to
-work at <Company>?", "Who referred you?"), and `any application` for a fact about the person
-(salary expectation, start date, notice period, relocation, a disclosure). Never reword, shorten
-or correct the answer, never add an answer the person did not give, and never edit or remove an
-earlier entry: a changed answer is a new entry with a later date. One reply to a `<Company> only`
-question that several companies asked gets one entry per company.
+- Write the answer as it goes on the form: the person's meaning, with dictation tidied ("my
+  postal code is v8v 1m5" becomes `V8V 1M5`). Never change its substance or add to it, and never
+  save an answer the person did not give, or one you inferred or drafted.
+- Scope is `<Company> only` for a question about that company or role ("Why do you want to work
+  at <Company>?", "Who referred you?"), and `any application` for a fact about the person. One
+  reply to a `<Company> only` question several companies asked gets one entry per company.
+- One wording per line, in exactly this form, under the entry's `Answer`:
+  `- Also asked as: <wording>`. When a question already has an entry under other wording and the
+  person's answer is the same, add the new wording to that entry rather than a second entry.
+- The latest entry for a question wins. When a new answer differs from a saved one, write a new
+  entry carrying every wording of the old one (its heading and each of its `Also asked as` lines,
+  as `Also asked as` lines) and move the old entry
+  to `profile/archive/application-answers-history.md` (create it if missing). An entry whose
+  heading says Superseded, or with a line `- Superseded <date>: <why>`, is never used.
 
 ## Rules
 
-- Click a final submit only in the conversation, only for a lead the person approved ("Approve
-  and submit", or their own message asking to submit it) that step 6 finds yours to send, and at
-  most twice per lead (the second only after fixing field errors). Never in the background, never
-  past a CAPTCHA, bot check, sign-in or agreement, never by JavaScript or deep_form, and never for
-  a lead with a `STRAY SUBMIT DETECTED` report, one that may already be sent, or one marked
-  "MANUAL APPLY ONLY".
-- Run `jobs submitted` only after your own submit, when the page reads as sent or a confirmation
-  email arrived, or on the person's own word in chat that this application is submitted.
-- Never create accounts, enter passwords or sign in for the person; never solve a CAPTCHA or
-  accept terms or agreements for them. On a sign-in or account page, stop and hand off with
-  everything ready. The one thing to tick for them is a data-processing or keep-in-contact box
-  their saved answer covers (see "Consent boxes"), without asking.
+- Click a final submit only in the conversation, for a lead the person approved ("Approve and
+  submit", or their own message asking to submit it) that step 6 finds yours to send, at most
+  twice per lead. Never in the background, by JavaScript or deep_form, past a CAPTCHA, bot check,
+  sign-in or agreement, or for a lead that may already be sent, has a `STRAY SUBMIT DETECTED`
+  report or is marked "MANUAL APPLY ONLY".
+- Run `jobs submitted` only after your own submit reads as sent or a confirmation email arrived,
+  or on the person's own word in chat.
+- Never create accounts, enter passwords or sign in for the person, solve a CAPTCHA, or accept
+  terms or agreements. The only boxes you tick for them are those in "Consent boxes".
 - Never send email or messages. Only the record, what follows from it and the person's own answers
-  go into the form, never an invented fact.
-- Do not modify anything under `profile/` except appending the person's answers to
-  `profile/knowledge-base/application-answers.md` as above; everything else there changes only
-  through the learn skill's approved proposals.
+  go into a form, never an invented fact.
+- Under `profile/`, write only `knowledge-base/application-answers.md` and its archive, as in
+  "Saved answers".

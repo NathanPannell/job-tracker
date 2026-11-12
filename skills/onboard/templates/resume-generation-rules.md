@@ -14,13 +14,15 @@ from `knowledge-base/` without broadening scope.
   date, metric and skill fresh from `master-resume.tex` and the knowledge base for each posting.
 - Compile from LaTeX. Do not recreate the template in another format.
 - Optimize for fast scanning: one-to-two-line bullets, no summary line or keyword tagline.
+- The header shows one email address, the one the person uses on forms.
 
 ## Choosing roles and projects (per posting, never by default)
 
 1. Read the posting and list what it values most.
 2. Rank every candidate project and role against that list. Start from the flagships:
    <flagship roles and projects>. Swap one out only for a specific reason.
-3. Order roles by relevance, and give the most bullets to the most relevant one.
+3. Choose roles by relevance, but always list them most recent first. Relevance decides which
+   roles appear and which gets the most bullets, never their order.
 4. Rebuild the skills lines from what the chosen roles and projects show. Never list something the
    person has not used.
 5. Write the choice in `sources.md` under a "Selection" heading: each pick, one line on why, and
@@ -28,8 +30,11 @@ from `knowledge-base/` without broadening scope.
 
 ## Writing bullets
 
-- Lead with what was built or decided and why it mattered, in words a recruiter follows on one
-  read.
+- Lead with what the person built or decided and why it mattered, in words a recruiter follows on
+  one read. Never credit an AI tool or agent with the work.
 - Prefer evidence and outcomes over lists of technologies.
-- Every number keeps the conditions recorded in the knowledge base.
+- Every number keeps the conditions recorded in the knowledge base, and the same fact uses the
+  same figure on every résumé.
+- Date every project, so the time since the last job never reads as idle.
+- No hedges ("a reported") and no private jargon a recruiter would not know.
 - Shortening and simplifying must not broaden scope or add claims.
