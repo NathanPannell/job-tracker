@@ -35,7 +35,8 @@ lead already has a package). If you are that subagent, carry on below and never 
   - `knowledge-base/`: source-linked facts. Start at its `README.md`; read only what this role
     needs.
   - `cover-letter-prompts.md` (the person's stories), `voice.md` when it exists, and
-    `OPEN-QUESTIONS.md` (facts not yet settled: never state one of those as settled).
+    `OPEN-QUESTIONS.md` (facts not yet settled: never state one of those as settled; an older
+    install may also have `UNANSWERED-QUESTIONS.md`, read the same way).
 
 ## Steps
 
@@ -71,7 +72,8 @@ lead already has a package). If you are that subagent, carry on below and never 
 6. Answers (`answers.md`): every question found in step 2, with an answer.
    - First look each up in `application-answers.md` (its heading or an `Also asked as` line). Where
      the same question, or one asking for the same fact, is answered and its scope covers this
-     application, use that answer word for word. An entry marked Superseded is never used.
+     application, use that answer word for word. Where several entries answer it, the latest
+     wins; an entry marked Superseded is never used.
    - Salary: follow the salary entry's rule there (for example, the midpoint of the posted
      range); never take a figure from anywhere else. With no salary entry, it is an open question.
    - Draft free-text answers ("Why us?", "Tell us about a project") from the record in 2–3

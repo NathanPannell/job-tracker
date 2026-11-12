@@ -230,7 +230,7 @@ export function parseQuestions(markdown: string): Question[] {
  * What retires an entry (the latest answer to its question is a later entry): a bullet line that
  * opens with Superseded, or the word in its heading.
  */
-const SUPERSEDED = /^-\s*[*_]*Superseded\b/im
+const SUPERSEDED = /^[ \t]*[-*][ \t]+[*_]*Superseded\b/im
 const SUPERSEDED_HEADING = /\bsuperseded\b/i
 
 /** A wording line, `- Also asked as: <wording>`, bold or indented as a sub-item. */

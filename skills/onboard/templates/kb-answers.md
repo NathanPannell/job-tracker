@@ -1,8 +1,8 @@
 # Application answers
 
 The person's answers to application questions: one current answer per question, written as the
-text to enter on the form. The package and submit skills read this file first and never ask a
-question answered here again.
+text to enter on the form (for salary, the rule that gives it). The package and submit skills
+read this file first and never ask a question answered here again.
 
 ## <The question>
 

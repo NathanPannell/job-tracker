@@ -423,8 +423,8 @@ header:
 # Application answers
 
 The person's answers to application questions: one current answer per question, written as the
-text to enter on the form. The package and submit skills read this file first and never ask a
-question answered here again.
+text to enter on the form (for salary, the rule that gives it). The package and submit skills
+read this file first and never ask a question answered here again.
 ```
 
 For each answer the person gives, add one entry at the end:
@@ -448,7 +448,8 @@ For each answer the person gives, add one entry at the end:
   `- Also asked as: <wording>`. When a question already has an entry under other wording and the
   person's answer is the same, add the new wording to that entry rather than a second entry.
 - The latest entry for a question wins. When a new answer differs from a saved one, write a new
-  entry carrying both wordings (the old heading as an `Also asked as` line) and move the old entry
+  entry carrying every wording of the old one (its heading and each of its `Also asked as` lines,
+  as `Also asked as` lines) and move the old entry
   to `profile/archive/application-answers-history.md` (create it if missing). An entry whose
   heading says Superseded, or with a line `- Superseded <date>: <why>`, is never used.
 

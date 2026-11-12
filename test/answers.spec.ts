@@ -506,6 +506,11 @@ describe('questions the saved answers already answer', () => {
     const heading =
       '## What is your salary expectation? (Superseded)\n\n- Answer: 200000\n- Scope: any application\n'
     assert.deepEqual(parseSaved(heading), [])
+    // Marked on a star bullet, or on an indented sub-item.
+    for (const line of ['* Superseded 2026-11-12: old', '  - Superseded 2026-11-12: old']) {
+      const marked = `## What is your salary expectation?\n\n- Answer: 200000\n${line}\n- Scope: any application\n`
+      assert.deepEqual(parseSaved(marked), [], line)
+    }
   })
 
   test('an "Also asked as" line counts bold or indented, one wording per line', () => {

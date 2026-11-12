@@ -18,7 +18,9 @@ applications. Nothing goes in that did not come from the person or from a docume
 - Run `jobs init`, then read `profile/onboarding-progress.md`. If it exists, say which stages are
   done and carry on from the first that is not. If it does not and they are adding to an existing record, go to
   "Adding to the record later" below. Otherwise create it with one checkbox per stage below, and
-  copy `open-questions.md` to `profile/OPEN-QUESTIONS.md` if that file is missing.
+  copy `open-questions.md` to `profile/OPEN-QUESTIONS.md` if that file is missing. An older
+  install may have `profile/UNANSWERED-QUESTIONS.md`: move its items under "Facts not yet known"
+  in `OPEN-QUESTIONS.md`, then delete it.
 - Run in the person's own conversation, never in a subagent: this is an interview.
 
 ## How to run the interview

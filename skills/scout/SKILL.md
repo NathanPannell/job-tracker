@@ -74,7 +74,8 @@ board. You never apply, email anyone, create accounts, or log into job sites.
 3. Merge the arrays and drop duplicates (same company and role, or same URL) and anything seen.
 4. Score every remaining posting 0-100 with the rubric in `preferences.md`, then apply every rule
    in `learnings.md`. The score is the person's chance of getting an interview, not how much they
-   would like the job. Be strict about level: years, title, degree or a yes/no knockout question
+   would like the job. Anything under Dealbreakers in `preferences.md` scores under 40. Be
+   strict about level: years, title, degree or a yes/no knockout question
    the person cannot meet is a dealbreaker (under 40), as `preferences.md` and `learnings.md` set
    out. Score fit only, not the posting's age: `jobs add` handles age. Write `fitReason` as one line
    naming the two or three biggest factors, e.g. `Junior backend APIs in Java, hybrid in their
