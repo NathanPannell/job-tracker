@@ -259,3 +259,98 @@ describe('tools', () => {
     expect(ran.text).toContain('1 new lead')
   })
 })
+
+const NO_SURFACE = 'no-surface: no surface is attached ($.session.surfaces() is empty)'
+
+/**
+ * The engine beneath a brand-new desktop chat whose window has not attached yet: every open
+ * answers `no-surface` until a surface is attached, and then places the pane.
+ */
+function detachedEngine(on: Parameters<typeof world>[0]) {
+  const state = { attached: false, opens: [] as { id: string; isPlaced: boolean }[] }
+  on('ui.open', (_, e) => {
+    const isPlaced = state.attached
+    state.opens.push({ id: e.id, isPlaced })
+    return { value: isPlaced ? { isPlaced: true } : { isPlaced: false, reason: NO_SURFACE } }
+  })
+  on('ui.panes', () => ({
+    value: state.opens.some(one => one.isPlaced)
+      ? [{ id: 'jobs', title: 'Jobs', isShown: true, isFocused: false, isPlaced: true }]
+      : [],
+  }))
+  on('session.attach', (_, e) => {
+    state.attached = true
+    return { clientId: e.clientId }
+  })
+  return state
+}
+
+const DESKTOP = {
+  surface: 'desktop',
+  clientId: 'desktop:default',
+  viewport: { columns: 160, rows: 50, isFullscreen: true },
+} as const
+
+describe('opening before the window attaches', () => {
+  test('/jobs as the first message of a new chat opens the board once the desktop attaches', async ($, on) => {
+    world(on, { leads: [lead('acme-api')] })
+    const engine = detachedEngine(on)
+    await $.session.start({ cwd: '.', surface: 'desktop', isInteractive: true })
+    const ran = await $.command.run({ command: 'jobs', args: '' } as never)
+    expect(ran.text).toContain('will open as soon as this window is ready')
+    expect(engine.opens).toEqual([{ id: 'jobs', isPlaced: false }])
+
+    // The phone shows the band read-only and never takes the pane.
+    await $.session.attach({
+      surface: 'mobile',
+      clientId: 'mobile:default',
+      viewport: { columns: 40, rows: 60, isFullscreen: false },
+    })
+    expect(engine.opens.filter(one => one.isPlaced)).toEqual([])
+
+    await $.session.attach(DESKTOP)
+    expect(engine.opens.at(-1)).toEqual({ id: 'jobs', isPlaced: true })
+    const ui = await $.ui.mount({ ...pane, surface: 'desktop' })
+    expect(await ui.find({ key: 'card:acme-api' })).toBeDefined()
+
+    // Opened once: a later window attaching leaves the board as the person left it.
+    const count = engine.opens.length
+    await $.session.attach({ ...DESKTOP, clientId: 'desktop:second' })
+    expect(engine.opens).toHaveLength(count)
+  })
+
+  test('open_board before the window attaches opens its view once the desktop attaches', async ($, on) => {
+    const w = world(on, seed, files)
+    const engine = detachedEngine(on)
+    await $.session.start({ cwd: '.', surface: 'desktop', isInteractive: true })
+    const ran = $.tool.call({
+      tool: 'mcp__job-tracker__open_board',
+      view: 'package',
+      leadId: 'acme-api',
+    })
+    await w.clock.advance(2000)
+    const result = String(((await ran) as { result?: unknown }).result)
+    expect(result).toContain('opens as soon as this window is ready')
+    expect(engine.opens).toEqual([{ id: 'jobs', isPlaced: false }])
+
+    await $.session.attach(DESKTOP)
+    expect(engine.opens.at(-1)).toEqual({ id: 'jobs', isPlaced: true })
+    const ui = await $.ui.mount({ ...pane, surface: 'desktop' })
+    expect(await ui.findAll({ type: 'Svg' })).toHaveLength(2)
+  })
+
+  test('a pane that waits for width, not a window, is left to the engine', async ($, on) => {
+    world(on, { leads: [lead('acme-api')] })
+    const opens: string[] = []
+    on('ui.open', (_, e) => {
+      opens.push(e.id)
+      return { value: { isPlaced: false, reason: 'below 110 columns (now 90)' } }
+    })
+    on('session.attach', (_, e) => ({ clientId: e.clientId }))
+    await $.session.start({ cwd: '.', surface: 'desktop', isInteractive: true })
+    const ran = await $.command.run({ command: 'jobs', args: '' } as never)
+    expect(ran.text).toContain('waiting for room to open (below 110 columns (now 90))')
+    await $.session.attach(DESKTOP)
+    expect(opens).toEqual(['jobs'])
+  })
+})
