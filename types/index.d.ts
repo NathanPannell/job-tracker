@@ -300,6 +300,8 @@ declare module 'claude-code' {
       drafts: DraftRun[]
       /** Every background prefill this session started, for the Chrome guard. */
       prefills: PrefillGuard[]
+      /** True while a /jobs or open_board that ran before any window attached waits for one. */
+      awaitingWindow: boolean
     }
   }
 }
