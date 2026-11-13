@@ -113,10 +113,26 @@ const openPane = ($: EngineInterface) => $.ui.open({ id: PANE, title: 'Jobs' })
 const isWindowless = (opened: UiOpenResult) =>
   !opened.isPlaced && opened.reason.startsWith('no-surface')
 
-/** Opens the pane for the person's /jobs or open_board, and remembers it if no window is there yet. */
+/**
+ * Opens the pane for the person's /jobs, open_board or band press, and remembers an open that
+ * found no window, for the next one that attaches. Only a placed open forgets it: a later open
+ * while only the phone is attached leaves it waiting for the desktop.
+ */
 async function openAsked($: EngineInterface): Promise<UiOpenResult> {
   const opened = await openPane($)
-  await update($, awaitingWindow, () => isWindowless(opened))
+  if (opened.isPlaced) await update($, awaitingWindow, () => false)
+  if (!isWindowless(opened)) return opened
+  await update($, awaitingWindow, () => true)
+  // A window that attached while this open was answered found nothing waiting: open for it now.
+  const surfaces = await $.session.surfaces()
+  return surfaces.some(one => one !== 'mobile') ? openWaiting($) : opened
+}
+
+/** Opens the pane an open with no window left waiting, once a window that docks it is there. */
+async function openWaiting($: EngineInterface): Promise<UiOpenResult> {
+  const opened = await openPane($)
+  if (!isWindowless(opened)) await update($, awaitingWindow, () => false)
+  if (!opened.isPlaced) $.ui.log(`job-tracker: the board did not open (${opened.reason})`)
   return opened
 }
 
@@ -960,7 +976,7 @@ export const register: Register = on => {
       text: opened.isPlaced
         ? `Opened the job board: ${bandText(c) ?? 'nothing new'}.`
         : isWindowless(opened)
-          ? 'The job board will open as soon as this window is ready.'
+          ? 'The job board will open as soon as this window is ready: no window that shows panes is attached yet.'
           : `The job board is waiting for room to open (${opened.reason}).`,
     }
   })
@@ -970,10 +986,7 @@ export const register: Register = on => {
   on('session.attach', async ($, e, next) => {
     const attached = await next(e)
     if (e.surface === 'mobile' || e.viewport?.isFullscreen === false) return attached
-    if (!(await read($, awaitingWindow))) return attached
-    const opened = await openPane($)
-    if (!isWindowless(opened)) await update($, awaitingWindow, () => false)
-    if (!opened.isPlaced) $.ui.log(`job-tracker: the board did not open (${opened.reason})`)
+    if (await read($, awaitingWindow)) await openWaiting($)
     return attached
   })
 
@@ -1002,7 +1015,7 @@ export const register: Register = on => {
         opened: opened.isPlaced
           ? 'placed'
           : isWindowless(opened)
-            ? 'not placed yet: no window is attached; it opens as soon as this window is ready'
+            ? 'not placed yet: no window that shows panes is attached; it opens as soon as one attaches'
             : `not placed: ${opened.reason}`,
         stillOpen: pane !== undefined,
         isPlaced: pane?.isPlaced ?? false,
