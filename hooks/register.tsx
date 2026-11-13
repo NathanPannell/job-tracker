@@ -8,6 +8,7 @@ import type {
   PromptOrigin,
   Register,
   RenderInput,
+  UiOpenResult,
 } from 'claude-code'
 
 import type {
@@ -89,6 +90,8 @@ const turning = atom({ plugin: 'job-tracker', key: 'turning' } as const, false)
 const sent = atom({ plugin: 'job-tracker', key: 'sent' } as const, [] as SentPrompt[])
 const drafts = atom({ plugin: 'job-tracker', key: 'drafts' } as const, [] as DraftRun[])
 const prefills = atom({ plugin: 'job-tracker', key: 'prefills' } as const, [] as PrefillGuard[])
+/** A /jobs or open_board that ran before any window attached; the next one opens the board. */
+const awaitingWindow = atom({ plugin: 'job-tracker', key: 'awaitingWindow' } as const, false)
 
 /** How long a sent prompt shows as queued before the pane stops waiting for its turn. */
 const SENT_FOR_MS = 30 * 60_000
@@ -105,6 +108,33 @@ const isPersonOrigin = (origin: PromptOrigin) =>
 const isJobPrompt = (text: string) => /job-tracker|\/jobs\b/i.test(text)
 
 const openPane = ($: EngineInterface) => $.ui.open({ id: PANE, title: 'Jobs' })
+
+/** Opened before any surface attached: a new chat's first message runs before its window joins. */
+const isWindowless = (opened: UiOpenResult) =>
+  !opened.isPlaced && opened.reason.startsWith('no-surface')
+
+/**
+ * Opens the pane for the person's /jobs, open_board or band press, and remembers an open that
+ * found no window, for the next one that attaches. Only a placed open forgets it: a later open
+ * while only the phone is attached leaves it waiting for the desktop.
+ */
+async function openAsked($: EngineInterface): Promise<UiOpenResult> {
+  const opened = await openPane($)
+  if (opened.isPlaced) await update($, awaitingWindow, () => false)
+  if (!isWindowless(opened)) return opened
+  await update($, awaitingWindow, () => true)
+  // A window that attached while this open was answered found nothing waiting: open for it now.
+  const surfaces = await $.session.surfaces()
+  return surfaces.some(one => one !== 'mobile') ? openWaiting($) : opened
+}
+
+/** Opens the pane an open with no window left waiting, once a window that docks it is there. */
+async function openWaiting($: EngineInterface): Promise<UiOpenResult> {
+  const opened = await openPane($)
+  if (!isWindowless(opened)) await update($, awaitingWindow, () => false)
+  if (!opened.isPlaced) $.ui.log(`job-tracker: the board did not open (${opened.reason})`)
+  return opened
+}
 
 /** Puts the board back on Active: every opening starts there, wherever the last visit ended. */
 async function resetBoard($: EngineInterface) {
@@ -940,13 +970,24 @@ export const register: Register = on => {
     await refresh($)
     await resetBoard($)
     await show($, { kind: 'board' })
-    const opened = await openPane($)
+    const opened = await openAsked($)
     const c = counts({ version: 1, leads: (await read($, board)).leads }, await $.clock.now())
     return {
       text: opened.isPlaced
         ? `Opened the job board: ${bandText(c) ?? 'nothing new'}.`
-        : `The job board is waiting for room to open (${opened.reason ?? 'not placed'}).`,
+        : isWindowless(opened)
+          ? 'The job board will open as soon as this window is ready: no window that shows panes is attached yet.'
+          : `The job board is waiting for room to open (${opened.reason}).`,
     }
+  })
+
+  // A new chat's first message runs before its window attaches; the board it asked for opens
+  // when one that docks a pane does. The phone keeps its read-only band and waits with it.
+  on('session.attach', async ($, e, next) => {
+    const attached = await next(e)
+    if (e.surface === 'mobile' || e.viewport?.isFullscreen === false) return attached
+    if (await read($, awaitingWindow)) await openWaiting($)
+    return attached
   })
 
   on('tool.call', { tool: 'mcp__job-tracker__open_board' }, async ($, e) => {
@@ -965,13 +1006,17 @@ export const register: Register = on => {
     await refresh($)
     await resetBoard($)
     await show($, target)
-    const opened = await openPane($)
+    const opened = await openAsked($)
     // A pane whose tree the surface refused is closed again; give the first draw a moment.
     await $.clock.sleep(1500)
     const pane = (await $.ui.panes()).find(one => one.id === 'jobs')
     return {
       result: json({
-        opened: opened.isPlaced ? 'placed' : `not placed: ${opened.reason}`,
+        opened: opened.isPlaced
+          ? 'placed'
+          : isWindowless(opened)
+            ? 'not placed yet: no window that shows panes is attached; it opens as soon as one attaches'
+            : `not placed: ${opened.reason}`,
         stillOpen: pane !== undefined,
         isPlaced: pane?.isPlaced ?? false,
         isShown: pane?.isShown ?? false,
@@ -1128,7 +1173,7 @@ export const register: Register = on => {
               onPress={() =>
                 void resetBoard($)
                   .then(() => show($, { kind: 'board' }))
-                  .then(() => openPane($))
+                  .then(() => openAsked($))
               }
             >
               <Text color="claude">●</Text> {text} <Text dimColor>· /jobs</Text>
